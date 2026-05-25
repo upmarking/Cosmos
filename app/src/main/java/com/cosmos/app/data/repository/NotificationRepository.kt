@@ -1,0 +1,99 @@
+package com.cosmos.app.data.repository
+
+import com.cosmos.app.data.model.Notification
+import com.cosmos.app.data.model.NotificationType
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+interface NotificationRepository {
+    fun getNotifications(userId: String): Flow<List<Notification>>
+    suspend fun markAsRead(notificationId: String): Result<Unit>
+    suspend fun createNotification(userId: String, type: NotificationType, title: String, body: String, actionId: String): Result<Unit>
+}
+
+class FirestoreNotificationRepository(
+    private val firestore: FirebaseFirestore
+) : NotificationRepository {
+
+    override fun getNotifications(userId: String): Flow<List<Notification>> = callbackFlow {
+        val registration = firestore.collection("notifications")
+            .whereEqualTo("userId", userId)
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                if (snapshot == null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                val notifications = snapshot.documents.map { doc ->
+                    val data = doc.data ?: emptyMap()
+                    val typeStr = data["type"] as? String ?: NotificationType.NEW_MATCH.name
+                    val type = runCatching { NotificationType.valueOf(typeStr) }.getOrDefault(NotificationType.NEW_MATCH)
+                    val time = when (val ts = data["timestamp"]) {
+                        is Timestamp -> formatTime(ts.toDate())
+                        else -> "Now"
+                    }
+                    Notification(
+                        id = doc.id,
+                        type = type,
+                        title = data["title"] as? String ?: "",
+                        body = data["body"] as? String ?: "",
+                        timestamp = time,
+                        isRead = data["isRead"] as? Boolean ?: false,
+                        actionId = data["actionId"] as? String ?: ""
+                    )
+                }
+                trySend(notifications)
+            }
+        awaitClose {
+            registration.remove()
+        }
+    }
+
+    override suspend fun markAsRead(notificationId: String): Result<Unit> = runCatching {
+        firestore.collection("notifications").document(notificationId)
+            .update("isRead", true).await()
+    }
+
+    override suspend fun createNotification(
+        userId: String,
+        type: NotificationType,
+        title: String,
+        body: String,
+        actionId: String
+    ): Result<Unit> = runCatching {
+        val data = mapOf(
+            "userId" to userId,
+            "type" to type.name,
+            "title" to title,
+            "body" to body,
+            "timestamp" to FieldValue.serverTimestamp(),
+            "isRead" to false,
+            "actionId" to actionId
+        )
+        firestore.collection("notifications").add(data).await()
+        Unit
+    }
+
+    private fun formatTime(date: Date): String {
+        val diff = System.currentTimeMillis() - date.time
+        return when {
+            diff < 60_000 -> "now"
+            diff < 3600_000 -> "${diff / 60_000}m ago"
+            diff < 86400_000 -> "${diff / 3600_000}h ago"
+            else -> SimpleDateFormat("d MMM", Locale.getDefault()).format(date)
+        }
+    }
+}
