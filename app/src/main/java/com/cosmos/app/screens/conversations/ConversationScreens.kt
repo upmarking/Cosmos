@@ -24,6 +24,7 @@ import com.cosmos.app.data.model.*
 import com.cosmos.app.ui.components.*
 import com.cosmos.app.ui.theme.*
 import androidx.compose.runtime.collectAsState
+import com.cosmos.app.navigation.Screen
 
 @Composable
 fun ConversationsListScreen(
@@ -63,27 +64,72 @@ fun ConversationsListScreen(
             )
 
             // Filter labels
+            var selectedFilter by remember { mutableStateOf("All") }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf("All", "Follow Up", "Unread").forEach { filter ->
+                    val isSelected = filter == selectedFilter
                     CosmosTagChip(
                         text = filter,
-                        backgroundColor = if (filter == "All") CosmosPrimary.copy(alpha = 0.2f) else CosmosSurfaceContainerHigh,
-                        textColor = if (filter == "All") CosmosPrimary else CosmosOnSurfaceVariant
+                        backgroundColor = if (isSelected) CosmosPrimary.copy(alpha = 0.2f) else CosmosSurfaceContainerHigh,
+                        textColor = if (isSelected) CosmosPrimary else CosmosOnSurfaceVariant,
+                        onClick = { selectedFilter = filter }
                     )
                 }
             }
 
             LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp)) {
                 val filtered = connections.filter {
-                    searchQuery.isEmpty() || it.member.name.contains(searchQuery, ignoreCase = true)
+                    val matchesSearch = searchQuery.isEmpty() || it.member.name.contains(searchQuery, ignoreCase = true)
+                    val matchesFilter = when (selectedFilter) {
+                        "Follow Up" -> it.status == ConnectionStatus.FOLLOW_UP_NEEDED || it.labels.contains("Follow Up")
+                        "Unread" -> it.unreadCount > 0
+                        else -> true
+                    }
+                    matchesSearch && matchesFilter
                 }
                 if (filtered.isEmpty()) {
                     item {
-                        CosmosGlassCard(modifier = Modifier.padding(16.dp)) {
-                            Text("No active conversations found. Swipe right in Connect to match!", color = CosmosOnSurfaceVariant)
+                        Box(
+                            modifier = Modifier
+                                .fillParentMaxHeight(0.7f)
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    Icons.Outlined.ChatBubbleOutline,
+                                    null,
+                                    tint = CosmosPrimary,
+                                    modifier = Modifier.size(64.dp)
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                Text(
+                                    text = "No Conversations Yet",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = CosmosOnBackground,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = "Curate matches in Connect or register for speed matchmaking events to start networking.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = CosmosOnSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                                Spacer(Modifier.height(24.dp))
+                                CosmosButton(
+                                    text = "Find Matches",
+                                    onClick = { onNavigate(Screen.Connect.route) },
+                                    modifier = Modifier.width(180.dp)
+                                )
+                            }
                         }
                     }
                 } else {
@@ -107,6 +153,7 @@ fun ConversationListItem(connection: Connection, onTap: () -> Unit) {
         CosmosAvatar(
             avatarUrl = connection.member.avatarUrl,
             name = connection.member.name,
+            modifier = Modifier,
             size = 52.dp,
             isLinkedInConnected = connection.member.isLinkedInConnected
         )
@@ -138,7 +185,7 @@ fun ConversationListItem(connection: Connection, onTap: () -> Unit) {
 fun RelationshipCrmChatScreen(
     connectionId: String,
     onBack: () -> Unit,
-    onProfileTap: () -> Unit,
+    onProfileTap: (String) -> Unit,
     onNavigate: (String) -> Unit,
     chatViewModel: com.cosmos.app.ui.viewmodel.ChatViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
@@ -149,16 +196,22 @@ fun RelationshipCrmChatScreen(
     val activeConnectionState by chatViewModel.activeConnection.collectAsState()
     val messages by chatViewModel.messages.collectAsState()
     
-    val connection = activeConnectionState ?: Connection(
-        id = connectionId,
-        member = SampleData.sampleMembers.find { it.id == connectionId } ?: SampleData.sampleMember
-    )
+    if (activeConnectionState == null) {
+        CosmosAmbientBackground {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = CosmosPrimary)
+            }
+        }
+        return
+    }
+
+    val connection = activeConnectionState!!
     val member = connection.member
 
     var messageText by remember { mutableStateOf("") }
     var showSummary by remember { mutableStateOf(false) }
     var showGoalDialog by remember { mutableStateOf(false) }
-    var newGoalText by remember { mutableStateOf(connection.privateGoal) }
+    var newGoalText by remember(connection.privateGoal) { mutableStateOf(connection.privateGoal) }
     
     val listState = rememberLazyListState()
 
@@ -179,10 +232,10 @@ fun RelationshipCrmChatScreen(
                 IconButton(onClick = onBack) {
                     Icon(Icons.Default.ArrowBack, "Back", tint = CosmosOnBackground)
                 }
-                Box(modifier = Modifier.clickable(onClick = onProfileTap)) {
-                    CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, size = 44.dp, isLinkedInConnected = member.isLinkedInConnected)
+                Box(modifier = Modifier.clickable { onProfileTap(member.id) }) {
+                    CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, modifier = Modifier, size = 44.dp, isLinkedInConnected = member.isLinkedInConnected)
                 }
-                Column(modifier = Modifier.weight(1f).clickable(onClick = onProfileTap)) {
+                Column(modifier = Modifier.weight(1f).clickable { onProfileTap(member.id) }) {
                     Text(member.name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
                     Text(member.headline, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -240,16 +293,49 @@ fun RelationshipCrmChatScreen(
             }
 
             // Messages
-            LazyColumn(
-                modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
-                state = listState,
-                contentPadding = PaddingValues(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(messages) { msg ->
-                    when (msg.type) {
-                        MessageType.AI_SUMMARY -> AiSummaryBubble(text = msg.text)
-                        else -> ChatBubble(message = msg)
+            if (messages.isEmpty()) {
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        CosmosAvatar(
+                            avatarUrl = member.avatarUrl,
+                            name = member.name,
+                            size = 64.dp,
+                            isLinkedInConnected = member.isLinkedInConnected
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "Match established! 🎉",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = CosmosOnBackground,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Say hello to ${member.name} and start building together.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = CosmosOnSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                    state = listState,
+                    contentPadding = PaddingValues(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(messages) { msg ->
+                        when (msg.type) {
+                            MessageType.AI_SUMMARY -> AiSummaryBubble(text = msg.text)
+                            else -> ChatBubble(message = msg)
+                        }
                     }
                 }
             }
@@ -344,9 +430,9 @@ fun ChatBubble(message: ChatMessage) {
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             Column {
-                Text(message.text, style = MaterialTheme.typography.bodyMedium, color = if (message.isOwn) CosmosBackground else CosmosOnBackground)
+                Text(message.text, style = MaterialTheme.typography.bodyMedium, color = if (message.isOwn) androidx.compose.ui.graphics.Color.White else CosmosOnBackground)
                 Spacer(Modifier.height(2.dp))
-                Text(message.timestamp, style = MaterialTheme.typography.labelSmall, color = (if (message.isOwn) CosmosBackground else CosmosOnSurfaceVariant).copy(alpha = 0.7f))
+                Text(message.timestamp, style = MaterialTheme.typography.labelSmall, color = (if (message.isOwn) androidx.compose.ui.graphics.Color.White else CosmosOnSurfaceVariant).copy(alpha = 0.7f))
             }
         }
     }

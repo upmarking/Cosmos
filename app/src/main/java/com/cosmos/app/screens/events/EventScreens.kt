@@ -19,7 +19,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cosmos.app.data.model.NetworkEvent
-import com.cosmos.app.data.model.SampleData
 import com.cosmos.app.ui.components.*
 import com.cosmos.app.ui.theme.*
 import androidx.compose.runtime.collectAsState
@@ -122,7 +121,19 @@ fun EventListCard(event: NetworkEvent, onTap: () -> Unit) {
     CosmosGlassCard(modifier = Modifier.clickable(onClick = onTap), showTopGradientBorder = false) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             // Date badge
-            val dateParts = event.date.split(" ")
+            val cleanDate = event.date
+                .replace("Tomorrow, ", "")
+                .replace("Today, ", "")
+                .replace("Next ", "")
+                .replace("Monday, ", "")
+                .replace("Tuesday, ", "")
+                .replace("Wednesday, ", "")
+                .replace("Thursday, ", "")
+                .replace("Friday, ", "")
+                .replace("Saturday, ", "")
+                .replace("Sunday, ", "")
+                .trim()
+            val dateParts = cleanDate.split(" ")
             val month = dateParts.getOrNull(0)?.take(3)?.uppercase() ?: "JUN"
             val day = dateParts.getOrNull(1)?.trimEnd(',')?.trim() ?: "15"
 
@@ -159,14 +170,31 @@ fun EventLobbyScreen(
     eventId: String,
     onBack: () -> Unit,
     onNavigate: (String) -> Unit,
-    eventViewModel: com.cosmos.app.ui.viewmodel.EventViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    eventViewModel: com.cosmos.app.ui.viewmodel.EventViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    authViewModel: com.cosmos.app.ui.viewmodel.AuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     LaunchedEffect(eventId) {
         eventViewModel.selectEvent(eventId)
+        eventViewModel.loadEventParticipants(eventId)
+        eventViewModel.loadEventRounds(eventId)
     }
 
     val eventState by eventViewModel.activeEvent.collectAsState()
-    val event = eventState ?: SampleData.sampleEvents.find { it.id == eventId } ?: SampleData.sampleEvents.first()
+    val participants by eventViewModel.eventParticipants.collectAsState()
+    val eventRounds by eventViewModel.eventRounds.collectAsState()
+    val currentUserState by authViewModel.currentUser.collectAsState()
+    val currentUserId = currentUserState?.id
+
+    if (eventState == null) {
+        CosmosAmbientBackground {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = CosmosPrimary)
+            }
+        }
+        return
+    }
+
+    val event = eventState!!
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("Overview", "Participants", "Schedule", "My Meetings")
 
@@ -258,15 +286,23 @@ fun EventLobbyScreen(
                         }
                     }
                     1 -> {
-                        items(SampleData.sampleMembers) { member ->
-                            CosmosGlassCard(showTopGradientBorder = false) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, size = 44.dp, isLinkedInConnected = member.isLinkedInConnected)
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(member.name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
-                                        Text(member.headline, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, maxLines = 1)
+                        if (participants.isEmpty()) {
+                            item {
+                                CosmosGlassCard(showTopGradientBorder = false) {
+                                    Text("No participants registered yet.", color = CosmosOnSurfaceVariant)
+                                }
+                            }
+                        } else {
+                            items(participants) { member ->
+                                CosmosGlassCard(showTopGradientBorder = false) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, modifier = Modifier, size = 44.dp, isLinkedInConnected = member.isLinkedInConnected)
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(member.name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
+                                            Text(member.headline, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, maxLines = 1)
+                                        }
+                                        CosmosTagChip(text = member.tags.firstOrNull() ?: "")
                                     }
-                                    CosmosTagChip(text = member.tags.firstOrNull() ?: "")
                                 }
                             }
                         }
@@ -294,18 +330,34 @@ fun EventLobbyScreen(
                                     }
                                 }
                             } else {
-                                SampleData.sampleMembers.forEachIndexed { index, member ->
+                                val roundsWithOtherParticipant = eventRounds.mapNotNull { round ->
+                                    val hasCurrentUser = round.participants.any { it.id == currentUserId }
+                                    if (hasCurrentUser) {
+                                        val other = round.participants.firstOrNull { it.id != currentUserId }
+                                        if (other != null) round to other else null
+                                    } else {
+                                        null
+                                    }
+                                }
+
+                                if (roundsWithOtherParticipant.isEmpty()) {
                                     CosmosGlassCard(showTopGradientBorder = false) {
-                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            Text("Round ${index + 1}", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary, modifier = Modifier.width(64.dp))
-                                            CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, size = 40.dp)
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(member.name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
-                                                Text("15 min · ${if (index == 0) "6:30 PM" else "6:50 PM"}", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                                        Text("No meetings scheduled yet.", color = CosmosOnSurfaceVariant, modifier = Modifier.fillMaxWidth())
+                                    }
+                                } else {
+                                    roundsWithOtherParticipant.forEachIndexed { index, (round, member) ->
+                                        CosmosGlassCard(showTopGradientBorder = false) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                Text("Round ${index + 1}", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary, modifier = Modifier.width(64.dp))
+                                                CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, size = 40.dp)
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(member.name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
+                                                    Text("${round.duration} min · ${if (index == 0) "6:30 PM" else "6:50 PM"}", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                                                }
                                             }
                                         }
+                                        Spacer(Modifier.height(8.dp))
                                     }
-                                    Spacer(Modifier.height(8.dp))
                                 }
                             }
                         }

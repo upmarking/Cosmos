@@ -15,7 +15,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.cosmos.app.data.model.SampleData
 import com.cosmos.app.data.model.IntroStatus
 import com.cosmos.app.ui.components.*
 import com.cosmos.app.ui.theme.*
@@ -26,17 +25,30 @@ fun RequestWarmIntroScreen(
     onBack: () -> Unit,
     onSent: () -> Unit,
     introViewModel: com.cosmos.app.ui.viewmodel.IntroViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
-    profileViewModel: com.cosmos.app.ui.viewmodel.ProfileViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    profileViewModel: com.cosmos.app.ui.viewmodel.ProfileViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    chatViewModel: com.cosmos.app.ui.viewmodel.ChatViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     LaunchedEffect(memberId) {
         profileViewModel.loadProfile(memberId)
     }
 
     val memberState by profileViewModel.selectedMember.collectAsState()
-    val member = memberState ?: SampleData.sampleMembers.find { it.id == memberId } ?: SampleData.sampleMember
+    val connectionsState by chatViewModel.connections.collectAsState()
+    
+    if (memberState == null) {
+        CosmosAmbientBackground {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = CosmosPrimary)
+            }
+        }
+        return
+    }
 
+    val member = memberState!!
+    val connectors = connectionsState.map { it.member }.filter { it.id != member.id }
+    
     var introMessage by remember { mutableStateOf("") }
-    var selectedConnector by remember { mutableStateOf("Marcus Williams") }
+    var selectedConnectorId by remember(connectors) { mutableStateOf(connectors.firstOrNull()?.id ?: "") }
 
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
@@ -50,7 +62,7 @@ fun RequestWarmIntroScreen(
                 // Target member card
                 CosmosGlassCard {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, size = 56.dp, isLinkedInConnected = member.isLinkedInConnected)
+                        CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, modifier = Modifier, size = 56.dp, isLinkedInConnected = member.isLinkedInConnected)
                         Column(modifier = Modifier.weight(1f)) {
                             Text(member.name, style = MaterialTheme.typography.titleMedium, color = CosmosOnBackground)
                             Text(member.headline, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, maxLines = 2)
@@ -61,28 +73,38 @@ fun RequestWarmIntroScreen(
                 Spacer(Modifier.height(20.dp))
                 Text("Who should connect you?", style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground, modifier = Modifier.padding(bottom = 12.dp))
 
-                // Connectors (mutual connections)
-                listOf("Marcus Williams", "David Kim", "Sarah Goldman").forEach { connector ->
-                    val isSelected = selectedConnector == connector
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(12.dp))
-                            .background(if (isSelected) CosmosPrimary.copy(alpha = 0.1f) else CosmosSurfaceContainerLow)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                if (connectors.isEmpty()) {
+                    CosmosGlassCard(showTopGradientBorder = false) {
+                        Text(
+                            text = "You don't have any connections yet who can introduce you. Swipe right on other members to connect first!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = CosmosOnSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                } else {
+                    connectors.forEach { connector ->
+                        val isSelected = selectedConnectorId == connector.id
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(12.dp))
+                                .background(if (isSelected) CosmosPrimary.copy(alpha = 0.1f) else CosmosSurfaceContainerLow)
                         ) {
-                            CosmosAvatar(avatarUrl = "", name = connector, size = 40.dp)
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(connector, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
-                                Text("Knows both of you", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                CosmosAvatar(avatarUrl = connector.avatarUrl, name = connector.name, modifier = Modifier, size = 40.dp, isLinkedInConnected = connector.isLinkedInConnected)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(connector.name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
+                                    Text("Knows both of you", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                                }
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = { selectedConnectorId = connector.id },
+                                    colors = RadioButtonDefaults.colors(selectedColor = CosmosPrimary)
+                                )
                             }
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = { selectedConnector = connector },
-                                colors = RadioButtonDefaults.colors(selectedColor = CosmosPrimary)
-                            )
                         }
                     }
                 }
@@ -111,20 +133,15 @@ fun RequestWarmIntroScreen(
                 CosmosButton(
                     text = "Send Introduction Request",
                     onClick = {
-                        val connectorId = when (selectedConnector) {
-                            "Marcus Williams" -> "2"
-                            "David Kim" -> "4"
-                            else -> "5" // Sarah Goldman
-                        }
                         introViewModel.requestWarmIntro(
                             targetId = member.id,
-                            connectorId = connectorId,
+                            connectorId = selectedConnectorId,
                             message = introMessage,
                             onSuccess = onSent
                         )
                     },
                     icon = Icons.Default.Send,
-                    enabled = introMessage.isNotBlank()
+                    enabled = introMessage.isNotBlank() && selectedConnectorId.isNotEmpty()
                 )
             }
         }
@@ -157,8 +174,8 @@ fun ReviewIntroRequestScreen(
                     CosmosGlassCard {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                             Row(horizontalArrangement = Arrangement.spacedBy((-16).dp)) {
-                                CosmosAvatar(avatarUrl = request.requester.avatarUrl, name = request.requester.name, size = 64.dp)
-                                CosmosAvatar(avatarUrl = request.target.avatarUrl, name = request.target.name, size = 64.dp)
+                                CosmosAvatar(avatarUrl = request.requester.avatarUrl, name = request.requester.name, modifier = Modifier, size = 64.dp)
+                                CosmosAvatar(avatarUrl = request.target.avatarUrl, name = request.target.name, modifier = Modifier, size = 64.dp)
                             }
                             Spacer(Modifier.height(12.dp))
                             Text("${request.requester.name} wants to meet ${request.target.name}", style = MaterialTheme.typography.titleLarge, color = CosmosOnBackground, fontWeight = FontWeight.SemiBold)
@@ -172,7 +189,7 @@ fun ReviewIntroRequestScreen(
                     CosmosGlassCard(showTopGradientBorder = false) {
                         Text("The Requester", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary, modifier = Modifier.padding(bottom = 12.dp))
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            CosmosAvatar(avatarUrl = request.requester.avatarUrl, name = request.requester.name, size = 48.dp, isLinkedInConnected = request.requester.isLinkedInConnected)
+                            CosmosAvatar(avatarUrl = request.requester.avatarUrl, name = request.requester.name, modifier = Modifier, size = 48.dp, isLinkedInConnected = request.requester.isLinkedInConnected)
                             Column {
                                 Text(request.requester.name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
                                 Text(request.requester.headline, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
@@ -271,7 +288,7 @@ fun ThreeWayIntroductionScreen(
                     ).forEach { (name, role, color) ->
                         CosmosGlassCard(modifier = Modifier.padding(bottom = 10.dp), showTopGradientBorder = false) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                CosmosAvatar(avatarUrl = "", name = name, size = 48.dp)
+                                CosmosAvatar(avatarUrl = "", name = name, modifier = Modifier, size = 48.dp)
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
                                     Text(role, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)

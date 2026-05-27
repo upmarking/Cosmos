@@ -1,0 +1,30 @@
+# Built artifacts
+bin/
+gen/
+out/
+build/
+app/build/
+
+# Gradle files
+.gradle/
+
+# Kotlin cache
+.kotlin/
+
+# IDEs and Editors
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.cproject
+.settings/
+
+# Local configuration files
+local.properties
+
+# System & Log files
+*.log
+.DS_Store
+Thumbs.db

@@ -27,6 +27,7 @@ class FirestoreSwipeRepository(
         firestore.collection("swipes").document(swipeId).set(swipeData).await()
 
         if (action == "LIKE") {
+
             // Check if reverse swipe exists and is also a LIKE
             val reverseSwipeId = "${likedId}_${likerId}"
             val reverseSwipeDoc = firestore.collection("swipes").document(reverseSwipeId).get().await()

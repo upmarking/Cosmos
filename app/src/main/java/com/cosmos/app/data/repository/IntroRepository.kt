@@ -2,6 +2,8 @@ package com.cosmos.app.data.repository
 
 import com.cosmos.app.data.model.IntroRequest
 import com.cosmos.app.data.model.IntroStatus
+import com.cosmos.app.data.model.Member
+import com.cosmos.app.data.model.MembershipTier
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
@@ -152,7 +154,7 @@ class FirestoreIntroRepository(
                         role = "",
                         company = "",
                         avatarUrl = "",
-                        membershipTier = com.cosmos.app.data.model.MembershipTier.EXPLORER
+                        membershipTier = MembershipTier.EXPLORER
                     )
                     
                     IntroRequest(

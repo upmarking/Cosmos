@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.cosmos.app-mergeDebugResources-70:/values-v21/values-v21.xml",
+            "outputFile": "com.cosmos.app-mergeDebugResources-66:/values-v21/values-v21.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\ppdub\\.gradle\\caches\\9.0-milestone-1\\transforms\\854cbe09c7e59d469dbca2ed65a3a8f4\\transformed\\credentials-play-services-auth-1.2.0-rc01\\res\\values-v21\\values-v21.xml",
+                    "source": "C:\\Users\\sharm\\.gradle\\caches\\9.0-milestone-1\\transforms\\854cbe09c7e59d469dbca2ed65a3a8f4\\transformed\\credentials-play-services-auth-1.2.0-rc01\\res\\values-v21\\values-v21.xml",
                     "from": {
                         "startLines": "2",
                         "startColumns": "4",
@@ -23,7 +23,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\ppdub\\.gradle\\caches\\9.0-milestone-1\\transforms\\901766faa579c3cf5c12b7c25b054673\\transformed\\core-1.13.1\\res\\values-v21\\values-v21.xml",
+                    "source": "C:\\Users\\sharm\\.gradle\\caches\\9.0-milestone-1\\transforms\\901766faa579c3cf5c12b7c25b054673\\transformed\\core-1.13.1\\res\\values-v21\\values-v21.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,13",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4",

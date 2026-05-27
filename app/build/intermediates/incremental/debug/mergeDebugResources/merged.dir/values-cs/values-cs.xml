@@ -28,7 +28,7 @@
     <string name="common_google_play_services_wear_update_text">Je vyžadována nová verze služeb Google Play. Nová verze se brzy sama nainstaluje.</string>
     <string name="common_open_on_phone">Otevřít v telefonu</string>
     <string name="common_signin_button_text">Přihlásit se</string>
-    <string name="common_signin_button_text_long">Přihlášení přes Google</string>
+    <string name="common_signin_button_text_long">Přihlásit se k účtu Google</string>
     <string msgid="3260749812566568062" name="copy_toast_msg">"Odkaz zkopírován do schránky"</string>
     <string msgid="8038256446254964252" name="default_error_message">"Neplatný údaj"</string>
     <string msgid="6312721426453364202" name="default_popup_window_title">"Vyskakovací okno"</string>

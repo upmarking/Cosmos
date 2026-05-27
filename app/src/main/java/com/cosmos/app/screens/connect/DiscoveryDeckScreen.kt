@@ -13,18 +13,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cosmos.app.data.model.Member
-import com.cosmos.app.data.model.SampleData
 import com.cosmos.app.navigation.Screen
 import com.cosmos.app.ui.components.*
 import com.cosmos.app.ui.theme.*
+
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,17 +36,31 @@ fun DiscoveryDeckScreen(
     onProfileTap: (String) -> Unit,
     onNavigateToFeed: () -> Unit,
     onNavigate: (String) -> Unit,
-    discoveryViewModel: com.cosmos.app.ui.viewmodel.DiscoveryViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    discoveryViewModel: com.cosmos.app.ui.viewmodel.DiscoveryViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    profileViewModel: com.cosmos.app.ui.viewmodel.ProfileViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val members by discoveryViewModel.deck.collectAsState()
     val connectionsLimitCount by discoveryViewModel.connectionsLimitCount.collectAsState()
+    val notifications by profileViewModel.notifications.collectAsState()
+    val unreadNotificationCount = notifications.count { !it.isRead }
+    
+    var selectedFilter by remember { mutableStateOf("All") }
+    
+    val filteredMembers = remember(members, selectedFilter) {
+        when (selectedFilter) {
+            "Founders" -> members.filter { it.isFounder() }
+            "Investors" -> members.filter { it.isInvestor() }
+            "Operators" -> members.filter { it.isOperator() }
+            else -> members
+        }
+    }
     
     var currentIndex by remember { mutableStateOf(0) }
     var swipeOffset by remember { mutableStateOf(0f) }
     var matchMade by remember { mutableStateOf(false) }
     var matchedMember by remember { mutableStateOf<Member?>(null) }
 
-    LaunchedEffect(members) {
+    LaunchedEffect(filteredMembers) {
         currentIndex = 0
     }
 
@@ -60,7 +78,11 @@ fun DiscoveryDeckScreen(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     IconButton(onClick = { onNavigate(Screen.Notifications.route) }) {
-                        BadgedBox(badge = { Badge(containerColor = CosmosError) { Text("2") } }) {
+                        if (unreadNotificationCount > 0) {
+                            BadgedBox(badge = { Badge(containerColor = CosmosError) { Text("$unreadNotificationCount") } }) {
+                                Icon(Icons.Outlined.Notifications, "Notifications", tint = CosmosOnBackground)
+                            }
+                        } else {
                             Icon(Icons.Outlined.Notifications, "Notifications", tint = CosmosOnBackground)
                         }
                     }
@@ -76,10 +98,12 @@ fun DiscoveryDeckScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf("All", "Founders", "Investors", "Operators").forEach { filter ->
+                    val isSelected = filter == selectedFilter
                     CosmosTagChip(
                         text = filter,
-                        backgroundColor = if (filter == "All") CosmosPrimary.copy(alpha = 0.2f) else CosmosSurfaceContainerHigh,
-                        textColor = if (filter == "All") CosmosPrimary else CosmosOnSurfaceVariant
+                        backgroundColor = if (isSelected) CosmosPrimary.copy(alpha = 0.2f) else CosmosSurfaceContainerHigh,
+                        textColor = if (isSelected) CosmosPrimary else CosmosOnSurfaceVariant,
+                        onClick = { selectedFilter = filter }
                     )
                 }
             }
@@ -108,24 +132,32 @@ fun DiscoveryDeckScreen(
                 modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                if (currentIndex < members.size) {
-                    // Background cards (stack effect)
-                    if (currentIndex + 1 < members.size) {
+                if (currentIndex < filteredMembers.size) {
+                    // Background card (stack effect — visually behind front card)
+                    if (currentIndex + 1 < filteredMembers.size) {
                         MemberSwipeCard(
-                            member = members[currentIndex + 1],
+                            member = filteredMembers[currentIndex + 1],
                             onTap = {},
-                            modifier = Modifier.offset(y = 16.dp).fillMaxWidth().scale(0.95f),
-                            swipeOffset = 0f
+                            modifier = Modifier
+                                .offset(y = 12.dp)
+                                .fillMaxWidth()
+                                .graphicsLayer(
+                                    scaleX = 0.93f,
+                                    scaleY = 0.93f
+                                )
+                                .alpha(0.5f),
+                            swipeOffset = 0f,
+                            isBackground = true
                         )
                     }
                     // Front card
                     MemberSwipeCard(
-                        member = members[currentIndex],
-                        onTap = { onProfileTap(members[currentIndex].id) },
+                        member = filteredMembers[currentIndex],
+                        onTap = { onProfileTap(filteredMembers[currentIndex].id) },
                         modifier = Modifier.fillMaxWidth().pointerInput(Unit) {
                             detectHorizontalDragGestures(
                                 onDragEnd = {
-                                    val currentMember = members[currentIndex]
+                                    val currentMember = filteredMembers[currentIndex]
                                     if (swipeOffset > 150) {
                                         discoveryViewModel.swipeRight(currentMember.id) { member ->
                                             matchedMember = member
@@ -156,7 +188,7 @@ fun DiscoveryDeckScreen(
             }
 
             // Action buttons
-            if (currentIndex < members.size) {
+            if (currentIndex < filteredMembers.size) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 24.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
@@ -170,8 +202,8 @@ fun DiscoveryDeckScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         IconButton(onClick = {
-                            if (currentIndex < members.size) {
-                                discoveryViewModel.swipeLeft(members[currentIndex].id)
+                            if (currentIndex < filteredMembers.size) {
+                                discoveryViewModel.swipeLeft(filteredMembers[currentIndex].id)
                                 currentIndex++
                             }
                         }) {
@@ -185,7 +217,7 @@ fun DiscoveryDeckScreen(
                             .background(CosmosSurfaceContainer),
                         contentAlignment = Alignment.Center
                     ) {
-                        IconButton(onClick = { if (currentIndex < members.size) onProfileTap(members[currentIndex].id) }) {
+                        IconButton(onClick = { if (currentIndex < filteredMembers.size) onProfileTap(filteredMembers[currentIndex].id) }) {
                             Icon(Icons.Default.Person, "View Profile", tint = CosmosOnSurfaceVariant, modifier = Modifier.size(20.dp))
                         }
                     }
@@ -197,8 +229,8 @@ fun DiscoveryDeckScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         IconButton(onClick = {
-                            if (currentIndex < members.size) {
-                                val currentMember = members[currentIndex]
+                            if (currentIndex < filteredMembers.size) {
+                                val currentMember = filteredMembers[currentIndex]
                                 discoveryViewModel.swipeRight(currentMember.id) { member ->
                                     matchedMember = member
                                     matchMade = true
@@ -227,12 +259,14 @@ fun DiscoveryDeckScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MemberSwipeCard(
     member: Member,
     onTap: () -> Unit,
     modifier: Modifier = Modifier,
-    swipeOffset: Float = 0f
+    swipeOffset: Float = 0f,
+    isBackground: Boolean = false
 ) {
     val rotationDeg = swipeOffset / 20f
     val likeAlpha = (swipeOffset / 200f).coerceIn(0f, 1f)
@@ -244,7 +278,12 @@ fun MemberSwipeCard(
             .offset(x = (swipeOffset / 3).dp)
     ) {
         CosmosGlassCard(showTopGradientBorder = true) {
-            // LIKE / NOPE overlay text
+            Column(
+                modifier = Modifier.graphicsLayer {
+                    alpha = if (isBackground) 0f else 1f
+                }
+            ) {
+                // LIKE / NOPE overlay text
             if (likeAlpha > 0.1f) {
                 Box(
                     modifier = Modifier.fillMaxWidth().height(4.dp)
@@ -315,14 +354,12 @@ fun MemberSwipeCard(
                     )
                 }
             }
+            }
         }
     }
 }
 
-@Composable
-private fun Modifier.scale(scale: Float): Modifier = this.then(
-    Modifier.wrapContentSize(Alignment.Center)
-)
+// Removed broken scale() extension — using graphicsLayer instead
 
 @Composable
 fun MatchCelebrationOverlay(
@@ -355,4 +392,60 @@ fun MatchCelebrationOverlay(
             }
         }
     }
+}
+
+private fun Member.isFounder(): Boolean {
+    val type = primaryUserType.lowercase()
+    val roleLower = role.lowercase()
+    val headlineLower = headline.lowercase()
+    val tagsLower = tags.map { it.lowercase() }
+    return type.contains("founder") || 
+           roleLower.contains("founder") || 
+           roleLower.contains("ceo") || 
+           headlineLower.contains("founder") || 
+           headlineLower.contains("ceo") || 
+           tagsLower.any { it.contains("founder") }
+}
+
+private fun Member.isInvestor(): Boolean {
+    val type = primaryUserType.lowercase()
+    val roleLower = role.lowercase()
+    val headlineLower = headline.lowercase()
+    val tagsLower = tags.map { it.lowercase() }
+    return type.contains("investor") || 
+           roleLower.contains("investor") || 
+           roleLower.contains("partner") || 
+           roleLower.contains("venture") || 
+           headlineLower.contains("investor") || 
+           headlineLower.contains("partner") || 
+           headlineLower.contains("venture") || 
+           tagsLower.any { it.contains("investor") }
+}
+
+private fun Member.isOperator(): Boolean {
+    val type = primaryUserType.lowercase()
+    val roleLower = role.lowercase()
+    val headlineLower = headline.lowercase()
+    val tagsLower = tags.map { it.lowercase() }
+    return type.contains("operator") || 
+           type.contains("professional") || 
+           type.contains("freelancer") || 
+           type.contains("creator") || 
+           type.contains("service provider") || 
+           roleLower.contains("operator") || 
+           roleLower.contains("product") || 
+           roleLower.contains("engineer") || 
+           roleLower.contains("manager") || 
+           roleLower.contains("head") || 
+           roleLower.contains("director") || 
+           roleLower.contains("vp") || 
+           headlineLower.contains("operator") || 
+           headlineLower.contains("product") || 
+           headlineLower.contains("engineer") || 
+           headlineLower.contains("manager") || 
+           headlineLower.contains("head") || 
+           headlineLower.contains("director") || 
+           headlineLower.contains("vp") || 
+           tagsLower.any { it.contains("operator") || it.contains("product") || it.contains("growth") || it.contains("engineer") } ||
+           (!isFounder() && !isInvestor() && (role.isNotEmpty() || tags.isNotEmpty() || headline.isNotEmpty()))
 }

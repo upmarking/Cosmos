@@ -1,6 +1,9 @@
 package com.cosmos.app.screens.onboarding
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -15,6 +18,7 @@ import com.cosmos.app.ui.theme.*
 import androidx.compose.runtime.collectAsState
 import com.cosmos.app.data.model.MembershipTier
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DefineIntentScreen(
     onNext: () -> Unit,
@@ -34,8 +38,8 @@ fun DefineIntentScreen(
         "Deep Tech", "Climate", "Biotech", "PropTech", "EdTech"
     )
 
-    val selectedIntents = remember { mutableStateSetOf<String>() }
-    val selectedTags = remember { mutableStateSetOf<String>() }
+    val selectedIntents = remember { mutableStateListOf<String>() }
+    val selectedTags = remember { mutableStateListOf<String>() }
 
     val currentUser by authViewModel.currentUser.collectAsState()
     val isLoading by authViewModel.isLoading.collectAsState()
@@ -115,7 +119,7 @@ fun DefineIntentScreen(
                                 val updated = member.copy(
                                     tags = selectedTags.toList()
                                 )
-                                authViewModel.saveOnboarding(updated, onNext)
+                                authViewModel.saveOnboarding(member = updated, onSuccess = onNext)
                             } ?: onNext()
                         },
                         icon = Icons.AutoMirrored.Filled.ArrowForward,
@@ -127,6 +131,7 @@ fun DefineIntentScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun YourVisionScreen(
     onNext: () -> Unit,
@@ -230,7 +235,7 @@ fun YourVisionScreen(
                                     goalStatement = goalStatement,
                                     longTermVision = longTermVision
                                 )
-                                authViewModel.saveOnboarding(updated, onNext)
+                                authViewModel.saveOnboarding(member = updated, onSuccess = onNext)
                             } ?: onNext()
                         },
                         icon = Icons.AutoMirrored.Filled.ArrowForward,
@@ -335,7 +340,7 @@ fun AiMatchingRefinementScreen(
                                 val updated = member.copy(
                                     membershipTier = MembershipTier.MEMBER
                                 )
-                                authViewModel.saveOnboarding(updated, onFinish)
+                                authViewModel.saveOnboarding(member = updated, onSuccess = onFinish)
                             } ?: onFinish()
                         }
                     )

@@ -3,6 +3,8 @@ package com.cosmos.app.screens.connect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,19 +20,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cosmos.app.data.model.EndorsedSkill
 import com.cosmos.app.data.model.Member
-import com.cosmos.app.data.model.SampleData
 import com.cosmos.app.navigation.Screen
 import com.cosmos.app.ui.components.*
 import com.cosmos.app.ui.theme.*
 import androidx.compose.runtime.collectAsState
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun FoundersCircleFeedScreen(
     onProfileTap: (String) -> Unit,
     onBack: () -> Unit,
-    onNavigate: (String) -> Unit
+    onNavigate: (String) -> Unit,
+    communityViewModel: com.cosmos.app.ui.viewmodel.CommunityViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
+    LaunchedEffect(Unit) {
+        communityViewModel.loadCircleMembers("c1")
+    }
+
+    val members by communityViewModel.circleMembers.collectAsState()
+
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             CosmosTopBar(title = "Founders Circle", onBack = onBack)
@@ -40,14 +48,23 @@ fun FoundersCircleFeedScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(SampleData.sampleMembers) { member ->
-                    FounderFeedCard(member = member, onTap = { onProfileTap(member.id) })
+                if (members.isEmpty()) {
+                    item {
+                        CosmosGlassCard {
+                            Text("No members in this circle yet.", color = CosmosOnSurfaceVariant)
+                        }
+                    }
+                } else {
+                    items(members) { member ->
+                        FounderFeedCard(member = member, onTap = { onProfileTap(member.id) })
+                    }
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FounderFeedCard(member: Member, onTap: () -> Unit) {
     CosmosGlassCard(
@@ -80,7 +97,7 @@ fun FounderFeedCard(member: Member, onTap: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MemberProfileScreen(
     memberId: String,
@@ -93,11 +110,21 @@ fun MemberProfileScreen(
 ) {
     LaunchedEffect(memberId) {
         profileViewModel.loadProfile(memberId)
+        profileViewModel.checkConnectionStatus(memberId)
     }
 
     val memberState by profileViewModel.selectedMember.collectAsState()
-    val member = memberState ?: SampleData.sampleMembers.find { it.id == memberId } ?: SampleData.sampleMember
-    var isConnected by remember { mutableStateOf(false) }
+    val isConnected by profileViewModel.isConnectionEstablished.collectAsState()
+
+    if (memberState == null) {
+        CosmosAmbientBackground {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = CosmosPrimary)
+            }
+        }
+        return
+    }
+    val member = memberState!!
 
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
@@ -159,7 +186,9 @@ fun MemberProfileScreen(
                             if (!isConnected) {
                                 CosmosButton(
                                     text = "Connect",
-                                    onClick = { isConnected = true },
+                                    onClick = { 
+                                        profileViewModel.connectWithMember(member.id) { _ -> }
+                                    },
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Default.PersonAdd
                                 )
@@ -270,6 +299,7 @@ fun EndorsedSkillRow(skill: EndorsedSkill) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EndorseExpertiseScreen(
     memberId: String,
@@ -282,9 +312,9 @@ fun EndorseExpertiseScreen(
     }
 
     val memberState by profileViewModel.selectedMember.collectAsState()
-    val member = memberState ?: SampleData.sampleMembers.find { it.id == memberId } ?: SampleData.sampleMember
+    val member = memberState ?: return
     val allSkills = listOf("Communication", "Product Thinking", "Fundraising", "Design", "Sales", "Leadership", "Hiring", "Strategy", "Operations", "Technical Ability", "Marketing", "Finance", "Legal", "Public Speaking", "Negotiation")
-    val endorsed = remember { mutableStateSetOf<String>() }
+    val endorsed = remember { mutableStateListOf<String>() }
 
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
@@ -295,7 +325,7 @@ fun EndorseExpertiseScreen(
             ) {
                 Spacer(Modifier.height(24.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, size = 56.dp, isLinkedInConnected = member.isLinkedInConnected)
+                    CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, modifier = Modifier, size = 56.dp, isLinkedInConnected = member.isLinkedInConnected)
                     Column {
                         Text(member.name, style = MaterialTheme.typography.titleMedium, color = CosmosOnBackground)
                         Text("Tap a skill to endorse it", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)

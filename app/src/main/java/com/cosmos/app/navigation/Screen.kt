@@ -7,6 +7,7 @@ sealed class Screen(val route: String) {
 
     // ── Onboarding ──────────────────────────────────────────────────────────
     object Welcome : Screen("welcome")
+    object WelcomeSignIn : Screen("welcome_signin") // Welcome screen with sign-in panel open
     object CompleteIdentity : Screen("complete_identity")
     object DefineIntent : Screen("define_intent")
     object YourVision : Screen("your_vision")
@@ -63,4 +64,5 @@ sealed class Screen(val route: String) {
     object MembershipTiers : Screen("membership_tiers")
     object Notifications : Screen("notifications")
     object Settings : Screen("settings")
+    object EditProfile : Screen("edit_profile")
 }

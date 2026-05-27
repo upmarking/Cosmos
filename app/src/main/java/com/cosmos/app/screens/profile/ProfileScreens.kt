@@ -24,6 +24,22 @@ import com.cosmos.app.navigation.Screen
 import com.cosmos.app.ui.components.*
 import com.cosmos.app.ui.theme.*
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import android.graphics.Bitmap
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import java.io.ByteArrayOutputStream
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NetworkingDashboardScreen(
     onMembershipTap: () -> Unit,
@@ -74,7 +90,14 @@ fun NetworkingDashboardScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Spacer(Modifier.height(32.dp))
-                        CosmosAvatar(avatarUrl = me.avatarUrl, name = me.name, size = 88.dp, isLinkedInConnected = me.isLinkedInConnected, membershipTierColor = CosmosPrimary)
+                        CosmosAvatar(
+                            avatarUrl = me.avatarUrl,
+                            name = me.name,
+                            modifier = Modifier,
+                            size = 88.dp,
+                            isLinkedInConnected = me.isLinkedInConnected,
+                            membershipTierColor = CosmosPrimary
+                        )
                         Spacer(Modifier.height(12.dp))
                         Text(me.name, style = MaterialTheme.typography.headlineSmall, color = CosmosOnBackground, fontWeight = FontWeight.Bold)
                         Text(me.headline, style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant)
@@ -128,9 +151,9 @@ fun NetworkingDashboardScreen(
                     }
                     Spacer(Modifier.height(10.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        CosmosStatCard("Intros Made", "6", modifier = Modifier.weight(1f), accent = CosmosGradientStart)
-                        CosmosStatCard("Goals Hit", "3", modifier = Modifier.weight(1f), accent = CosmosSuccess)
-                        CosmosStatCard("Circles", "2", modifier = Modifier.weight(1f), accent = CosmosSecondary)
+                        CosmosStatCard(label = "Intros Made", value = "6", modifier = Modifier.weight(1f), accent = CosmosGradientStart)
+                        CosmosStatCard(label = "Goals Hit", value = "3", modifier = Modifier.weight(1f), accent = CosmosSuccess)
+                        CosmosStatCard(label = "Circles", value = "2", modifier = Modifier.weight(1f), accent = CosmosSecondary)
                     }
                 }
             }
@@ -138,7 +161,7 @@ fun NetworkingDashboardScreen(
             // Top endorsed skills
             item {
                 Spacer(Modifier.height(16.dp))
-                CosmosSectionHeader("Top Endorsements", modifier = Modifier.padding(horizontal = 20.dp))
+                CosmosSectionHeader(title = "Top Endorsements")
                 Spacer(Modifier.height(8.dp))
                 if (me.endorsedSkills.isEmpty()) {
                     Text("No skill endorsements yet.", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp))
@@ -167,10 +190,10 @@ fun NetworkingDashboardScreen(
             // Quick actions
             item {
                 Spacer(Modifier.height(16.dp))
-                CosmosSectionHeader("Quick Actions", modifier = Modifier.padding(horizontal = 20.dp))
+                CosmosSectionHeader(title = "Quick Actions")
                 Spacer(Modifier.height(8.dp))
                 listOf(
-                    Triple(Icons.Default.Edit, "Edit Profile", ""),
+                    Triple(Icons.Default.Edit, "Edit Profile", Screen.EditProfile.route),
                     Triple(Icons.Default.Star, "Membership & Tiers", Screen.MembershipTiers.route),
                     Triple(Icons.Default.Settings, "Settings & Privacy", Screen.Settings.route),
                     Triple(Icons.Default.HelpOutline, "Help & Support", "")
@@ -294,7 +317,7 @@ fun NotificationsCenterScreen(
                 val read = notifications.filter { it.isRead }
 
                 if (unread.isNotEmpty()) {
-                    item { CosmosSectionHeader("New", modifier = Modifier.padding(horizontal = 16.dp)) }
+                    item { CosmosSectionHeader(title = "New") }
                     items(unread) { notif ->
                         NotificationItem(notification = notif, onTap = {
                             profileViewModel.markNotificationAsRead(notif.id)
@@ -309,7 +332,7 @@ fun NotificationsCenterScreen(
                 }
 
                 if (read.isNotEmpty()) {
-                    item { CosmosSectionHeader("Earlier", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+                    item { CosmosSectionHeader(title = "Earlier") }
                     items(read) { notif ->
                         NotificationItem(notification = notif, onTap = {
                             when (notif.type) {
@@ -373,6 +396,7 @@ fun NotificationItem(notification: Notification, onTap: () -> Unit) {
 fun SettingsPrivacyScreen(
     onBack: () -> Unit,
     onSignOut: () -> Unit = {},
+    onEditProfileTap: () -> Unit = {},
     authViewModel: com.cosmos.app.ui.viewmodel.AuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val settingsSections = listOf(
@@ -383,13 +407,15 @@ fun SettingsPrivacyScreen(
         "Danger Zone" to listOf("Sign Out", "Pause Account", "Delete Account")
     )
 
+    val currentUser by authViewModel.currentUser.collectAsState()
+
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             CosmosTopBar(title = "Settings & Privacy", onBack = onBack)
 
             LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp)) {
                 settingsSections.forEach { (section, settings) ->
-                    item { CosmosSectionHeader(section, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+                    item { CosmosSectionHeader(title = section) }
                     settings.forEach { setting ->
                         item {
                             val isDanger = section == "Danger Zone"
@@ -398,6 +424,13 @@ fun SettingsPrivacyScreen(
                                     if (setting == "Sign Out") {
                                         authViewModel.signOut {
                                             onSignOut()
+                                        }
+                                    } else if (setting == "Edit Profile") {
+                                        onEditProfileTap()
+                                    } else if (setting == "LinkedIn Connection") {
+                                        currentUser?.let { member ->
+                                            val updated = member.copy(isLinkedInConnected = !member.isLinkedInConnected)
+                                            authViewModel.saveOnboarding(member = updated, imageBytes = null, onSuccess = {})
                                         }
                                     }
                                 }.padding(horizontal = 20.dp, vertical = 14.dp),
@@ -410,6 +443,19 @@ fun SettingsPrivacyScreen(
                                         checked = true, onCheckedChange = {},
                                         colors = SwitchDefaults.colors(checkedTrackColor = CosmosPrimary, uncheckedTrackColor = CosmosSurfaceContainerHigh)
                                     )
+                                } else if (setting == "LinkedIn Connection") {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        val isConnected = currentUser?.isLinkedInConnected == true
+                                        Text(
+                                            text = if (isConnected) "Connected" else "Not Connected",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (isConnected) CosmosPrimary else CosmosOnSurfaceVariant
+                                        )
+                                        Icon(Icons.Default.ChevronRight, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(18.dp))
+                                    }
                                 } else {
                                     Icon(Icons.Default.ChevronRight, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(18.dp))
                                 }
@@ -422,3 +468,330 @@ fun SettingsPrivacyScreen(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun EditProfileScreen(
+    onBack: () -> Unit,
+    authViewModel: com.cosmos.app.ui.viewmodel.AuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+) {
+    val currentUserState by authViewModel.currentUser.collectAsState()
+    val isLoading by authViewModel.isLoading.collectAsState()
+    val context = LocalContext.current
+
+    var name by remember { mutableStateOf("") }
+    var headline by remember { mutableStateOf("") }
+    var role by remember { mutableStateOf("") }
+    var company by remember { mutableStateOf("") }
+    var location by remember { mutableStateOf("") }
+    var selectedUserType by remember { mutableStateOf("") }
+    var bio by remember { mutableStateOf("") }
+    var currentAvatarUrl by remember { mutableStateOf("") }
+
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedImageBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var showPhotoOptions by remember { mutableStateOf(false) }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            selectedImageUri = uri
+            selectedImageBitmap = null
+        }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            selectedImageBitmap = bitmap
+            selectedImageUri = null
+        }
+    }
+
+    val userTypes = listOf(
+        "Founder", "Co-Founder", "Startup Operator", "Investor", "Student",
+        "Mentor", "Tech Professional", "Marketing Professional", "Finance Professional",
+        "Legal Professional", "Healthcare Professional", "Business Professional",
+        "Creator", "Freelancer", "Service Provider", "Community Member"
+    )
+
+    // Prefill form values once when currentUserState becomes available
+    var hasPrefilled by remember { mutableStateOf(false) }
+    LaunchedEffect(currentUserState) {
+        currentUserState?.let { member ->
+            if (!hasPrefilled) {
+                name = member.name
+                headline = member.headline
+                role = member.role
+                company = member.company
+                location = member.location
+                selectedUserType = member.primaryUserType
+                bio = member.bio
+                currentAvatarUrl = member.avatarUrl
+                hasPrefilled = true
+            }
+        }
+    }
+
+    var localError by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        authViewModel.authError.collect { error ->
+            localError = error
+        }
+    }
+
+    CosmosAmbientBackground {
+        Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+            CosmosTopBar(title = "Edit Profile", onBack = onBack)
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+            ) {
+                Spacer(Modifier.height(16.dp))
+
+                // Profile photo edit
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(96.dp)
+                            .clip(CircleShape)
+                            .background(CosmosSurfaceContainerHigh)
+                            .border(2.dp, CosmosOutlineVariant, CircleShape)
+                            .clickable { showPhotoOptions = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (selectedImageUri != null || selectedImageBitmap != null) {
+                            AsyncImage(
+                                model = selectedImageUri ?: selectedImageBitmap,
+                                contentDescription = "Selected photo",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else if (currentAvatarUrl.isNotEmpty()) {
+                            val model: Any = if (currentAvatarUrl.startsWith("data:image")) {
+                                try {
+                                    val base64Data = currentAvatarUrl.substringAfter(",")
+                                    android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
+                                } catch (e: Exception) {
+                                    currentAvatarUrl
+                                }
+                            } else {
+                                currentAvatarUrl
+                            }
+                            AsyncImage(
+                                model = model,
+                                contentDescription = "Current photo",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Default.AddAPhoto,
+                                    contentDescription = "Add photo",
+                                    tint = CosmosOnSurfaceVariant,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Text(
+                                    "Photo",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = CosmosOnSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (showPhotoOptions) {
+                    AlertDialog(
+                        onDismissRequest = { showPhotoOptions = false },
+                        title = { Text("Select Profile Photo", color = CosmosOnBackground) },
+                        text = { Text("Choose a photo from your gallery or take a new one.", color = CosmosOnSurfaceVariant) },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showPhotoOptions = false
+                                    galleryLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                }
+                            ) {
+                                Text("Gallery", color = CosmosPrimary)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    showPhotoOptions = false
+                                    cameraLauncher.launch(null)
+                                }
+                            ) {
+                                Text("Camera", color = CosmosPrimary)
+                            }
+                        },
+                        containerColor = CosmosSurfaceContainerHigh
+                    )
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                // User type selector
+                Text(
+                    "I am a...",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = CosmosOnBackground,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    userTypes.forEach { type ->
+                        CosmosTagChip(
+                            text = type,
+                            backgroundColor = if (selectedUserType == type) CosmosPrimary.copy(alpha = 0.2f)
+                                             else CosmosSurfaceContainerHigh,
+                            textColor = if (selectedUserType == type) CosmosPrimary else CosmosOnSurfaceVariant,
+                            onClick = { selectedUserType = type }
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                // Input fields
+                EditProfileTextField(label = "Full Name *", value = name, onValueChange = { name = it }, placeholder = "Alexandra Chen")
+                EditProfileTextField(label = "Professional Headline", value = headline, onValueChange = { headline = it }, placeholder = "Founder & CEO at NexusAI")
+                EditProfileTextField(label = "Current Role", value = role, onValueChange = { role = it }, placeholder = "CEO")
+                EditProfileTextField(label = "Company", value = company, onValueChange = { company = it }, placeholder = "NexusAI")
+                EditProfileTextField(label = "Location", value = location, onValueChange = { location = it }, placeholder = "San Francisco, CA")
+                EditProfileTextField(label = "Bio", value = bio, onValueChange = { bio = it }, placeholder = "Tell other members about yourself...", singleLine = false)
+
+                if (localError.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(localError, color = CosmosError, style = MaterialTheme.typography.bodyMedium)
+                }
+
+                Spacer(Modifier.height(100.dp))
+            }
+
+            // Bottom Save Button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(CosmosBackground)
+                    .navigationBarsPadding()
+                    .padding(20.dp)
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(color = CosmosPrimary, modifier = Modifier.align(Alignment.Center))
+                } else {
+                    CosmosButton(
+                        text = "Save Changes",
+                        onClick = {
+                            if (name.isNotBlank() && selectedUserType.isNotBlank()) {
+                                val imageBytes = when {
+                                    selectedImageUri != null -> {
+                                        try {
+                                            context.contentResolver.openInputStream(selectedImageUri!!)?.use { it.readBytes() }
+                                        } catch (e: Exception) {
+                                            null
+                                        }
+                                    }
+                                    selectedImageBitmap != null -> {
+                                        try {
+                                            val stream = ByteArrayOutputStream()
+                                            selectedImageBitmap!!.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+                                            stream.toByteArray()
+                                        } catch (e: Exception) {
+                                            null
+                                        }
+                                    }
+                                    else -> null
+                                }
+
+                                val updatedMember = currentUserState?.copy(
+                                    name = name,
+                                    headline = headline.ifBlank { "$selectedUserType at $company" },
+                                    role = role,
+                                    company = company,
+                                    location = location,
+                                    primaryUserType = selectedUserType,
+                                    bio = bio
+                                ) ?: Member(
+                                    id = "",
+                                    name = name,
+                                    headline = headline.ifBlank { "$selectedUserType at $company" },
+                                    role = role,
+                                    company = company,
+                                    location = location,
+                                    primaryUserType = selectedUserType,
+                                    bio = bio,
+                                    avatarUrl = currentAvatarUrl
+                                )
+
+                                authViewModel.saveOnboarding(
+                                    member = updatedMember,
+                                    onSuccess = onBack,
+                                    imageBytes = imageBytes
+                                )
+                            } else {
+                                localError = "Please fill in all required (*) fields"
+                            }
+                        },
+                        enabled = name.isNotBlank() && selectedUserType.isNotBlank()
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditProfileTextField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String = "",
+    singleLine: Boolean = true,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.padding(bottom = 16.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = CosmosOnSurfaceVariant,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text(placeholder, color = CosmosOnSurfaceVariant.copy(alpha = 0.5f)) },
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = CosmosPrimary,
+                unfocusedBorderColor = CosmosOutlineVariant,
+                focusedTextColor = CosmosOnBackground,
+                unfocusedTextColor = CosmosOnBackground,
+                cursorColor = CosmosPrimary,
+                focusedContainerColor = CosmosSurfaceContainerLow,
+                unfocusedContainerColor = CosmosSurfaceContainerLow
+            ),
+            singleLine = singleLine,
+            maxLines = if (singleLine) 1 else 5
+        )
+    }
+}
+

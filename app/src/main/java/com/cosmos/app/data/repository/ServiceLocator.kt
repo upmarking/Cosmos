@@ -1,10 +1,28 @@
 package com.cosmos.app.data.repository
 
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 
 object ServiceLocator {
+
+    // Toggle this to manually force offline mock mode without connecting to Firebase.
+    var forceMockMode: Boolean = false
+
+    val isMockMode: Boolean = false
+
+    init {
+        try {
+            val app = FirebaseApp.getInstance()
+            val apiKey = app.options.apiKey
+            if (apiKey != null && apiKey.contains("Dumpo", ignoreCase = true)) {
+                forceMockMode = true
+            }
+        } catch (e: Exception) {
+            forceMockMode = true
+        }
+    }
 
     private val auth: FirebaseAuth by lazy {
         FirebaseAuth.getInstance()
@@ -19,37 +37,49 @@ object ServiceLocator {
         db
     }
 
-    val authRepository: AuthRepository by lazy {
-        FirebaseAuthRepository(auth, firestore)
-    }
+    // Expose mock repositories so fallback can access them directly
+    val mockAuthRepository = MockAuthRepository()
+    val mockProfileRepository = MockProfileRepository()
+    val mockSwipeRepository = MockSwipeRepository()
+    val mockChatRepository = MockChatRepository()
+    val mockEventRepository = MockEventRepository()
+    val mockCircleRepository = MockCircleRepository()
+    val mockNotificationRepository = MockNotificationRepository()
+    val mockIntroRepository = MockIntroRepository()
 
-    val profileRepository: ProfileRepository by lazy {
-        FirestoreProfileRepository(firestore)
-    }
+    // Expose real repositories
+    val firebaseAuthRepository by lazy { FirebaseAuthRepository(auth, firestore) }
+    val firestoreProfileRepository by lazy { FirestoreProfileRepository(firestore) }
+    val firestoreSwipeRepository by lazy { FirestoreSwipeRepository(firestore) }
+    val firestoreChatRepository by lazy { FirestoreChatRepository(firestore, profileRepository) }
+    val firestoreEventRepository by lazy { FirestoreEventRepository(firestore) }
+    val firestoreCircleRepository by lazy { FirestoreCircleRepository(firestore) }
+    val firestoreNotificationRepository by lazy { FirestoreNotificationRepository(firestore) }
+    val firestoreIntroRepository by lazy { FirestoreIntroRepository(firestore, profileRepository) }
 
-    val swipeRepository: SwipeRepository by lazy {
-        FirestoreSwipeRepository(firestore)
-    }
+    val authRepository: AuthRepository
+        get() = if (forceMockMode || isMockMode) mockAuthRepository else firebaseAuthRepository
 
-    val chatRepository: ChatRepository by lazy {
-        FirestoreChatRepository(firestore, profileRepository)
-    }
+    val profileRepository: ProfileRepository
+        get() = if (forceMockMode || isMockMode) mockProfileRepository else firestoreProfileRepository
 
-    val eventRepository: EventRepository by lazy {
-        FirestoreEventRepository(firestore)
-    }
+    val swipeRepository: SwipeRepository
+        get() = if (forceMockMode || isMockMode) mockSwipeRepository else firestoreSwipeRepository
 
-    val circleRepository: CircleRepository by lazy {
-        FirestoreCircleRepository(firestore)
-    }
+    val chatRepository: ChatRepository
+        get() = if (forceMockMode || isMockMode) mockChatRepository else firestoreChatRepository
 
-    val notificationRepository: NotificationRepository by lazy {
-        FirestoreNotificationRepository(firestore)
-    }
+    val eventRepository: EventRepository
+        get() = if (forceMockMode || isMockMode) mockEventRepository else firestoreEventRepository
 
-    val introRepository: IntroRepository by lazy {
-        FirestoreIntroRepository(firestore, profileRepository)
-    }
+    val circleRepository: CircleRepository
+        get() = if (forceMockMode || isMockMode) mockCircleRepository else firestoreCircleRepository
+
+    val notificationRepository: NotificationRepository
+        get() = if (forceMockMode || isMockMode) mockNotificationRepository else firestoreNotificationRepository
+
+    val introRepository: IntroRepository
+        get() = if (forceMockMode || isMockMode) mockIntroRepository else firestoreIntroRepository
 
     val aiSummaryService: AiSummaryService by lazy {
         GeminiAiSummaryService()

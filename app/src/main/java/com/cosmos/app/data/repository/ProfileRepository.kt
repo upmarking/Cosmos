@@ -17,10 +17,97 @@ class FirestoreProfileRepository(
     private val firestore: FirebaseFirestore
 ) : ProfileRepository {
 
+    private fun getMockUserMap(userId: String): Map<String, Any>? {
+        return when (userId) {
+            "mock_user_sarah" -> mapOf(
+                "id" to "mock_user_sarah",
+                "name" to "Sarah Jenkins",
+                "headline" to "Founder & CEO at BioSphere",
+                "role" to "CEO",
+                "company" to "BioSphere",
+                "avatarUrl" to "",
+                "location" to "Boston, MA",
+                "bio" to "Building the future of sustainable food systems.",
+                "tags" to listOf("ClimateTech", "Biotech", "Female Founder"),
+                "primaryUserType" to "Founder",
+                "membershipTier" to "FOUNDER",
+                "isLinkedInConnected" to true,
+                "mutualConnectionsCount" to 3,
+                "connectionsCount" to 14,
+                "eventsAttended" to 5,
+                "followUpsCompleted" to 8
+            )
+            "mock_user_david" -> mapOf(
+                "id" to "mock_user_david",
+                "name" to "David Chen",
+                "headline" to "General Partner at Nexus Ventures",
+                "role" to "GP",
+                "company" to "Nexus Ventures",
+                "avatarUrl" to "",
+                "location" to "San Francisco, CA",
+                "bio" to "Investing in early stage AI and enterprise SaaS. Former developer.",
+                "tags" to listOf("AI/ML", "B2B SaaS", "VC"),
+                "primaryUserType" to "Investor",
+                "membershipTier" to "INNER_CIRCLE",
+                "isLinkedInConnected" to true,
+                "mutualConnectionsCount" to 5,
+                "connectionsCount" to 42,
+                "eventsAttended" to 12,
+                "followUpsCompleted" to 20
+            )
+            "mock_user_elena" -> mapOf(
+                "id" to "mock_user_elena",
+                "name" to "Elena Rostova",
+                "headline" to "Lead Designer at Cosmos Studio",
+                "role" to "Designer",
+                "company" to "Cosmos Studio",
+                "avatarUrl" to "",
+                "location" to "New York, NY",
+                "bio" to "Passionate about premium design systems and minimalist interfaces.",
+                "tags" to listOf("UI/UX", "Product Design", "Creative"),
+                "primaryUserType" to "Creator",
+                "membershipTier" to "MEMBER",
+                "isLinkedInConnected" to false,
+                "mutualConnectionsCount" to 1,
+                "connectionsCount" to 8,
+                "eventsAttended" to 3,
+                "followUpsCompleted" to 4
+            )
+            "mock_user_marcus" -> mapOf(
+                "id" to "mock_user_marcus",
+                "name" to "Marcus Vance",
+                "headline" to "VP of Product at ScaleUp",
+                "role" to "Product VP",
+                "company" to "ScaleUp",
+                "avatarUrl" to "",
+                "location" to "Austin, TX",
+                "bio" to "Scale specialist. Former 0-to-1 PM at Stripe and Airbnb.",
+                "tags" to listOf("Product Management", "Growth", "Scaling"),
+                "primaryUserType" to "Startup Operator",
+                "membershipTier" to "EXPLORER",
+                "isLinkedInConnected" to false,
+                "mutualConnectionsCount" to 2,
+                "connectionsCount" to 19,
+                "eventsAttended" to 8,
+                "followUpsCompleted" to 15
+            )
+            else -> null
+        }
+    }
+
     override suspend fun getProfile(userId: String): Result<Member> = runCatching {
         val snapshot = firestore.collection("users").document(userId).get().await()
-        if (!snapshot.exists()) throw IllegalArgumentException("User profile $userId not found")
-        val member = FirebaseAuthRepository.mapDocumentToMember(snapshot.id, snapshot.data ?: emptyMap())
+        val member = if (!snapshot.exists()) {
+            if (userId.startsWith("mock_user_")) {
+                val mockMap = getMockUserMap(userId) ?: throw IllegalArgumentException("User profile $userId not found")
+                firestore.collection("users").document(userId).set(mockMap).await()
+                FirebaseAuthRepository.mapDocumentToMember(userId, mockMap)
+            } else {
+                throw IllegalArgumentException("User profile $userId not found")
+            }
+        } else {
+            FirebaseAuthRepository.mapDocumentToMember(snapshot.id, snapshot.data ?: emptyMap())
+        }
         
         // Load endorsed skills
         val skills = getEndorsedSkills(userId).getOrDefault(emptyList())

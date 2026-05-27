@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -35,6 +36,7 @@ import com.cosmos.app.screens.profile.MembershipTiersScreen
 import com.cosmos.app.screens.profile.NetworkingDashboardScreen
 import com.cosmos.app.screens.profile.NotificationsCenterScreen
 import com.cosmos.app.screens.profile.SettingsPrivacyScreen
+import com.cosmos.app.screens.profile.EditProfileScreen
 
 @Composable
 fun CosmosNavHost(
@@ -66,10 +68,22 @@ fun CosmosNavHost(
                 onSignIn = { navController.navigate(Screen.Connect.route) { popUpTo(0) } }
             )
         }
+        composable(Screen.WelcomeSignIn.route) {
+            WelcomeScreen(
+                onGetStarted = { navController.navigate(Screen.CompleteIdentity.route) },
+                onSignIn = { navController.navigate(Screen.Connect.route) { popUpTo(0) } },
+                initialShowSignIn = true
+            )
+        }
         composable(Screen.CompleteIdentity.route) {
             CompleteIdentityScreen(
                 onNext = { navController.navigate(Screen.DefineIntent.route) },
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onSignInInstead = {
+                    navController.navigate(Screen.WelcomeSignIn.route) {
+                        popUpTo(Screen.Welcome.route) { inclusive = false }
+                    }
+                }
             )
         }
         composable(Screen.DefineIntent.route) {
@@ -261,7 +275,7 @@ fun CosmosNavHost(
             RelationshipCrmChatScreen(
                 connectionId = connectionId,
                 onBack = { navController.popBackStack() },
-                onProfileTap = { navController.navigate(Screen.MemberProfile.createRoute(connectionId)) },
+                onProfileTap = { memberId -> navController.navigate(Screen.MemberProfile.createRoute(memberId)) },
                 onNavigate = { route -> navController.navigate(route) }
             )
         }
@@ -299,7 +313,15 @@ fun CosmosNavHost(
                     navController.navigate(Screen.Welcome.route) {
                         popUpTo(0) { inclusive = true }
                     }
+                },
+                onEditProfileTap = {
+                    navController.navigate(Screen.EditProfile.route)
                 }
+            )
+        }
+        composable(Screen.EditProfile.route) {
+            EditProfileScreen(
+                onBack = { navController.popBackStack() }
             )
         }
     }

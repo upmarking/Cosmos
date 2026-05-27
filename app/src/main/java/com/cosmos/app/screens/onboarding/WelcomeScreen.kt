@@ -16,6 +16,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -27,10 +28,11 @@ import kotlinx.coroutines.delay
 fun WelcomeScreen(
     onGetStarted: () -> Unit,
     onSignIn: () -> Unit,
+    initialShowSignIn: Boolean = false,
     authViewModel: com.cosmos.app.ui.viewmodel.AuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     var visible by remember { mutableStateOf(false) }
-    var showSignIn by remember { mutableStateOf(false) }
+    var showSignIn by remember { mutableStateOf(initialShowSignIn) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var localError by remember { mutableStateOf("") }
@@ -44,7 +46,9 @@ fun WelcomeScreen(
     }
 
     LaunchedEffect(currentUser) {
-        if (currentUser != null) {
+        // Only auto-navigate when the user is on the Sign In panel.
+        // During registration, navigation is handled by the signUp callback.
+        if (currentUser != null && showSignIn) {
             onSignIn()
         }
     }
@@ -129,7 +133,7 @@ fun WelcomeScreen(
                             onValueChange = { password = it },
                             label = { Text("Password", color = CosmosOnSurfaceVariant) },
                             modifier = Modifier.fillMaxWidth(),
-                            visualTransformation = androidx.compose.ui.text.input.PasswordTransformation(),
+                            visualTransformation = PasswordVisualTransformation(),
                             shape = RoundedCornerShape(12.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = CosmosPrimary,
@@ -216,7 +220,7 @@ fun WelcomeScreen(
                         )
 
                         Spacer(Modifier.height(16.dp))
-                        Row {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "Already a member? ",
                                 style = MaterialTheme.typography.labelMedium,
@@ -224,7 +228,8 @@ fun WelcomeScreen(
                             )
                             TextButton(
                                 onClick = { showSignIn = true },
-                                contentPadding = PaddingValues(0.dp)
+                                contentPadding = PaddingValues(0.dp),
+                                modifier = Modifier.height(24.dp)
                             ) {
                                 Text(
                                     text = "Sign In",

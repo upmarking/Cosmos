@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.cosmos.app.data.model.ChatMessage
 import com.cosmos.app.data.model.Circle
 import com.cosmos.app.data.model.Connection
+import com.cosmos.app.data.model.EventRound
 import com.cosmos.app.data.model.IntroRequest
 import com.cosmos.app.data.model.IntroStatus
 import com.cosmos.app.data.model.Member
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
 // ── AuthViewModel ────────────────────────────────────────────────────────────
@@ -83,10 +85,22 @@ class AuthViewModel(
         }
     }
 
-    fun saveOnboarding(member: Member, onSuccess: () -> Unit) {
+    fun saveOnboarding(member: Member, onSuccess: () -> Unit, imageBytes: ByteArray? = null) {
         viewModelScope.launch {
             _isLoading.value = true
-            authRepo.saveOnboardingData(member)
+
+            // Attempt photo upload — always returns success (empty URL if Storage unavailable)
+            val avatarUrl = if (imageBytes != null) {
+                authRepo.uploadProfileImage(authRepo.currentUserId ?: "", imageBytes)
+                    .getOrDefault("") // never block onboarding on upload failure
+            } else {
+                ""
+            }
+
+            val memberToSave = if (avatarUrl.isNotEmpty()) member.copy(avatarUrl = avatarUrl) else member
+
+            // Always proceed to save onboarding data regardless of upload outcome
+            authRepo.saveOnboardingData(memberToSave)
                 .onSuccess {
                     _isLoading.value = false
                     onSuccess()
@@ -173,10 +187,18 @@ class ChatViewModel(
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
     private val _activeConnection = MutableStateFlow<Connection?>(null)
-    val activeConnection: StateFlow<Connection?>(null)
+    val activeConnection: StateFlow<Connection?> = _activeConnection.asStateFlow()
 
     init {
         loadConnections()
+    }
+
+    private fun resolveId(connectionId: String, uid: String): String {
+        return if (!connectionId.contains("_") && !connectionId.startsWith("intro_")) {
+            if (uid < connectionId) "${uid}_${connectionId}" else "${connectionId}_${uid}"
+        } else {
+            connectionId
+        }
     }
 
     private fun loadConnections() {
@@ -195,8 +217,9 @@ class ChatViewModel(
 
     fun selectConnection(connectionId: String) {
         val uid = authRepo.currentUserId ?: return
+        val resolvedId = resolveId(connectionId, uid)
         viewModelScope.launch {
-            chatRepo.getConnection(connectionId, uid).collectLatest { conn ->
+            chatRepo.getConnection(resolvedId, uid).collectLatest { conn ->
                 if (conn != null) {
                     val profile = profileRepo.getProfile(conn.member.id).getOrDefault(conn.member)
                     _activeConnection.value = conn.copy(member = profile)
@@ -204,7 +227,7 @@ class ChatViewModel(
             }
         }
         viewModelScope.launch {
-            chatRepo.getMessages(connectionId).collectLatest { list ->
+            chatRepo.getMessages(resolvedId).collectLatest { list ->
                 val ownMarked = list.map { it.copy(isOwn = it.senderId == uid) }
                 _messages.value = ownMarked
             }
@@ -213,29 +236,34 @@ class ChatViewModel(
 
     fun sendMessage(connectionId: String, text: String) {
         val uid = authRepo.currentUserId ?: return
+        val resolvedId = resolveId(connectionId, uid)
         viewModelScope.launch {
-            chatRepo.sendMessage(connectionId, uid, text, MessageType.TEXT)
+            chatRepo.sendMessage(resolvedId, uid, text, MessageType.TEXT)
         }
     }
 
     fun addLabel(connectionId: String, labels: List<String>) {
         val uid = authRepo.currentUserId ?: return
+        val resolvedId = resolveId(connectionId, uid)
         viewModelScope.launch {
-            chatRepo.updateCrmLabels(connectionId, uid, labels)
+            chatRepo.updateCrmLabels(resolvedId, uid, labels)
         }
     }
 
     fun updateGoal(connectionId: String, goal: String) {
         val uid = authRepo.currentUserId ?: return
+        val resolvedId = resolveId(connectionId, uid)
         viewModelScope.launch {
-            chatRepo.updatePrivateGoal(connectionId, uid, goal)
+            chatRepo.updatePrivateGoal(resolvedId, uid, goal)
         }
     }
 
     fun generateMeetingAiSummary(connectionId: String, transcript: String) {
+        val uid = authRepo.currentUserId ?: return
+        val resolvedId = resolveId(connectionId, uid)
         viewModelScope.launch {
             aiService.generateMeetingSummary(transcript).onSuccess { summary ->
-                chatRepo.saveAiSummary(connectionId, summary)
+                chatRepo.saveAiSummary(resolvedId, summary)
             }
         }
     }
@@ -253,13 +281,19 @@ class EventViewModel(
     private val _activeEvent = MutableStateFlow<NetworkEvent?>(null)
     val activeEvent: StateFlow<NetworkEvent?> = _activeEvent.asStateFlow()
 
+    private val _eventParticipants = MutableStateFlow<List<Member>>(emptyList())
+    val eventParticipants: StateFlow<List<Member>> = _eventParticipants.asStateFlow()
+
+    private val _eventRounds = MutableStateFlow<List<EventRound>>(emptyList())
+    val eventRounds: StateFlow<List<EventRound>> = _eventRounds.asStateFlow()
+
     init {
         loadEvents()
     }
 
     fun loadEvents() {
         viewModelScope.launch {
-            eventRepo.getEvents().onSuccess { list ->
+            eventRepo.getEvents().collectLatest { list ->
                 _events.value = list
             }
         }
@@ -268,7 +302,7 @@ class EventViewModel(
     fun selectEvent(eventId: String) {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch {
-            eventRepo.getEvent(eventId, uid).onSuccess { event ->
+            eventRepo.getEvent(eventId, uid).collectLatest { event ->
                 _activeEvent.value = event
             }
         }
@@ -277,9 +311,22 @@ class EventViewModel(
     fun register(eventId: String) {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch {
-            eventRepo.registerForEvent(eventId, uid).onSuccess {
-                selectEvent(eventId)
-                loadEvents()
+            eventRepo.registerForEvent(eventId, uid)
+        }
+    }
+
+    fun loadEventParticipants(eventId: String) {
+        viewModelScope.launch {
+            eventRepo.getEventParticipants(eventId).collectLatest { list ->
+                _eventParticipants.value = list
+            }
+        }
+    }
+
+    fun loadEventRounds(eventId: String) {
+        viewModelScope.launch {
+            eventRepo.getEventRounds(eventId).collectLatest { list ->
+                _eventRounds.value = list
             }
         }
     }
@@ -297,6 +344,9 @@ class CommunityViewModel(
     private val _feedPosts = MutableStateFlow<List<CirclePost>>(emptyList())
     val feedPosts: StateFlow<List<CirclePost>> = _feedPosts.asStateFlow()
 
+    private val _circleMembers = MutableStateFlow<List<Member>>(emptyList())
+    val circleMembers: StateFlow<List<Member>> = _circleMembers.asStateFlow()
+
     init {
         loadCircles()
     }
@@ -304,7 +354,7 @@ class CommunityViewModel(
     fun loadCircles() {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch {
-            circleRepo.getCircles(uid).onSuccess { list ->
+            circleRepo.getCircles(uid).collectLatest { list ->
                 _circles.value = list
             }
         }
@@ -323,19 +373,30 @@ class CommunityViewModel(
         viewModelScope.launch {
             circleRepo.joinCircle(circleId, uid).onSuccess {
                 loadCircles()
+                loadCircleMembers(circleId)
+            }
+        }
+    }
+
+    fun loadCircleMembers(circleId: String) {
+        viewModelScope.launch {
+            circleRepo.getCircleMembers(circleId).onSuccess { list ->
+                _circleMembers.value = list
             }
         }
     }
 
     fun postUpdate(circleId: String, content: String) {
-        val currentUser = authRepo.currentUser.value ?: return
         viewModelScope.launch {
-            circleRepo.createCirclePost(
-                circleId = circleId,
-                authorName = currentUser.name,
-                authorAvatar = currentUser.avatarUrl,
-                content = content
-            )
+            authRepo.currentUser.firstOrNull()?.let { currentUser ->
+                circleRepo.createCirclePost(
+                    circleId = circleId,
+                    authorId = currentUser.id,
+                    authorName = currentUser.name,
+                    authorAvatar = currentUser.avatarUrl,
+                    content = content
+                )
+            }
         }
     }
 }
@@ -357,6 +418,26 @@ class ProfileViewModel(
         loadNotifications()
     }
 
+    private val _isConnectionEstablished = MutableStateFlow(false)
+    val isConnectionEstablished: StateFlow<Boolean> = _isConnectionEstablished.asStateFlow()
+
+    fun checkConnectionStatus(memberId: String) {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            ServiceLocator.chatRepository.getConnections(uid).collectLatest { list ->
+                _isConnectionEstablished.value = list.any { it.member.id == memberId }
+            }
+        }
+    }
+
+    fun connectWithMember(memberId: String, onResult: (Boolean) -> Unit) {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            val result = ServiceLocator.swipeRepository.recordSwipe(uid, memberId, "LIKE")
+            onResult(result.getOrDefault(false))
+        }
+    }
+
     fun loadProfile(memberId: String) {
         viewModelScope.launch {
             profileRepo.getProfile(memberId).onSuccess { member ->
@@ -366,10 +447,11 @@ class ProfileViewModel(
     }
 
     fun endorseSkill(memberId: String, skillName: String) {
-        val currentUser = authRepo.currentUser.value ?: return
         viewModelScope.launch {
-            profileRepo.endorseSkill(memberId, currentUser.name, skillName).onSuccess {
-                loadProfile(memberId)
+            authRepo.currentUser.firstOrNull()?.let { currentUser ->
+                profileRepo.endorseSkill(memberId, currentUser.name, skillName).onSuccess {
+                    loadProfile(memberId)
+                }
             }
         }
     }

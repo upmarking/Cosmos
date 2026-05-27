@@ -16,13 +16,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cosmos.app.data.model.Circle
-import com.cosmos.app.data.model.SampleData
 import com.cosmos.app.ui.components.*
 import com.cosmos.app.ui.theme.*
 import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 
 @Composable
 fun CommunityHubScreen(
@@ -71,6 +73,7 @@ fun CommunityHubScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CircleCard(circle: Circle, onTap: () -> Unit) {
     CosmosGlassCard(modifier = Modifier.clickable(onClick = onTap), showTopGradientBorder = false) {
@@ -216,9 +219,18 @@ fun CircleMembersScreen(
     circleId: String,
     onBack: () -> Unit,
     onMemberTap: (String) -> Unit,
-    onFeedTap: () -> Unit
+    onFeedTap: () -> Unit,
+    communityViewModel: com.cosmos.app.ui.viewmodel.CommunityViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
-    val circle = SampleData.sampleCircles.find { it.id == circleId } ?: SampleData.sampleCircles.first()
+    LaunchedEffect(circleId) {
+        communityViewModel.loadCircleMembers(circleId)
+        communityViewModel.loadCircles()
+    }
+
+    val circles by communityViewModel.circles.collectAsState()
+    val circleMembers by communityViewModel.circleMembers.collectAsState()
+    
+    val circle = circles.find { it.id == circleId } ?: Circle(circleId, "Loading...", "", "", 0, "", emptyList(), false, false, "")
 
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
@@ -247,15 +259,23 @@ fun CircleMembersScreen(
 
                 item { CosmosSectionHeader("Members") }
 
-                items(SampleData.sampleMembers) { member ->
-                    CosmosGlassCard(modifier = Modifier.clickable { onMemberTap(member.id) }, showTopGradientBorder = false) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, size = 48.dp, isLinkedInConnected = member.isLinkedInConnected)
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(member.name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
-                                Text(member.headline, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, maxLines = 1)
+                if (circleMembers.isEmpty()) {
+                    item {
+                        CosmosGlassCard(showTopGradientBorder = false) {
+                            Text("No members in this circle yet.", color = CosmosOnSurfaceVariant, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                } else {
+                    items(circleMembers) { member ->
+                        CosmosGlassCard(modifier = Modifier.clickable { onMemberTap(member.id) }, showTopGradientBorder = false) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, size = 48.dp, isLinkedInConnected = member.isLinkedInConnected)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(member.name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
+                                    Text(member.headline, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, maxLines = 1)
+                                }
+                                Icon(Icons.Default.ChevronRight, null, tint = CosmosOnSurfaceVariant)
                             }
-                            Icon(Icons.Default.ChevronRight, null, tint = CosmosOnSurfaceVariant)
                         }
                     }
                 }
@@ -279,7 +299,7 @@ fun PrivateCircleFeedScreen(
     }
 
     val circleState by communityViewModel.circles.collectAsState()
-    val circle = circleState.find { it.id == circleId } ?: SampleData.sampleCircles.first()
+    val circle = circleState.find { it.id == circleId } ?: Circle(circleId, "Loading...", "", "", 0, "", emptyList(), false, false, "")
     var postText by remember { mutableStateOf("") }
     val posts by communityViewModel.feedPosts.collectAsState()
 
@@ -346,7 +366,9 @@ fun PrivateCircleFeedScreen(
                             content = post.content, 
                             time = post.timeString, 
                             onAuthorTap = {
-                                SampleData.sampleMembers.find { it.name == post.author }?.let { onNavigate(com.cosmos.app.navigation.Screen.MemberProfile.createRoute(it.id)) }
+                                if (post.authorId.isNotEmpty()) {
+                                    onNavigate(com.cosmos.app.navigation.Screen.MemberProfile.createRoute(post.authorId))
+                                }
                             }
                         )
                     }
@@ -359,8 +381,8 @@ fun PrivateCircleFeedScreen(
 }
 
 @Composable
-fun CircleFeedPost(author: String, content: String, time: String, onAuthorTap: () -> Unit) {
-    CosmosGlassCard(showTopGradientBorder = false) {
+fun CircleFeedPost(author: String, content: String, time: String, onAuthorTap: () -> Unit, modifier: Modifier = Modifier) {
+    CosmosGlassCard(modifier = modifier, showTopGradientBorder = false) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             CosmosAvatar(avatarUrl = "", name = author, size = 40.dp, modifier = Modifier.clickable(onClick = onAuthorTap))
             Column(modifier = Modifier.weight(1f)) {

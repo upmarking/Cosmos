@@ -162,11 +162,12 @@ fun CosmosGlassCard(
 fun CosmosAvatar(
     avatarUrl: String,
     name: String,
+    modifier: Modifier = Modifier,
     size: Dp = 56.dp,
     isLinkedInConnected: Boolean = false,
     membershipTierColor: Color = Color.Transparent
 ) {
-    Box(contentAlignment = Alignment.BottomEnd) {
+    Box(contentAlignment = Alignment.BottomEnd, modifier = modifier) {
         Box(
             modifier = Modifier
                 .size(size)
@@ -180,8 +181,18 @@ fun CosmosAvatar(
             contentAlignment = Alignment.Center
         ) {
             if (avatarUrl.isNotEmpty()) {
+                val model: Any = if (avatarUrl.startsWith("data:image")) {
+                    try {
+                        val base64Data = avatarUrl.substringAfter(",")
+                        android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
+                    } catch (e: Exception) {
+                        avatarUrl
+                    }
+                } else {
+                    avatarUrl
+                }
                 AsyncImage(
-                    model = avatarUrl,
+                    model = model,
                     contentDescription = name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()

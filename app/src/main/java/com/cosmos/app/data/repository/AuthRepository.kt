@@ -3,12 +3,17 @@ package com.cosmos.app.data.repository
 import com.cosmos.app.data.model.Member
 import com.cosmos.app.data.model.MembershipTier
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 interface AuthRepository {
     val currentUser: Flow<Member?>
@@ -17,6 +22,7 @@ interface AuthRepository {
     suspend fun signUp(email: String, password: String, name: String, primaryType: String): Result<Unit>
     suspend fun signOut(): Result<Unit>
     suspend fun saveOnboardingData(member: Member): Result<Unit>
+    suspend fun uploadProfileImage(uid: String, bytes: ByteArray): Result<String>
 }
 
 class FirebaseAuthRepository(
@@ -25,9 +31,13 @@ class FirebaseAuthRepository(
 ) : AuthRepository {
 
     override val currentUserId: String?
-        get() = auth.currentUser?.uid
+        get() = if (ServiceLocator.forceMockMode) {
+            ServiceLocator.mockAuthRepository.currentUserId
+        } else {
+            auth.currentUser?.uid
+        }
 
-    override val currentUser: Flow<Member?> = callbackFlow {
+    private val firebaseCurrentUser: Flow<Member?> = callbackFlow {
         val authListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
             val firebaseUser = firebaseAuth.currentUser
             if (firebaseUser == null) {
@@ -70,61 +80,152 @@ class FirebaseAuthRepository(
         }
     }
 
-    override suspend fun signIn(email: String, password: String): Result<Unit> = runCatching {
-        auth.signInWithEmailAndPassword(email, password).await()
-        Unit
-    }
-
-    override suspend fun signUp(email: String, password: String, name: String, primaryType: String): Result<Unit> = runCatching {
-        val result = auth.createUserWithEmailAndPassword(email, password).await()
-        val uid = result.user?.uid ?: throw IllegalStateException("UID not found after signup")
+    override val currentUser: Flow<Member?> = callbackFlow {
+        var currentJob: kotlinx.coroutines.Job? = null
         
-        // Initialize basic document in Firestore
-        val basicUserMap = mapOf(
-            "id" to uid,
-            "name" to name,
-            "primaryUserType" to primaryType,
-            "headline" to "",
-            "role" to "",
-            "company" to "",
-            "avatarUrl" to "",
-            "location" to "",
-            "bio" to "",
-            "tags" to emptyList<String>(),
-            "goalStatement" to "",
-            "longTermVision" to "",
-            "isLinkedInConnected" to false,
-            "membershipTier" to MembershipTier.EXPLORER.name,
-            "connectionsCount" to 0,
-            "eventsAttended" to 0,
-            "followUpsCompleted" to 0
-        )
-        firestore.collection("users").document(uid).set(basicUserMap).await()
-        Unit
+        val monitorJob = launch {
+            var lastMode: Boolean? = null
+            while (isActive) {
+                val mode = ServiceLocator.forceMockMode
+                if (mode != lastMode) {
+                    lastMode = mode
+                    currentJob?.cancel()
+                    currentJob = launch {
+                        if (mode) {
+                            ServiceLocator.mockAuthRepository.currentUser.collect {
+                                send(it)
+                            }
+                        } else {
+                            firebaseCurrentUser.collect {
+                                send(it)
+                            }
+                        }
+                    }
+                }
+                kotlinx.coroutines.delay(200)
+            }
+        }
+        
+        awaitClose {
+            monitorJob.cancel()
+            currentJob?.cancel()
+        }
     }
 
-    override suspend fun signOut(): Result<Unit> = runCatching {
-        auth.signOut()
+    override suspend fun signIn(email: String, password: String): Result<Unit> {
+        if (ServiceLocator.forceMockMode) {
+            return ServiceLocator.mockAuthRepository.signIn(email, password)
+        }
+        return try {
+            auth.signInWithEmailAndPassword(email, password).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            if (e.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
+                ServiceLocator.forceMockMode = true
+                ServiceLocator.mockAuthRepository.signIn(email, password)
+            } else {
+                Result.failure(e)
+            }
+        }
     }
 
-    override suspend fun saveOnboardingData(member: Member): Result<Unit> = runCatching {
-        val uid = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
-        val dataMap = mapOf(
-            "id" to uid,
-            "name" to member.name,
-            "headline" to member.headline,
-            "role" to member.role,
-            "company" to member.company,
-            "avatarUrl" to member.avatarUrl,
-            "location" to member.location,
-            "bio" to member.bio,
-            "tags" to member.tags,
-            "goalStatement" to member.goalStatement,
-            "longTermVision" to member.longTermVision,
-            "isLinkedInConnected" to member.isLinkedInConnected,
-            "membershipTier" to member.membershipTier.name
-        )
-        firestore.collection("users").document(uid).update(dataMap).await()
+    override suspend fun signUp(email: String, password: String, name: String, primaryType: String): Result<Unit> {
+        if (ServiceLocator.forceMockMode) {
+            return ServiceLocator.mockAuthRepository.signUp(email, password, name, primaryType)
+        }
+        return try {
+            val result = auth.createUserWithEmailAndPassword(email, password).await()
+            val uid = result.user?.uid ?: throw IllegalStateException("UID not found after signup")
+
+            // Initialize basic document in Firestore
+            val basicUserMap = mapOf(
+                "id" to uid,
+                "name" to name,
+                "primaryUserType" to primaryType,
+                "headline" to "",
+                "role" to "",
+                "company" to "",
+                "avatarUrl" to "",
+                "location" to "",
+                "bio" to "",
+                "tags" to emptyList<String>(),
+                "goalStatement" to "",
+                "longTermVision" to "",
+                "isLinkedInConnected" to false,
+                "membershipTier" to MembershipTier.EXPLORER.name,
+                "connectionsCount" to 0,
+                "eventsAttended" to 0,
+                "followUpsCompleted" to 0
+            )
+            firestore.collection("users").document(uid).set(basicUserMap).await()
+            Result.success(Unit)
+        } catch (e: FirebaseAuthUserCollisionException) {
+            // Email is already registered — surface a clear, actionable message
+            Result.failure(Exception("An account already exists with this email. Please sign in instead."))
+        } catch (e: Exception) {
+            if (e.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
+                ServiceLocator.forceMockMode = true
+                ServiceLocator.mockAuthRepository.signUp(email, password, name, primaryType)
+            } else {
+                Result.failure(e)
+            }
+        }
+    }
+
+    override suspend fun signOut(): Result<Unit> {
+        return if (ServiceLocator.forceMockMode) {
+            ServiceLocator.mockAuthRepository.signOut()
+        } else {
+            runCatching {
+                auth.signOut()
+            }
+        }
+    }
+
+    override suspend fun saveOnboardingData(member: Member): Result<Unit> {
+        if (ServiceLocator.forceMockMode) {
+            return ServiceLocator.mockAuthRepository.saveOnboardingData(member)
+        }
+        return runCatching {
+            val uid = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
+            val dataMap = mapOf(
+                "id" to uid,
+                "name" to member.name,
+                "headline" to member.headline,
+                "role" to member.role,
+                "company" to member.company,
+                "avatarUrl" to member.avatarUrl,
+                "location" to member.location,
+                "bio" to member.bio,
+                "tags" to member.tags,
+                "goalStatement" to member.goalStatement,
+                "longTermVision" to member.longTermVision,
+                "isLinkedInConnected" to member.isLinkedInConnected,
+                "membershipTier" to member.membershipTier.name,
+                "primaryUserType" to member.primaryUserType
+            )
+            // Use set() with merge=true so it works even if the document doesn't exist yet
+            // (avoids CONFIGURATION_NOT_FOUND / NOT_FOUND errors from update())
+            firestore.collection("users").document(uid).set(dataMap, SetOptions.merge()).await()
+        }
+    }
+
+    override suspend fun uploadProfileImage(uid: String, bytes: ByteArray): Result<String> {
+        if (ServiceLocator.forceMockMode) {
+            return ServiceLocator.mockAuthRepository.uploadProfileImage(uid, bytes)
+        }
+        return try {
+            val storageRef = FirebaseStorage.getInstance().reference.child("avatars/$uid.jpg")
+            storageRef.putBytes(bytes).await()
+            val downloadUrl = storageRef.downloadUrl.await()
+            Result.success(downloadUrl.toString())
+        } catch (e: Exception) {
+            // Profile photo upload is optional. If Firebase Storage is not configured
+            // (CONFIGURATION_NOT_FOUND), the bucket doesn't exist, or any other error
+            // occurs, we silently skip the photo and let onboarding continue normally.
+            e.printStackTrace()
+            Result.success("") // always succeed so onboarding is never blocked
+        }
     }
 
     companion object {
@@ -150,7 +251,8 @@ class FirebaseAuthRepository(
                 membershipTier = membershipTier,
                 connectionsCount = (data["connectionsCount"] as? Number)?.toInt() ?: 0,
                 eventsAttended = (data["eventsAttended"] as? Number)?.toInt() ?: 0,
-                followUpsCompleted = (data["followUpsCompleted"] as? Number)?.toInt() ?: 0
+                followUpsCompleted = (data["followUpsCompleted"] as? Number)?.toInt() ?: 0,
+                primaryUserType = data["primaryUserType"] as? String ?: ""
             )
         }
     }

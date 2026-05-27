@@ -65,6 +65,7 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
+    implementation(libs.google.generativeai)
     // Firebase and Vertex AI
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)

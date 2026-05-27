@@ -24,7 +24,8 @@ data class Member(
     val membershipTier: MembershipTier = MembershipTier.EXPLORER,
     val connectionsCount: Int = 0,
     val eventsAttended: Int = 0,
-    val followUpsCompleted: Int = 0
+    val followUpsCompleted: Int = 0,
+    val primaryUserType: String = ""
 )
 
 data class EndorsedSkill(
@@ -154,190 +155,17 @@ enum class IntroStatus {
 }
 
 /**
- * Sample/mock data for UI previews and placeholder screens.
+ * Minimal placeholder for fallback usage only.
+ * Real data comes from Firestore.
  */
 object SampleData {
     val sampleMember = Member(
-        id = "1",
-        name = "Alexandra Chen",
-        headline = "Founder & CEO at NexusAI",
-        role = "CEO",
-        company = "NexusAI",
+        id = "",
+        name = "Unknown",
+        headline = "",
+        role = "",
+        company = "",
         avatarUrl = "",
-        location = "San Francisco, CA",
-        bio = "Building the future of enterprise intelligence. Ex-Google, Stanford MBA. Passionate about AI, product strategy, and building world-class teams.",
-        tags = listOf("AI", "SaaS", "Founder", "Product"),
-        goalStatement = "Looking for co-founders, strategic investors, and enterprise advisors in the AI space.",
-        mutualConnectionsCount = 12,
-        isLinkedInConnected = true,
-        membershipTier = MembershipTier.INNER_CIRCLE,
-        connectionsCount = 8,
-        eventsAttended = 5,
-        followUpsCompleted = 14,
-        endorsedSkills = listOf(
-            EndorsedSkill("Product Strategy", 24),
-            EndorsedSkill("Fundraising", 18),
-            EndorsedSkill("Leadership", 31),
-            EndorsedSkill("AI/ML", 15),
-            EndorsedSkill("Public Speaking", 9)
-        )
-    )
-
-    val sampleMembers = listOf(
-        sampleMember,
-        Member(
-            id = "2",
-            name = "Marcus Williams",
-            headline = "Partner at Sequoia Capital",
-            role = "Partner",
-            company = "Sequoia Capital",
-            avatarUrl = "",
-            location = "Menlo Park, CA",
-            bio = "Early-stage investor focused on B2B SaaS, fintech, and deep tech. Previously founded two companies.",
-            tags = listOf("Investor", "Fintech", "B2B SaaS", "Deep Tech"),
-            goalStatement = "Seeking exceptional founders building in fintech and AI infrastructure.",
-            mutualConnectionsCount = 7,
-            isLinkedInConnected = true,
-            membershipTier = MembershipTier.FOUNDER,
-            endorsedSkills = listOf(
-                EndorsedSkill("Venture Capital", 41),
-                EndorsedSkill("Strategic Partnerships", 29),
-                EndorsedSkill("Board Advisory", 22)
-            )
-        ),
-        Member(
-            id = "3",
-            name = "Priya Sharma",
-            headline = "Head of Product at Stripe",
-            role = "Head of Product",
-            company = "Stripe",
-            avatarUrl = "",
-            location = "New York, NY",
-            bio = "Scaling payment infrastructure for millions of businesses globally. Obsessed with developer experience and financial inclusion.",
-            tags = listOf("Product", "Fintech", "Developer Tools", "Growth"),
-            goalStatement = "Looking to connect with fintech founders and potential collaborators on open banking.",
-            mutualConnectionsCount = 3,
-            isLinkedInConnected = true,
-            membershipTier = MembershipTier.MEMBER,
-            endorsedSkills = listOf(
-                EndorsedSkill("Product Thinking", 38),
-                EndorsedSkill("Fintech", 27),
-                EndorsedSkill("Growth", 19)
-            )
-        )
-    )
-
-    val sampleCircles = listOf(
-        Circle(
-            id = "c1",
-            name = "Founders Circle",
-            description = "A private community for verified startup founders to share insights, challenges, and opportunities.",
-            memberCount = 234,
-            theme = "Entrepreneurship",
-            tags = listOf("Founders", "Startups", "Fundraising"),
-            isJoined = true,
-            isPrivate = true,
-            adminName = "Cosmos Team"
-        ),
-        Circle(
-            id = "c2",
-            name = "AI & Deep Tech",
-            description = "For builders and investors at the frontier of artificial intelligence and deep technology.",
-            memberCount = 412,
-            theme = "Technology",
-            tags = listOf("AI", "ML", "Deep Tech", "Research"),
-            isJoined = false,
-            isPrivate = false,
-            adminName = "Dr. James Park"
-        ),
-        Circle(
-            id = "c3",
-            name = "Fintech Operators",
-            description = "Senior operators and founders in the financial technology space.",
-            memberCount = 189,
-            theme = "Finance",
-            tags = listOf("Fintech", "Payments", "Banking", "Crypto"),
-            isJoined = false,
-            isPrivate = true,
-            adminName = "Sarah Goldman"
-        )
-    )
-
-    val sampleEvents = listOf(
-        NetworkEvent(
-            id = "e1",
-            title = "Founders Summit: AI Edition",
-            description = "An intimate gathering of 50 top AI founders for structured networking, roundtables, and 1:1 meetings.",
-            date = "June 15, 2026",
-            time = "6:00 PM - 9:00 PM PST",
-            location = "San Francisco, CA",
-            type = EventType.FOUNDER_MEETUP,
-            participantCount = 38,
-            maxParticipants = 50,
-            isPaid = true,
-            price = "$75",
-            tags = listOf("AI", "Founders", "Networking"),
-            coverUrl = ""
-        ),
-        NetworkEvent(
-            id = "e2",
-            title = "Open Networking: NYC",
-            description = "Monthly open networking session for professionals across all industries in New York City.",
-            date = "June 20, 2026",
-            time = "7:00 PM - 9:00 PM EST",
-            location = "New York, NY",
-            type = EventType.OPEN_NETWORKING,
-            participantCount = 67,
-            maxParticipants = 100,
-            tags = listOf("Networking", "NYC", "Open")
-        )
-    )
-
-    val sampleNotifications = listOf(
-        Notification(
-            id = "n1",
-            type = NotificationType.NEW_MATCH,
-            title = "New Match! 🎉",
-            body = "You and Marcus Williams are both interested in connecting.",
-            timestamp = "2 min ago",
-            isRead = false,
-            actionId = "2"
-        ),
-        Notification(
-            id = "n2",
-            type = NotificationType.WARM_INTRO_REQUEST,
-            title = "Warm Introduction Request",
-            body = "Priya Sharma wants to be introduced to your connection David Kim.",
-            timestamp = "1 hour ago",
-            isRead = false,
-            actionId = "req_001"
-        ),
-        Notification(
-            id = "n3",
-            type = NotificationType.ENDORSEMENT_RECEIVED,
-            title = "New Endorsement",
-            body = "Alexandra Chen endorsed your Product Strategy skill.",
-            timestamp = "3 hours ago",
-            isRead = true,
-            actionId = "1"
-        ),
-        Notification(
-            id = "n4",
-            type = NotificationType.AI_SUMMARY_READY,
-            title = "Meeting Summary Ready",
-            body = "Your meeting with Marcus Williams has been summarized by AI.",
-            timestamp = "Yesterday",
-            isRead = true,
-            actionId = "2"
-        ),
-        Notification(
-            id = "n5",
-            type = NotificationType.EVENT_INVITATION,
-            title = "Event Invitation",
-            body = "You've been invited to Founders Summit: AI Edition on June 15.",
-            timestamp = "2 days ago",
-            isRead = true,
-            actionId = "e1"
-        )
+        membershipTier = MembershipTier.EXPLORER
     )
 }

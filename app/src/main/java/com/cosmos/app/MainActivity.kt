@@ -19,6 +19,7 @@ import com.cosmos.app.ui.theme.CosmosTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.cosmos.app.data.repository.LocalStore.initialize(this)
         enableEdgeToEdge()
         setContent {
             CosmosTheme {
