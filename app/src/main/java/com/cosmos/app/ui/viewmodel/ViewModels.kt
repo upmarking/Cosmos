@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.cosmos.app.data.model.ChatMessage
 import com.cosmos.app.data.model.Circle
 import com.cosmos.app.data.model.Connection
+import com.cosmos.app.data.model.ConnectionProfileStatus
+import com.cosmos.app.data.model.ConnectionRequest
+import com.cosmos.app.data.model.ConnectionRequestStatus
 import com.cosmos.app.data.model.EventRound
 import com.cosmos.app.data.model.IntroRequest
 import com.cosmos.app.data.model.IntroStatus
@@ -13,14 +16,15 @@ import com.cosmos.app.data.model.MembershipTier
 import com.cosmos.app.data.model.MessageType
 import com.cosmos.app.data.model.NetworkEvent
 import com.cosmos.app.data.model.Notification
+import com.cosmos.app.data.model.CirclePost
 import com.cosmos.app.data.repository.AuthRepository
-import com.cosmos.app.data.repository.CirclePost
 import com.cosmos.app.data.repository.CircleRepository
 import com.cosmos.app.data.repository.ChatRepository
 import com.cosmos.app.data.repository.EventRepository
 import com.cosmos.app.data.repository.IntroRepository
 import com.cosmos.app.data.repository.NotificationRepository
 import com.cosmos.app.data.repository.ProfileRepository
+import com.cosmos.app.data.repository.ConnectionRequestRepository
 import com.cosmos.app.data.repository.ServiceLocator
 import com.cosmos.app.data.repository.SwipeRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -86,6 +90,7 @@ class AuthViewModel(
     }
 
     fun saveOnboarding(member: Member, onSuccess: () -> Unit, imageBytes: ByteArray? = null) {
+        val previousUser = _currentUser.value
         viewModelScope.launch {
             _isLoading.value = true
 
@@ -99,6 +104,9 @@ class AuthViewModel(
 
             val memberToSave = if (avatarUrl.isNotEmpty()) member.copy(avatarUrl = avatarUrl) else member
 
+            // Optimistically update current user so UI reflects immediately
+            _currentUser.value = memberToSave
+
             // Always proceed to save onboarding data regardless of upload outcome
             authRepo.saveOnboardingData(memberToSave)
                 .onSuccess {
@@ -107,6 +115,7 @@ class AuthViewModel(
                 }
                 .onFailure { error ->
                     _isLoading.value = false
+                    _currentUser.value = previousUser
                     _authError.emit(error.message ?: "Failed to save profile")
                 }
         }
@@ -115,6 +124,69 @@ class AuthViewModel(
     fun signOut(onSuccess: () -> Unit) {
         viewModelScope.launch {
             authRepo.signOut().onSuccess { onSuccess() }
+        }
+    }
+
+    fun updateProfile(member: Member, onSuccess: () -> Unit = {}) {
+        val previousUser = _currentUser.value
+        _currentUser.value = member
+        viewModelScope.launch {
+            _isLoading.value = true
+            authRepo.saveOnboardingData(member)
+                .onSuccess {
+                    _isLoading.value = false
+                    onSuccess()
+                }
+                .onFailure { error ->
+                    _isLoading.value = false
+                    _currentUser.value = previousUser
+                    _authError.emit(error.message ?: "Failed to update profile settings")
+                }
+        }
+    }
+
+    fun updatePassword(currentPassword: String, newPassword: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            authRepo.updatePassword(currentPassword, newPassword)
+                .onSuccess {
+                    _isLoading.value = false
+                    onSuccess()
+                }
+                .onFailure { error ->
+                    _isLoading.value = false
+                    onError(error.message ?: "Failed to update password")
+                }
+        }
+    }
+
+    fun deleteAccount(onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            authRepo.deleteAccount()
+                .onSuccess {
+                    _isLoading.value = false
+                    onSuccess()
+                }
+                .onFailure { error ->
+                    _isLoading.value = false
+                    _authError.emit(error.message ?: "Failed to delete account")
+                }
+        }
+    }
+
+    fun resetPassword(email: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            authRepo.resetPassword(email)
+                .onSuccess {
+                    _isLoading.value = false
+                    onSuccess()
+                }
+                .onFailure { error ->
+                    _isLoading.value = false
+                    onError(error.message ?: "Failed to send reset email")
+                }
         }
     }
 }
@@ -219,6 +291,9 @@ class ChatViewModel(
         val uid = authRepo.currentUserId ?: return
         val resolvedId = resolveId(connectionId, uid)
         viewModelScope.launch {
+            chatRepo.markMessagesAsRead(resolvedId, uid)
+        }
+        viewModelScope.launch {
             chatRepo.getConnection(resolvedId, uid).collectLatest { conn ->
                 if (conn != null) {
                     val profile = profileRepo.getProfile(conn.member.id).getOrDefault(conn.member)
@@ -230,6 +305,7 @@ class ChatViewModel(
             chatRepo.getMessages(resolvedId).collectLatest { list ->
                 val ownMarked = list.map { it.copy(isOwn = it.senderId == uid) }
                 _messages.value = ownMarked
+                chatRepo.markMessagesAsRead(resolvedId, uid)
             }
         }
     }
@@ -287,6 +363,9 @@ class EventViewModel(
     private val _eventRounds = MutableStateFlow<List<EventRound>>(emptyList())
     val eventRounds: StateFlow<List<EventRound>> = _eventRounds.asStateFlow()
 
+    private val _isCreatingEvent = MutableStateFlow(false)
+    val isCreatingEvent: StateFlow<Boolean> = _isCreatingEvent.asStateFlow()
+
     init {
         loadEvents()
     }
@@ -330,6 +409,20 @@ class EventViewModel(
             }
         }
     }
+
+    fun createEvent(event: NetworkEvent, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            _isCreatingEvent.value = true
+            eventRepo.createEvent(event, uid).onSuccess {
+                _isCreatingEvent.value = false
+                onSuccess()
+            }.onFailure { error ->
+                _isCreatingEvent.value = false
+                onError(error.message ?: "Failed to create event")
+            }
+        }
+    }
 }
 
 // ── CommunityViewModel ───────────────────────────────────────────────────────
@@ -337,6 +430,8 @@ class CommunityViewModel(
     private val authRepo: AuthRepository = ServiceLocator.authRepository,
     private val circleRepo: CircleRepository = ServiceLocator.circleRepository
 ) : ViewModel() {
+
+    val currentUser = authRepo.currentUser
 
     private val _circles = MutableStateFlow<List<Circle>>(emptyList())
     val circles: StateFlow<List<Circle>> = _circles.asStateFlow()
@@ -347,23 +442,70 @@ class CommunityViewModel(
     private val _circleMembers = MutableStateFlow<List<Member>>(emptyList())
     val circleMembers: StateFlow<List<Member>> = _circleMembers.asStateFlow()
 
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    private val _likedPostIds = MutableStateFlow<Set<String>>(emptySet())
+    val likedPostIds: StateFlow<Set<String>> = _likedPostIds.asStateFlow()
+
+    private val _isMembersLoading = MutableStateFlow(false)
+    val isMembersLoading: StateFlow<Boolean> = _isMembersLoading.asStateFlow()
+
+    private val _isPostsLoading = MutableStateFlow(false)
+    val isPostsLoading: StateFlow<Boolean> = _isPostsLoading.asStateFlow()
+
     init {
         loadCircles()
     }
 
     fun loadCircles() {
         val uid = authRepo.currentUserId ?: return
+        _isLoading.value = true
+        _errorMessage.value = null
         viewModelScope.launch {
-            circleRepo.getCircles(uid).collectLatest { list ->
-                _circles.value = list
+            try {
+                circleRepo.getCircles(uid).collectLatest { list ->
+                    _circles.value = list
+                    _isLoading.value = false
+                    _isRefreshing.value = false
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Failed to load circles"
+                _isLoading.value = false
+                _isRefreshing.value = false
             }
         }
     }
 
+    fun refreshCircles() {
+        _isRefreshing.value = true
+        _errorMessage.value = null
+        loadCircles()
+    }
+
     fun selectCircle(circleId: String) {
+        _isPostsLoading.value = true
         viewModelScope.launch {
-            circleRepo.getCirclePosts(circleId).collectLatest { list ->
-                _feedPosts.value = list
+            try {
+                // Load liked posts for this circle
+                val uid = authRepo.currentUserId ?: ""
+                if (uid.isNotEmpty()) {
+                    circleRepo.getLikedPostIds(circleId, uid).onSuccess { ids ->
+                        _likedPostIds.value = ids
+                    }
+                }
+                circleRepo.getCirclePosts(circleId).collectLatest { list ->
+                    _feedPosts.value = list
+                    _isPostsLoading.value = false
+                }
+            } catch (e: Exception) {
+                _isPostsLoading.value = false
             }
         }
     }
@@ -374,14 +516,64 @@ class CommunityViewModel(
             circleRepo.joinCircle(circleId, uid).onSuccess {
                 loadCircles()
                 loadCircleMembers(circleId)
+            }.onFailure { e ->
+                _errorMessage.value = e.message ?: "Failed to join circle"
+            }
+        }
+    }
+
+    fun leaveCircle(circleId: String) {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            circleRepo.leaveCircle(circleId, uid).onSuccess {
+                loadCircles()
+                loadCircleMembers(circleId)
+            }.onFailure { e ->
+                _errorMessage.value = e.message ?: "Failed to leave circle"
+            }
+        }
+    }
+
+    fun createCircle(
+        name: String,
+        description: String,
+        theme: String,
+        tags: List<String>,
+        isPrivate: Boolean,
+        onSuccess: () -> Unit
+    ) {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            val currentMember = authRepo.currentUser.firstOrNull()
+            val newCircle = Circle(
+                id = "",
+                name = name,
+                description = description,
+                theme = theme,
+                tags = tags,
+                isPrivate = isPrivate,
+                memberCount = 1,
+                isJoined = true,
+                adminName = currentMember?.name ?: "Organizer",
+                createdBy = uid
+            )
+            circleRepo.createCircle(newCircle, uid).onSuccess {
+                loadCircles()
+                onSuccess()
+            }.onFailure { e ->
+                _errorMessage.value = e.message ?: "Failed to create circle"
             }
         }
     }
 
     fun loadCircleMembers(circleId: String) {
+        _isMembersLoading.value = true
         viewModelScope.launch {
             circleRepo.getCircleMembers(circleId).onSuccess { list ->
                 _circleMembers.value = list
+                _isMembersLoading.value = false
+            }.onFailure {
+                _isMembersLoading.value = false
             }
         }
     }
@@ -398,6 +590,46 @@ class CommunityViewModel(
                 )
             }
         }
+    }
+
+    fun likePost(circleId: String, postId: String) {
+        val uid = authRepo.currentUserId ?: return
+        // Optimistic update
+        _likedPostIds.value = _likedPostIds.value + postId
+        _feedPosts.value = _feedPosts.value.map { post ->
+            if (post.id == postId) post.copy(likesCount = post.likesCount + 1) else post
+        }
+        viewModelScope.launch {
+            circleRepo.likePost(circleId, postId, uid).onFailure {
+                // Revert optimistic update
+                _likedPostIds.value = _likedPostIds.value - postId
+                _feedPosts.value = _feedPosts.value.map { post ->
+                    if (post.id == postId) post.copy(likesCount = (post.likesCount - 1).coerceAtLeast(0)) else post
+                }
+            }
+        }
+    }
+
+    fun unlikePost(circleId: String, postId: String) {
+        val uid = authRepo.currentUserId ?: return
+        // Optimistic update
+        _likedPostIds.value = _likedPostIds.value - postId
+        _feedPosts.value = _feedPosts.value.map { post ->
+            if (post.id == postId) post.copy(likesCount = (post.likesCount - 1).coerceAtLeast(0)) else post
+        }
+        viewModelScope.launch {
+            circleRepo.unlikePost(circleId, postId, uid).onFailure {
+                // Revert optimistic update
+                _likedPostIds.value = _likedPostIds.value + postId
+                _feedPosts.value = _feedPosts.value.map { post ->
+                    if (post.id == postId) post.copy(likesCount = post.likesCount + 1) else post
+                }
+            }
+        }
+    }
+
+    fun clearError() {
+        _errorMessage.value = null
     }
 }
 
@@ -418,23 +650,73 @@ class ProfileViewModel(
         loadNotifications()
     }
 
-    private val _isConnectionEstablished = MutableStateFlow(false)
-    val isConnectionEstablished: StateFlow<Boolean> = _isConnectionEstablished.asStateFlow()
+    private val _connectionProfileStatus = MutableStateFlow(ConnectionProfileStatus.NONE)
+    val connectionProfileStatus: StateFlow<ConnectionProfileStatus> = _connectionProfileStatus.asStateFlow()
 
     fun checkConnectionStatus(memberId: String) {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch {
-            ServiceLocator.chatRepository.getConnections(uid).collectLatest { list ->
-                _isConnectionEstablished.value = list.any { it.member.id == memberId }
+            ServiceLocator.connectionRequestRepository.getConnectionStatusFlow(uid, memberId)
+                .collectLatest { status ->
+                    _connectionProfileStatus.value = status
+                }
+        }
+    }
+
+    fun connectWithMember(memberId: String, message: String = "", onResult: (Boolean) -> Unit) {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            val currentUser = authRepo.currentUser.firstOrNull()
+            val targetUser = profileRepo.getProfile(memberId).getOrNull()
+            ServiceLocator.connectionRequestRepository.sendConnectionRequest(
+                senderId = uid,
+                receiverId = memberId,
+                senderName = currentUser?.name ?: "",
+                senderHeadline = currentUser?.headline ?: "",
+                senderAvatarUrl = currentUser?.avatarUrl ?: "",
+                receiverName = targetUser?.name ?: "",
+                receiverHeadline = targetUser?.headline ?: "",
+                receiverAvatarUrl = targetUser?.avatarUrl ?: "",
+                message = message
+            ).onSuccess {
+                _connectionProfileStatus.value = ConnectionProfileStatus.PENDING_SENT
+                onResult(true)
+            }.onFailure {
+                onResult(false)
             }
         }
     }
 
-    fun connectWithMember(memberId: String, onResult: (Boolean) -> Unit) {
+    fun acceptConnectionFromProfile(memberId: String) {
         val uid = authRepo.currentUserId ?: return
+        val requestId = "req_${memberId}_${uid}"
         viewModelScope.launch {
-            val result = ServiceLocator.swipeRepository.recordSwipe(uid, memberId, "LIKE")
-            onResult(result.getOrDefault(false))
+            ServiceLocator.connectionRequestRepository.acceptConnectionRequest(requestId)
+                .onSuccess {
+                    _connectionProfileStatus.value = ConnectionProfileStatus.CONNECTED
+                }
+        }
+    }
+
+    fun declineConnectionFromProfile(memberId: String) {
+        val uid = authRepo.currentUserId ?: return
+        val requestId = "req_${memberId}_${uid}"
+        viewModelScope.launch {
+            ServiceLocator.connectionRequestRepository.declineConnectionRequest(requestId)
+                .onSuccess {
+                    _connectionProfileStatus.value = ConnectionProfileStatus.NONE
+                }
+        }
+    }
+
+    fun withdrawConnectionRequest(memberId: String) {
+        val uid = authRepo.currentUserId ?: return
+        val requestId = "req_${uid}_${memberId}"
+        viewModelScope.launch {
+            ServiceLocator.connectionRequestRepository.withdrawConnectionRequest(requestId)
+                .onSuccess {
+                    _connectionProfileStatus.value = ConnectionProfileStatus.NONE
+                }
         }
     }
 
@@ -527,5 +809,131 @@ class IntroViewModel(
                 onSuccess()
             }
         }
+    }
+}
+
+// ── ConnectionViewModel ─────────────────────────────────────────────────────
+class ConnectionViewModel(
+    private val authRepo: AuthRepository = ServiceLocator.authRepository,
+    private val connectionRequestRepo: ConnectionRequestRepository = ServiceLocator.connectionRequestRepository,
+    private val profileRepo: ProfileRepository = ServiceLocator.profileRepository
+) : ViewModel() {
+
+    private val _incomingRequests = MutableStateFlow<List<ConnectionRequest>>(emptyList())
+    val incomingRequests: StateFlow<List<ConnectionRequest>> = _incomingRequests.asStateFlow()
+
+    private val _outgoingRequests = MutableStateFlow<List<ConnectionRequest>>(emptyList())
+    val outgoingRequests: StateFlow<List<ConnectionRequest>> = _outgoingRequests.asStateFlow()
+
+    private val _incomingCount = MutableStateFlow(0)
+    val incomingCount: StateFlow<Int> = _incomingCount.asStateFlow()
+
+    init {
+        loadRequests()
+    }
+
+    private fun loadRequests() {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            connectionRequestRepo.getIncomingRequests(uid).collectLatest { list ->
+                _incomingRequests.value = list
+            }
+        }
+        viewModelScope.launch {
+            connectionRequestRepo.getOutgoingRequests(uid).collectLatest { list ->
+                _outgoingRequests.value = list
+            }
+        }
+        viewModelScope.launch {
+            connectionRequestRepo.getIncomingRequestCount(uid).collectLatest { count ->
+                _incomingCount.value = count
+            }
+        }
+    }
+
+    fun sendRequest(receiverId: String, message: String = "", onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            val currentUser = authRepo.currentUser.firstOrNull()
+            val targetUser = profileRepo.getProfile(receiverId).getOrNull()
+            connectionRequestRepo.sendConnectionRequest(
+                senderId = uid,
+                receiverId = receiverId,
+                senderName = currentUser?.name ?: "",
+                senderHeadline = currentUser?.headline ?: "",
+                senderAvatarUrl = currentUser?.avatarUrl ?: "",
+                receiverName = targetUser?.name ?: "",
+                receiverHeadline = targetUser?.headline ?: "",
+                receiverAvatarUrl = targetUser?.avatarUrl ?: "",
+                message = message
+            ).onSuccess {
+                onSuccess()
+            }.onFailure { error ->
+                onError(error.message ?: "Failed to send request")
+            }
+        }
+    }
+
+    fun acceptRequest(requestId: String, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            connectionRequestRepo.acceptConnectionRequest(requestId).onSuccess {
+                onSuccess()
+            }
+        }
+    }
+
+    fun declineRequest(requestId: String, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            connectionRequestRepo.declineConnectionRequest(requestId).onSuccess {
+                onSuccess()
+            }
+        }
+    }
+
+    fun withdrawRequest(requestId: String, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            connectionRequestRepo.withdrawConnectionRequest(requestId).onSuccess {
+                onSuccess()
+            }
+        }
+    }
+}
+
+// ── SearchViewModel ────────────────────────────────────────────────────────────
+class SearchViewModel(
+    private val profileRepo: ProfileRepository = ServiceLocator.profileRepository
+) : ViewModel() {
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _searchResults = MutableStateFlow<List<Member>>(emptyList())
+    val searchResults: StateFlow<List<Member>> = _searchResults.asStateFlow()
+
+    private val _isSearching = MutableStateFlow(false)
+    val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
+
+    fun updateQuery(query: String) {
+        _searchQuery.value = query
+        if (query.trim().length >= 2) {
+            executeSearch(query)
+        } else {
+            _searchResults.value = emptyList()
+        }
+    }
+
+    fun executeSearch(query: String) {
+        viewModelScope.launch {
+            _isSearching.value = true
+            profileRepo.searchProfiles(query).onSuccess { list ->
+                _searchResults.value = list
+            }
+            _isSearching.value = false
+        }
+    }
+    
+    fun clearSearch() {
+        _searchQuery.value = ""
+        _searchResults.value = emptyList()
     }
 }

@@ -46,6 +46,7 @@ object ServiceLocator {
     val mockCircleRepository = MockCircleRepository()
     val mockNotificationRepository = MockNotificationRepository()
     val mockIntroRepository = MockIntroRepository()
+    val mockConnectionRequestRepository = MockConnectionRequestRepository()
 
     // Expose real repositories
     val firebaseAuthRepository by lazy { FirebaseAuthRepository(auth, firestore) }
@@ -56,6 +57,7 @@ object ServiceLocator {
     val firestoreCircleRepository by lazy { FirestoreCircleRepository(firestore) }
     val firestoreNotificationRepository by lazy { FirestoreNotificationRepository(firestore) }
     val firestoreIntroRepository by lazy { FirestoreIntroRepository(firestore, profileRepository) }
+    val firestoreConnectionRequestRepository by lazy { FirestoreConnectionRequestRepository(firestore) }
 
     val authRepository: AuthRepository
         get() = if (forceMockMode || isMockMode) mockAuthRepository else firebaseAuthRepository
@@ -80,6 +82,9 @@ object ServiceLocator {
 
     val introRepository: IntroRepository
         get() = if (forceMockMode || isMockMode) mockIntroRepository else firestoreIntroRepository
+
+    val connectionRequestRepository: ConnectionRequestRepository
+        get() = if (forceMockMode || isMockMode) mockConnectionRequestRepository else firestoreConnectionRequestRepository
 
     val aiSummaryService: AiSummaryService by lazy {
         GeminiAiSummaryService()

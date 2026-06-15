@@ -4,10 +4,12 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
+import java.util.Calendar
 
 interface SwipeRepository {
     suspend fun recordSwipe(likerId: String, likedId: String, action: String): Result<Boolean>
     suspend fun getMonthlyConnectionsCount(userId: String): Result<Int>
+    suspend fun undoLastSwipe(userId: String): Result<Unit>
 }
 
 class FirestoreSwipeRepository(
@@ -17,7 +19,7 @@ class FirestoreSwipeRepository(
     override suspend fun recordSwipe(likerId: String, likedId: String, action: String): Result<Boolean> = runCatching {
         val swipeId = "${likerId}_${likedId}"
         
-        // Write the swipe record
+        // Write the swipe record (used for discovery deck filtering only)
         val swipeData = mapOf(
             "likerId" to likerId,
             "likedId" to likedId,
@@ -26,62 +28,56 @@ class FirestoreSwipeRepository(
         )
         firestore.collection("swipes").document(swipeId).set(swipeData).await()
 
-        if (action == "LIKE") {
-
-            // Check if reverse swipe exists and is also a LIKE
-            val reverseSwipeId = "${likedId}_${likerId}"
-            val reverseSwipeDoc = firestore.collection("swipes").document(reverseSwipeId).get().await()
-            if (reverseSwipeDoc.exists() && reverseSwipeDoc.getString("action") == "LIKE") {
-                // Mutual Match! Create connection
-                val connectionId = if (likerId < likedId) "${likerId}_${likedId}" else "${likedId}_${likerId}"
-                val connectionData = mapOf(
-                    "id" to connectionId,
-                    "members" to listOf(likerId, likedId),
-                    "lastMessage" to "You matched! Say hello.",
-                    "lastMessageTime" to FieldValue.serverTimestamp(),
-                    "unreadCountMap" to mapOf(likerId to 0, likedId to 0),
-                    "labels" to mapOf(likerId to emptyList<String>(), likedId to emptyList<String>()),
-                    "privateGoals" to mapOf(likerId to "", likedId to ""),
-                    "status" to "ACTIVE",
-                    "createdAt" to FieldValue.serverTimestamp()
-                )
-                firestore.collection("connections").document(connectionId).set(connectionData).await()
-                
-                // Add a notification for both users
-                val notificationData1 = mapOf(
-                    "userId" to likerId,
-                    "type" to "NEW_MATCH",
-                    "title" to "New Match! 🎉",
-                    "body" to "You matched with another member. Start a conversation now!",
-                    "timestamp" to FieldValue.serverTimestamp(),
-                    "isRead" to false,
-                    "actionId" to likedId
-                )
-                val notificationData2 = mapOf(
-                    "userId" to likedId,
-                    "type" to "NEW_MATCH",
-                    "title" to "New Match! 🎉",
-                    "body" to "You matched with another member. Start a conversation now!",
-                    "timestamp" to FieldValue.serverTimestamp(),
-                    "isRead" to false,
-                    "actionId" to likerId
-                )
-                firestore.collection("notifications").add(notificationData1)
-                firestore.collection("notifications").add(notificationData2)
-                
-                return@runCatching true
-            }
-        }
+        // Connection creation is now handled by ConnectionRequestRepository
         false
     }
 
     override suspend fun getMonthlyConnectionsCount(userId: String): Result<Int> = runCatching {
-        // Find all connections matching the user
+        // Get start of current month
+        val calendar = Calendar.getInstance()
+        calendar.set(Calendar.DAY_OF_MONTH, 1)
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        val startOfMonth = Timestamp(calendar.time)
+
+        // Find connections created this month
         val snapshot = firestore.collection("connections")
             .whereArrayContains("members", userId)
             .get().await()
         
-        // Return size of connections matching this month (simplified count)
-        snapshot.size()
+        // Filter by creation date this month
+        snapshot.documents.count { doc ->
+            val createdAt = doc.getTimestamp("createdAt")
+            createdAt != null && createdAt >= startOfMonth
+        }
+    }
+
+    override suspend fun undoLastSwipe(userId: String): Result<Unit> = runCatching {
+        // Find the most recent swipe by this user
+        val snapshot = firestore.collection("swipes")
+            .whereEqualTo("likerId", userId)
+            .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .limit(1)
+            .get().await()
+
+        if (snapshot.documents.isNotEmpty()) {
+            val lastSwipe = snapshot.documents.first()
+            val likedId = lastSwipe.getString("likedId") ?: return@runCatching
+
+            // Delete the swipe
+            lastSwipe.reference.delete().await()
+
+            // If it created a connection, remove that too
+            val connectionId = if (userId < likedId) "${userId}_${likedId}" else "${likedId}_${userId}"
+            val connDoc = firestore.collection("connections").document(connectionId).get().await()
+            if (connDoc.exists()) {
+                // Delete messages sub-collection
+                val messages = connDoc.reference.collection("messages").get().await()
+                messages.documents.forEach { it.reference.delete().await() }
+                connDoc.reference.delete().await()
+            }
+        }
     }
 }

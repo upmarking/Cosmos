@@ -37,12 +37,14 @@ fun DiscoveryDeckScreen(
     onNavigateToFeed: () -> Unit,
     onNavigate: (String) -> Unit,
     discoveryViewModel: com.cosmos.app.ui.viewmodel.DiscoveryViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
-    profileViewModel: com.cosmos.app.ui.viewmodel.ProfileViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    profileViewModel: com.cosmos.app.ui.viewmodel.ProfileViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    connectionViewModel: com.cosmos.app.ui.viewmodel.ConnectionViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val members by discoveryViewModel.deck.collectAsState()
     val connectionsLimitCount by discoveryViewModel.connectionsLimitCount.collectAsState()
     val notifications by profileViewModel.notifications.collectAsState()
     val unreadNotificationCount = notifications.count { !it.isRead }
+    val incomingRequestCount by connectionViewModel.incomingCount.collectAsState()
     
     var selectedFilter by remember { mutableStateOf("All") }
     
@@ -57,8 +59,8 @@ fun DiscoveryDeckScreen(
     
     var currentIndex by remember { mutableStateOf(0) }
     var swipeOffset by remember { mutableStateOf(0f) }
-    var matchMade by remember { mutableStateOf(false) }
-    var matchedMember by remember { mutableStateOf<Member?>(null) }
+    var requestSent by remember { mutableStateOf(false) }
+    var requestedMember by remember { mutableStateOf<Member?>(null) }
 
     LaunchedEffect(filteredMembers) {
         currentIndex = 0
@@ -77,6 +79,9 @@ fun DiscoveryDeckScreen(
                     Text("Connect", style = MaterialTheme.typography.titleLarge, color = CosmosOnBackground)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    IconButton(onClick = { onNavigate(Screen.SearchProfiles.route) }) {
+                        Icon(Icons.Default.Search, "Search", tint = CosmosOnBackground)
+                    }
                     IconButton(onClick = { onNavigate(Screen.Notifications.route) }) {
                         if (unreadNotificationCount > 0) {
                             BadgedBox(badge = { Badge(containerColor = CosmosError) { Text("$unreadNotificationCount") } }) {
@@ -84,6 +89,16 @@ fun DiscoveryDeckScreen(
                             }
                         } else {
                             Icon(Icons.Outlined.Notifications, "Notifications", tint = CosmosOnBackground)
+                        }
+                    }
+                    // Pending requests badge
+                    IconButton(onClick = { onNavigate(Screen.ConnectionRequests.route) }) {
+                        if (incomingRequestCount > 0) {
+                            BadgedBox(badge = { Badge(containerColor = CosmosPrimary) { Text("$incomingRequestCount") } }) {
+                                Icon(Icons.Outlined.PersonAdd, "Requests", tint = CosmosOnBackground)
+                            }
+                        } else {
+                            Icon(Icons.Outlined.PersonAdd, "Requests", tint = CosmosOnBackground)
                         }
                     }
                     IconButton(onClick = onNavigateToFeed) {
@@ -159,10 +174,16 @@ fun DiscoveryDeckScreen(
                                 onDragEnd = {
                                     val currentMember = filteredMembers[currentIndex]
                                     if (swipeOffset > 150) {
-                                        discoveryViewModel.swipeRight(currentMember.id) { member ->
-                                            matchedMember = member
-                                            matchMade = true
-                                        }
+                                        val currentMember = filteredMembers[currentIndex]
+                                        connectionViewModel.sendRequest(
+                                            receiverId = currentMember.id,
+                                            onSuccess = {
+                                                requestedMember = currentMember
+                                                requestSent = true
+                                            }
+                                        )
+                                        // Also record skip swipe so they don't appear again in deck
+                                        discoveryViewModel.swipeRight(currentMember.id) { _ -> }
                                         currentIndex++
                                     } else if (swipeOffset < -150) {
                                         discoveryViewModel.swipeLeft(currentMember.id)
@@ -231,14 +252,18 @@ fun DiscoveryDeckScreen(
                         IconButton(onClick = {
                             if (currentIndex < filteredMembers.size) {
                                 val currentMember = filteredMembers[currentIndex]
-                                discoveryViewModel.swipeRight(currentMember.id) { member ->
-                                    matchedMember = member
-                                    matchMade = true
-                                }
+                                connectionViewModel.sendRequest(
+                                    receiverId = currentMember.id,
+                                    onSuccess = {
+                                        requestedMember = currentMember
+                                        requestSent = true
+                                    }
+                                )
+                                discoveryViewModel.swipeRight(currentMember.id) { _ -> }
                                 currentIndex++
                             }
                         }) {
-                            Icon(Icons.Default.Favorite, "Connect", tint = Color.White, modifier = Modifier.size(28.dp))
+                            Icon(Icons.Default.PersonAdd, "Connect", tint = Color.White, modifier = Modifier.size(28.dp))
                         }
                     }
                 }
@@ -246,15 +271,15 @@ fun DiscoveryDeckScreen(
         }
     }
 
-    // Match celebration overlay
-    if (matchMade && matchedMember != null) {
-        MatchCelebrationOverlay(
-            member = matchedMember!!,
-            onStartChat = {
-                matchMade = false
-                onNavigate(Screen.CrmChat.createRoute(matchedMember!!.id))
+    // Request sent confirmation overlay
+    if (requestSent && requestedMember != null) {
+        RequestSentOverlay(
+            member = requestedMember!!,
+            onViewRequests = {
+                requestSent = false
+                onNavigate(Screen.ConnectionRequests.route)
             },
-            onContinueDiscovering = { matchMade = false }
+            onContinueDiscovering = { requestSent = false }
         )
     }
 }
@@ -362,9 +387,9 @@ fun MemberSwipeCard(
 // Removed broken scale() extension — using graphicsLayer instead
 
 @Composable
-fun MatchCelebrationOverlay(
+fun RequestSentOverlay(
     member: Member,
-    onStartChat: () -> Unit,
+    onViewRequests: () -> Unit,
     onContinueDiscovering: () -> Unit
 ) {
     Box(
@@ -375,17 +400,25 @@ fun MatchCelebrationOverlay(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(32.dp)
         ) {
-            Text("🎉", style = MaterialTheme.typography.displayLarge)
+            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF6F), modifier = Modifier.size(64.dp))
             Spacer(Modifier.height(16.dp))
-            Text("It's a Match!", style = MaterialTheme.typography.headlineLarge, color = CosmosPrimary)
+            Text("Request Sent!", style = MaterialTheme.typography.headlineMedium, color = CosmosPrimary, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            CosmosAvatar(
+                avatarUrl = member.avatarUrl,
+                name = member.name,
+                size = 56.dp,
+                isLinkedInConnected = member.isLinkedInConnected
+            )
             Spacer(Modifier.height(8.dp))
             Text(
-                "You and ${member.name} are both interested in connecting.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = CosmosOnSurfaceVariant
+                "Your connection request has been sent to ${member.name}. They'll be notified and can accept your request.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = CosmosOnSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
             Spacer(Modifier.height(32.dp))
-            CosmosButton(text = "Start Conversation", onClick = onStartChat, icon = Icons.Default.Chat)
+            CosmosButton(text = "View Sent Requests", onClick = onViewRequests, icon = Icons.Default.People)
             Spacer(Modifier.height(12.dp))
             TextButton(onClick = onContinueDiscovering) {
                 Text("Continue Discovering", color = CosmosOnSurfaceVariant)

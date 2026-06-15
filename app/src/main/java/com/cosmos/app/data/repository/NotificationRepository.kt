@@ -17,7 +17,10 @@ import java.util.Locale
 interface NotificationRepository {
     fun getNotifications(userId: String): Flow<List<Notification>>
     suspend fun markAsRead(notificationId: String): Result<Unit>
+    suspend fun markAllAsRead(userId: String): Result<Unit>
     suspend fun createNotification(userId: String, type: NotificationType, title: String, body: String, actionId: String): Result<Unit>
+    suspend fun deleteNotification(notificationId: String): Result<Unit>
+    fun getUnreadCount(userId: String): Flow<Int>
 }
 
 class FirestoreNotificationRepository(
@@ -67,6 +70,19 @@ class FirestoreNotificationRepository(
             .update("isRead", true).await()
     }
 
+    override suspend fun markAllAsRead(userId: String): Result<Unit> = runCatching {
+        val snapshot = firestore.collection("notifications")
+            .whereEqualTo("userId", userId)
+            .whereEqualTo("isRead", false)
+            .get().await()
+        
+        val batch = firestore.batch()
+        snapshot.documents.forEach { doc ->
+            batch.update(doc.reference, "isRead", true)
+        }
+        batch.commit().await()
+    }
+
     override suspend fun createNotification(
         userId: String,
         type: NotificationType,
@@ -85,6 +101,26 @@ class FirestoreNotificationRepository(
         )
         firestore.collection("notifications").add(data).await()
         Unit
+    }
+
+    override suspend fun deleteNotification(notificationId: String): Result<Unit> = runCatching {
+        firestore.collection("notifications").document(notificationId).delete().await()
+    }
+
+    override fun getUnreadCount(userId: String): Flow<Int> = callbackFlow {
+        val registration = firestore.collection("notifications")
+            .whereEqualTo("userId", userId)
+            .whereEqualTo("isRead", false)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(0)
+                    return@addSnapshotListener
+                }
+                trySend(snapshot?.size() ?: 0)
+            }
+        awaitClose {
+            registration.remove()
+        }
     }
 
     private fun formatTime(date: Date): String {

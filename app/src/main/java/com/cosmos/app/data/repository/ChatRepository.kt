@@ -26,6 +26,10 @@ interface ChatRepository {
     suspend fun updateCrmLabels(connectionId: String, userId: String, labels: List<String>): Result<Unit>
     suspend fun updatePrivateGoal(connectionId: String, userId: String, goal: String): Result<Unit>
     suspend fun saveAiSummary(connectionId: String, summaryText: String): Result<Unit>
+    suspend fun markMessagesAsRead(connectionId: String, userId: String): Result<Unit>
+    suspend fun deleteMessage(connectionId: String, messageId: String): Result<Unit>
+    suspend fun searchMessages(connectionId: String, query: String): Result<List<ChatMessage>>
+    fun getUnreadCountTotal(userId: String): Flow<Int>
 }
 
 class FirestoreChatRepository(
@@ -46,16 +50,11 @@ class FirestoreChatRepository(
                     return@addSnapshotListener
                 }
 
-                // Map connections. Since mapping requires fetching other member details,
-                // we can load member profile details. For immediate UI flow, we spawn a coroutine.
-                // To keep it clean and robust, we fetch from local profiles or placeholder profiles
-                // if they are not cached, and fetch actual profiles asynchronously.
                 val connections = snapshot.documents.map { doc ->
                     val data = doc.data ?: emptyMap()
                     val members = (data["members"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
                     val otherMemberId = members.firstOrNull { it != userId } ?: ""
                     
-                    // Simple placeholder Member - details loaded in UI/ViewModel
                     val placeholderMember = Member(
                         id = otherMemberId,
                         name = "Member $otherMemberId",
@@ -133,7 +132,6 @@ class FirestoreChatRepository(
                 val statusStr = data["status"] as? String ?: ConnectionStatus.ACTIVE.name
                 val status = runCatching { ConnectionStatus.valueOf(statusStr) }.getOrDefault(ConnectionStatus.ACTIVE)
 
-                // Retrieve other member details to supply real Member name/headline
                 val placeholderMember = Member(
                     id = otherMemberId,
                     name = "Loading...",
@@ -175,7 +173,6 @@ class FirestoreChatRepository(
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
-                val currentUserId = firestore.app.options.databaseUrl ?: "" // mock check
                 val messages = snapshot.documents.map { doc ->
                     val data = doc.data ?: emptyMap()
                     val senderId = data["senderId"] as? String ?: ""
@@ -192,7 +189,8 @@ class FirestoreChatRepository(
                         text = data["text"] as? String ?: "",
                         timestamp = timestamp,
                         isOwn = false, // determined at ViewModel level using current auth uid
-                        type = type
+                        type = type,
+                        isDeleted = data["isDeleted"] as? Boolean ?: false
                     )
                 }
                 trySend(messages)
@@ -212,17 +210,28 @@ class FirestoreChatRepository(
             "senderId" to senderId,
             "text" to text,
             "timestamp" to FieldValue.serverTimestamp(),
-            "type" to type.name
+            "type" to type.name,
+            "isDeleted" to false
         )
         // 1. Add message document
         firestore.collection("connections").document(connectionId)
             .collection("messages").add(messageDoc).await()
         
         // 2. Update connection doc with last message summary
-        val connectionUpdate = mapOf(
+        val connectionUpdate = mutableMapOf<String, Any>(
             "lastMessage" to if (type == MessageType.AI_SUMMARY) "AI Summary Ready" else text,
             "lastMessageTime" to FieldValue.serverTimestamp()
         )
+        
+        // 3. Increment unread count for the OTHER member(s)
+        val connDoc = firestore.collection("connections").document(connectionId).get().await()
+        val members = (connDoc.get("members") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+        for (memberId in members) {
+            if (memberId != senderId) {
+                connectionUpdate["unreadCountMap.$memberId"] = FieldValue.increment(1)
+            }
+        }
+        
         firestore.collection("connections").document(connectionId).update(connectionUpdate).await()
         Unit
     }
@@ -248,8 +257,73 @@ class FirestoreChatRepository(
     }
 
     override suspend fun saveAiSummary(connectionId: String, summaryText: String): Result<Unit> = runCatching {
-        // Send AI summary as a system message
         sendMessage(connectionId, "system", summaryText, MessageType.AI_SUMMARY).getOrThrow()
+    }
+
+    override suspend fun markMessagesAsRead(connectionId: String, userId: String): Result<Unit> = runCatching {
+        firestore.collection("connections").document(connectionId)
+            .update("unreadCountMap.$userId", 0).await()
+    }
+
+    override suspend fun deleteMessage(connectionId: String, messageId: String): Result<Unit> = runCatching {
+        // Soft delete — mark as deleted rather than removing
+        firestore.collection("connections").document(connectionId)
+            .collection("messages").document(messageId)
+            .update("isDeleted", true, "text", "This message was deleted").await()
+    }
+
+    override suspend fun searchMessages(connectionId: String, query: String): Result<List<ChatMessage>> = runCatching {
+        val snapshot = firestore.collection("connections").document(connectionId)
+            .collection("messages")
+            .orderBy("timestamp", Query.Direction.ASCENDING)
+            .get().await()
+
+        val queryLower = query.lowercase().trim()
+        snapshot.documents
+            .map { doc ->
+                val data = doc.data ?: emptyMap()
+                val senderId = data["senderId"] as? String ?: ""
+                val timestamp = when (val time = data["timestamp"]) {
+                    is Timestamp -> formatMessageTime(time.toDate())
+                    else -> "12:00 PM"
+                }
+                val typeStr = data["type"] as? String ?: MessageType.TEXT.name
+                val type = runCatching { MessageType.valueOf(typeStr) }.getOrDefault(MessageType.TEXT)
+                ChatMessage(
+                    id = doc.id,
+                    senderId = senderId,
+                    text = data["text"] as? String ?: "",
+                    timestamp = timestamp,
+                    isOwn = false,
+                    type = type,
+                    isDeleted = data["isDeleted"] as? Boolean ?: false
+                )
+            }
+            .filter { !it.isDeleted && it.text.lowercase().contains(queryLower) }
+    }
+
+    override fun getUnreadCountTotal(userId: String): Flow<Int> = callbackFlow {
+        val registration = firestore.collection("connections")
+            .whereArrayContains("members", userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(0)
+                    return@addSnapshotListener
+                }
+                if (snapshot == null) {
+                    trySend(0)
+                    return@addSnapshotListener
+                }
+                val total = snapshot.documents.sumOf { doc ->
+                    val data = doc.data ?: emptyMap()
+                    val unreadCountMap = data["unreadCountMap"] as? Map<String, Any>
+                    (unreadCountMap?.get(userId) as? Number)?.toInt() ?: 0
+                }
+                trySend(total)
+            }
+        awaitClose {
+            registration.remove()
+        }
     }
 
     private fun formatTime(date: Date): String {

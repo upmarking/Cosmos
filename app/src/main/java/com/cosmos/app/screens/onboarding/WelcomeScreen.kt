@@ -36,7 +36,9 @@ fun WelcomeScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var localError by remember { mutableStateOf("") }
+    var forgotPasswordMode by remember { mutableStateOf(false) }
     
+    val context = androidx.compose.ui.platform.LocalContext.current
     val isLoading by authViewModel.isLoading.collectAsState()
     val currentUser by authViewModel.currentUser.collectAsState()
 
@@ -103,69 +105,158 @@ fun WelcomeScreen(
                 Spacer(Modifier.height(40.dp))
 
                 if (showSignIn) {
-                    // Sign In Card
-                    CosmosGlassCard(showTopGradientBorder = true) {
-                        Text(
-                            text = "Sign In to Cosmos",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = CosmosOnBackground,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        
-                        OutlinedTextField(
-                            value = email,
-                            onValueChange = { email = it },
-                            label = { Text("Email Address", color = CosmosOnSurfaceVariant) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = CosmosPrimary,
-                                unfocusedBorderColor = CosmosOutlineVariant,
-                                focusedTextColor = CosmosOnBackground,
-                                unfocusedTextColor = CosmosOnBackground
-                            )
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        
-                        OutlinedTextField(
-                            value = password,
-                            onValueChange = { password = it },
-                            label = { Text("Password", color = CosmosOnSurfaceVariant) },
-                            modifier = Modifier.fillMaxWidth(),
-                            visualTransformation = PasswordVisualTransformation(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = CosmosPrimary,
-                                unfocusedBorderColor = CosmosOutlineVariant,
-                                focusedTextColor = CosmosOnBackground,
-                                unfocusedTextColor = CosmosOnBackground
-                            )
-                        )
-                        
-                        if (localError.isNotEmpty()) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(localError, color = CosmosError, style = MaterialTheme.typography.bodySmall)
-                        }
-                        
-                        Spacer(Modifier.height(16.dp))
-                        
-                        if (isLoading) {
-                            CircularProgressIndicator(color = CosmosPrimary, modifier = Modifier.align(Alignment.CenterHorizontally))
-                        } else {
-                            CosmosButton(
-                                text = "Sign In",
-                                onClick = {
-                                    if (email.isNotBlank() && password.isNotBlank()) {
-                                        authViewModel.signIn(email, password, onSignIn)
-                                    } else {
-                                        localError = "Please enter email and password"
+                    if (forgotPasswordMode) {
+                            CosmosGlassCard(showTopGradientBorder = true) {
+                                Text(
+                                    text = "Reset Password",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = CosmosOnBackground,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                Text(
+                                    text = "Enter your email address and we'll send you a link to reset your password.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = CosmosOnSurfaceVariant
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                OutlinedTextField(
+                                    value = email,
+                                    onValueChange = { email = it },
+                                    label = { Text("Email Address", color = CosmosOnSurfaceVariant) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = CosmosPrimary,
+                                        unfocusedBorderColor = CosmosOutlineVariant,
+                                        focusedTextColor = CosmosOnBackground,
+                                        unfocusedTextColor = CosmosOnBackground
+                                    )
+                                )
+                                if (localError.isNotEmpty()) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(localError, color = CosmosError, style = MaterialTheme.typography.bodySmall)
+                                }
+                                Spacer(Modifier.height(24.dp))
+                                if (isLoading) {
+                                    CircularProgressIndicator(color = CosmosPrimary, modifier = Modifier.align(Alignment.CenterHorizontally))
+                                } else {
+                                    CosmosButton(
+                                        text = "Send Reset Link",
+                                        onClick = {
+                                            if (email.isNotBlank()) {
+                                                authViewModel.resetPassword(
+                                                    email = email,
+                                                    onSuccess = {
+                                                        android.widget.Toast.makeText(context, "Reset link sent to $email", android.widget.Toast.LENGTH_LONG).show()
+                                                        forgotPasswordMode = false
+                                                        localError = ""
+                                                    },
+                                                    onError = { err ->
+                                                        localError = err
+                                                    }
+                                                )
+                                            } else {
+                                                localError = "Please enter your email address"
+                                            }
+                                        }
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    TextButton(
+                                        onClick = {
+                                            forgotPasswordMode = false
+                                            localError = ""
+                                        },
+                                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                                    ) {
+                                        Text("Cancel", color = CosmosOnSurfaceVariant)
                                     }
                                 }
+                        }
+                    } else {
+                        // Sign In Card
+                        CosmosGlassCard(showTopGradientBorder = true) {
+                            Text(
+                                text = "Sign In to Cosmos",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = CosmosOnBackground,
+                                fontWeight = FontWeight.Bold
                             )
-                            Spacer(Modifier.height(8.dp))
-                            TextButton(onClick = { showSignIn = false }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                                Text("Cancel", color = CosmosOnSurfaceVariant)
+                            Spacer(Modifier.height(16.dp))
+                            
+                            OutlinedTextField(
+                                value = email,
+                                onValueChange = { email = it },
+                                label = { Text("Email Address", color = CosmosOnSurfaceVariant) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = CosmosPrimary,
+                                    unfocusedBorderColor = CosmosOutlineVariant,
+                                    focusedTextColor = CosmosOnBackground,
+                                    unfocusedTextColor = CosmosOnBackground
+                                )
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            
+                            OutlinedTextField(
+                                value = password,
+                                onValueChange = { password = it },
+                                label = { Text("Password", color = CosmosOnSurfaceVariant) },
+                                modifier = Modifier.fillMaxWidth(),
+                                visualTransformation = PasswordVisualTransformation(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = CosmosPrimary,
+                                    unfocusedBorderColor = CosmosOutlineVariant,
+                                    focusedTextColor = CosmosOnBackground,
+                                    unfocusedTextColor = CosmosOnBackground
+                                )
+                            )
+                            
+                            Spacer(Modifier.height(4.dp))
+                            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                                TextButton(
+                                    onClick = {
+                                        forgotPasswordMode = true
+                                        localError = ""
+                                    },
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text("Forgot Password?", style = MaterialTheme.typography.bodySmall, color = CosmosPrimary)
+                                }
+                            }
+                            
+                            if (localError.isNotEmpty()) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(localError, color = CosmosError, style = MaterialTheme.typography.bodySmall)
+                            }
+                            
+                            Spacer(Modifier.height(16.dp))
+                            
+                            if (isLoading) {
+                                CircularProgressIndicator(color = CosmosPrimary, modifier = Modifier.align(Alignment.CenterHorizontally))
+                            } else {
+                                CosmosButton(
+                                    text = "Sign In",
+                                    onClick = {
+                                        if (email.isNotBlank() && password.isNotBlank()) {
+                                            authViewModel.signIn(email, password, onSignIn)
+                                        } else {
+                                            localError = "Please enter email and password"
+                                        }
+                                    }
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                TextButton(
+                                    onClick = {
+                                        showSignIn = false
+                                        forgotPasswordMode = false
+                                    },
+                                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                                ) {
+                                    Text("Cancel", color = CosmosOnSurfaceVariant)
+                                }
                             }
                         }
                     }

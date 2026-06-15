@@ -198,11 +198,11 @@ fun CosmosAvatar(
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = name,
-                    tint = CosmosOnSurfaceVariant,
-                    modifier = Modifier.size(size * 0.5f)
+                Text(
+                    text = name.firstOrNull()?.uppercase() ?: "?",
+                    color = CosmosOnSurfaceVariant,
+                    fontSize = (size.value * 0.4f).sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }

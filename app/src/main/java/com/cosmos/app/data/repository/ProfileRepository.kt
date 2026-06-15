@@ -3,6 +3,9 @@ package com.cosmos.app.data.repository
 import com.cosmos.app.data.model.EndorsedSkill
 import com.cosmos.app.data.model.Member
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.FieldValue
 import kotlinx.coroutines.tasks.await
 
 interface ProfileRepository {
@@ -11,104 +14,21 @@ interface ProfileRepository {
     suspend fun getDiscoveryDeck(currentUserId: String): Result<List<Member>>
     suspend fun endorseSkill(userId: String, endorserName: String, skillName: String): Result<Unit>
     suspend fun getEndorsedSkills(userId: String): Result<List<EndorsedSkill>>
+    suspend fun updateProfile(userId: String, updates: Map<String, Any>): Result<Unit>
+    suspend fun searchProfiles(query: String, tags: List<String> = emptyList(), userType: String = ""): Result<List<Member>>
+    suspend fun getProfilesPaginated(lastDocId: String?, limit: Int = 20): Result<List<Member>>
 }
 
 class FirestoreProfileRepository(
     private val firestore: FirebaseFirestore
 ) : ProfileRepository {
 
-    private fun getMockUserMap(userId: String): Map<String, Any>? {
-        return when (userId) {
-            "mock_user_sarah" -> mapOf(
-                "id" to "mock_user_sarah",
-                "name" to "Sarah Jenkins",
-                "headline" to "Founder & CEO at BioSphere",
-                "role" to "CEO",
-                "company" to "BioSphere",
-                "avatarUrl" to "",
-                "location" to "Boston, MA",
-                "bio" to "Building the future of sustainable food systems.",
-                "tags" to listOf("ClimateTech", "Biotech", "Female Founder"),
-                "primaryUserType" to "Founder",
-                "membershipTier" to "FOUNDER",
-                "isLinkedInConnected" to true,
-                "mutualConnectionsCount" to 3,
-                "connectionsCount" to 14,
-                "eventsAttended" to 5,
-                "followUpsCompleted" to 8
-            )
-            "mock_user_david" -> mapOf(
-                "id" to "mock_user_david",
-                "name" to "David Chen",
-                "headline" to "General Partner at Nexus Ventures",
-                "role" to "GP",
-                "company" to "Nexus Ventures",
-                "avatarUrl" to "",
-                "location" to "San Francisco, CA",
-                "bio" to "Investing in early stage AI and enterprise SaaS. Former developer.",
-                "tags" to listOf("AI/ML", "B2B SaaS", "VC"),
-                "primaryUserType" to "Investor",
-                "membershipTier" to "INNER_CIRCLE",
-                "isLinkedInConnected" to true,
-                "mutualConnectionsCount" to 5,
-                "connectionsCount" to 42,
-                "eventsAttended" to 12,
-                "followUpsCompleted" to 20
-            )
-            "mock_user_elena" -> mapOf(
-                "id" to "mock_user_elena",
-                "name" to "Elena Rostova",
-                "headline" to "Lead Designer at Cosmos Studio",
-                "role" to "Designer",
-                "company" to "Cosmos Studio",
-                "avatarUrl" to "",
-                "location" to "New York, NY",
-                "bio" to "Passionate about premium design systems and minimalist interfaces.",
-                "tags" to listOf("UI/UX", "Product Design", "Creative"),
-                "primaryUserType" to "Creator",
-                "membershipTier" to "MEMBER",
-                "isLinkedInConnected" to false,
-                "mutualConnectionsCount" to 1,
-                "connectionsCount" to 8,
-                "eventsAttended" to 3,
-                "followUpsCompleted" to 4
-            )
-            "mock_user_marcus" -> mapOf(
-                "id" to "mock_user_marcus",
-                "name" to "Marcus Vance",
-                "headline" to "VP of Product at ScaleUp",
-                "role" to "Product VP",
-                "company" to "ScaleUp",
-                "avatarUrl" to "",
-                "location" to "Austin, TX",
-                "bio" to "Scale specialist. Former 0-to-1 PM at Stripe and Airbnb.",
-                "tags" to listOf("Product Management", "Growth", "Scaling"),
-                "primaryUserType" to "Startup Operator",
-                "membershipTier" to "EXPLORER",
-                "isLinkedInConnected" to false,
-                "mutualConnectionsCount" to 2,
-                "connectionsCount" to 19,
-                "eventsAttended" to 8,
-                "followUpsCompleted" to 15
-            )
-            else -> null
-        }
-    }
-
     override suspend fun getProfile(userId: String): Result<Member> = runCatching {
         val snapshot = firestore.collection("users").document(userId).get().await()
-        val member = if (!snapshot.exists()) {
-            if (userId.startsWith("mock_user_")) {
-                val mockMap = getMockUserMap(userId) ?: throw IllegalArgumentException("User profile $userId not found")
-                firestore.collection("users").document(userId).set(mockMap).await()
-                FirebaseAuthRepository.mapDocumentToMember(userId, mockMap)
-            } else {
-                throw IllegalArgumentException("User profile $userId not found")
-            }
-        } else {
-            FirebaseAuthRepository.mapDocumentToMember(snapshot.id, snapshot.data ?: emptyMap())
+        if (!snapshot.exists()) {
+            throw IllegalArgumentException("User profile $userId not found")
         }
-        
+        val member = FirebaseAuthRepository.mapDocumentToMember(snapshot.id, snapshot.data ?: emptyMap())
         // Load endorsed skills
         val skills = getEndorsedSkills(userId).getOrDefault(emptyList())
         member.copy(endorsedSkills = skills)
@@ -133,10 +53,14 @@ class FirestoreProfileRepository(
             .get().await()
         val swipedUserIds = swipedSnapshot.documents.mapNotNull { it.getString("likedId") }.toSet()
 
-        // 3. Fetch all other users
+        // 3. Fetch all other users (excluding restricted users)
         val allUsersSnapshot = firestore.collection("users").get().await()
         val candidates = allUsersSnapshot.documents
-            .filter { it.id != currentUserId && !swipedUserIds.contains(it.id) }
+            .filter { doc ->
+                doc.id != currentUserId &&
+                !swipedUserIds.contains(doc.id) &&
+                doc.getBoolean("isRestricted") != true
+            }
             .map { doc ->
                 val member = FirebaseAuthRepository.mapDocumentToMember(doc.id, doc.data ?: emptyMap())
                 val skills = getEndorsedSkills(doc.id).getOrDefault(emptyList())
@@ -146,19 +70,24 @@ class FirestoreProfileRepository(
         // 4. Rank candidates based on matching rules
         candidates.map { candidate ->
             val sharedTags = candidate.tags.intersect(currentUser.tags.toSet()).size
-            val hasSharedGoal = candidate.goalStatement.split(" ").intersect(
-                currentUser.goalStatement.split(" ").toSet()
-            ).isNotEmpty()
+            val hasSharedGoal = if (currentUser.goalStatement.isNotBlank() && candidate.goalStatement.isNotBlank()) {
+                candidate.goalStatement.split(" ").intersect(
+                    currentUser.goalStatement.split(" ").toSet()
+                ).isNotEmpty()
+            } else false
 
             var score = 0
             score += sharedTags * 10
             if (hasSharedGoal) score += 15
             if (candidate.isLinkedInConnected) score += 5
             score += candidate.mutualConnectionsCount * 2
+            // Boost for complementary lookingFor
+            val sharedLookingFor = candidate.lookingFor.intersect(currentUser.lookingFor.toSet()).size
+            score += sharedLookingFor * 8
 
             candidate to score
         }
-        .filter { it.second > 0 || it.first.tags.isEmpty() || currentUser.tags.isEmpty() } // don't filter out completely if user tags are empty
+        .filter { it.second > 0 || it.first.tags.isEmpty() || currentUser.tags.isEmpty() }
         .sortedByDescending { it.second }
         .map { it.first }
     }
@@ -189,6 +118,18 @@ class FirestoreProfileRepository(
                 )
             ).await()
         }
+
+        // Create notification for the endorsed user
+        val notifData = mapOf(
+            "userId" to userId,
+            "type" to "ENDORSEMENT_RECEIVED",
+            "title" to "New Endorsement",
+            "body" to "$endorserName endorsed your $skillName skill.",
+            "timestamp" to FieldValue.serverTimestamp(),
+            "isRead" to false,
+            "actionId" to userId
+        )
+        firestore.collection("notifications").add(notifData).await()
         Unit
     }
 
@@ -202,6 +143,62 @@ class FirestoreProfileRepository(
                 count = doc.getLong("count")?.toInt() ?: 0,
                 endorsers = (doc.get("endorsers") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
             )
+        }
+    }
+
+    override suspend fun updateProfile(userId: String, updates: Map<String, Any>): Result<Unit> = runCatching {
+        val updatesWithTimestamp = updates.toMutableMap()
+        updatesWithTimestamp["updatedAt"] = FieldValue.serverTimestamp()
+        firestore.collection("users").document(userId)
+            .set(updatesWithTimestamp, SetOptions.merge()).await()
+    }
+
+    override suspend fun searchProfiles(
+        query: String,
+        tags: List<String>,
+        userType: String
+    ): Result<List<Member>> = runCatching {
+        // Firestore doesn't support full-text search natively
+        // So we fetch all and filter client-side (for small datasets)
+        // For production scale, use Algolia/Typesense/Cloud Functions
+        val allProfiles = getAllProfiles().getOrThrow()
+        val queryLower = query.lowercase().trim()
+
+        allProfiles.filter { member ->
+            val matchesQuery = queryLower.isEmpty() ||
+                member.name.lowercase().contains(queryLower) ||
+                member.headline.lowercase().contains(queryLower) ||
+                member.company.lowercase().contains(queryLower) ||
+                member.bio.lowercase().contains(queryLower) ||
+                member.tags.any { it.lowercase().contains(queryLower) }
+
+            val matchesTags = tags.isEmpty() ||
+                member.tags.any { memberTag -> tags.any { filterTag -> memberTag.equals(filterTag, ignoreCase = true) } }
+
+            val matchesType = userType.isEmpty() ||
+                member.primaryUserType.equals(userType, ignoreCase = true)
+
+            matchesQuery && matchesTags && matchesType && !member.isRestricted
+        }
+    }
+
+    override suspend fun getProfilesPaginated(lastDocId: String?, limit: Int): Result<List<Member>> = runCatching {
+        var query: Query = firestore.collection("users")
+            .orderBy("name")
+            .limit(limit.toLong())
+
+        if (lastDocId != null) {
+            val lastDoc = firestore.collection("users").document(lastDocId).get().await()
+            if (lastDoc.exists()) {
+                query = query.startAfter(lastDoc)
+            }
+        }
+
+        val snapshot = query.get().await()
+        snapshot.documents.map { doc ->
+            val member = FirebaseAuthRepository.mapDocumentToMember(doc.id, doc.data ?: emptyMap())
+            val skills = getEndorsedSkills(doc.id).getOrDefault(emptyList())
+            member.copy(endorsedSkills = skills)
         }
     }
 }

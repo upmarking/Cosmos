@@ -155,36 +155,49 @@ fun CompleteIdentityScreen(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(CircleShape)
-                            .background(CosmosSurfaceContainerHigh)
-                            .border(2.dp, CosmosOutlineVariant, CircleShape)
-                            .clickable { showPhotoOptions = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (selectedImageUri != null || selectedImageBitmap != null) {
-                            AsyncImage(
-                                model = selectedImageUri ?: selectedImageBitmap,
-                                contentDescription = "Selected photo",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Default.AddAPhoto,
-                                    contentDescription = "Add photo",
-                                    tint = CosmosOnSurfaceVariant,
-                                    modifier = Modifier.size(28.dp)
+                    Box(contentAlignment = Alignment.BottomEnd) {
+                        Box(
+                            modifier = Modifier
+                                .size(96.dp)
+                                .clip(CircleShape)
+                                .background(CosmosSurfaceContainerHigh)
+                                .border(2.dp, CosmosOutlineVariant, CircleShape)
+                                .clickable { showPhotoOptions = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (selectedImageUri != null || selectedImageBitmap != null) {
+                                AsyncImage(
+                                    model = selectedImageUri ?: selectedImageBitmap,
+                                    contentDescription = "Selected photo",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
                                 )
-                                Text(
-                                    "Photo",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = CosmosOnSurfaceVariant
-                                )
+                            } else {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Default.AddAPhoto,
+                                        contentDescription = "Add photo",
+                                        tint = CosmosOnSurfaceVariant,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    Text(
+                                        "Photo",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = CosmosOnSurfaceVariant
+                                    )
+                                }
                             }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(CosmosPrimary)
+                                .border(2.dp, CosmosBackground, CircleShape)
+                                .clickable { showPhotoOptions = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit photo", tint = Color.White, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
@@ -193,7 +206,20 @@ fun CompleteIdentityScreen(
                     AlertDialog(
                         onDismissRequest = { showPhotoOptions = false },
                         title = { Text("Select Profile Photo", color = CosmosOnBackground) },
-                        text = { Text("Choose a photo from your gallery or take a new one.", color = CosmosOnSurfaceVariant) },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Choose a photo from your gallery or take a new one.", color = CosmosOnSurfaceVariant)
+                                if (selectedImageUri != null || selectedImageBitmap != null) {
+                                    TextButton(onClick = {
+                                        showPhotoOptions = false
+                                        selectedImageUri = null
+                                        selectedImageBitmap = null
+                                    }) {
+                                        Text("Remove Current Photo", color = CosmosError)
+                                    }
+                                }
+                            }
+                        },
                         confirmButton = {
                             TextButton(
                                 onClick = {
@@ -240,7 +266,23 @@ fun CompleteIdentityScreen(
                             backgroundColor = if (selectedUserType == type) CosmosPrimary.copy(alpha = 0.2f)
                                              else CosmosSurfaceContainerHigh,
                             textColor = if (selectedUserType == type) CosmosPrimary else CosmosOnSurfaceVariant,
-                            onClick = { selectedUserType = type }
+                            onClick = {
+                                val oldUserType = selectedUserType
+                                val trimmedHeadline = headline.trim()
+                                val oldTypeLower = oldUserType.lowercase()
+                                val isDefaultHeadline = trimmedHeadline.isBlank() ||
+                                    trimmedHeadline.lowercase() == oldTypeLower ||
+                                    trimmedHeadline.lowercase().startsWith("$oldTypeLower at")
+                                if (isDefaultHeadline) {
+                                    val companySuffix = if (trimmedHeadline.lowercase().startsWith("$oldTypeLower at")) {
+                                        trimmedHeadline.substring(oldTypeLower.length + 4).trim()
+                                    } else {
+                                        company
+                                    }
+                                    headline = if (companySuffix.isBlank()) type else "$type at $companySuffix"
+                                }
+                                selectedUserType = type
+                            }
                         )
                     }
                 }
@@ -287,7 +329,23 @@ fun CompleteIdentityScreen(
 
                 CosmosTextField(label = "Professional Headline", value = headline, onValueChange = { headline = it }, placeholder = "Founder & CEO at NexusAI")
                 CosmosTextField(label = "Current Role", value = role, onValueChange = { role = it }, placeholder = "CEO")
-                CosmosTextField(label = "Company", value = company, onValueChange = { company = it }, placeholder = "NexusAI")
+                CosmosTextField(
+                    label = "Company",
+                    value = company,
+                    onValueChange = { newCompany ->
+                        val oldCompany = company
+                        val trimmedHeadline = headline.trim()
+                        val typeLower = selectedUserType.lowercase()
+                        val isDefaultHeadline = trimmedHeadline.isBlank() ||
+                            trimmedHeadline.lowercase() == typeLower ||
+                            trimmedHeadline.lowercase().startsWith("$typeLower at")
+                        if (isDefaultHeadline) {
+                            headline = if (newCompany.isBlank()) selectedUserType else "$selectedUserType at $newCompany"
+                        }
+                        company = newCompany
+                    },
+                    placeholder = "NexusAI"
+                )
                 CosmosTextField(label = "Location", value = location, onValueChange = { location = it }, placeholder = "San Francisco, CA")
                 CosmosTextField(label = "Years of Experience", value = yearsExperience, onValueChange = { yearsExperience = it }, placeholder = "8")
 
@@ -447,7 +505,7 @@ fun CompleteIdentityScreen(
                                     val memberData = Member(
                                         id = "", // populated inside repository using uid
                                         name = name,
-                                        headline = headline.ifBlank { "$selectedUserType at $company" },
+                                        headline = headline.ifBlank { if (company.isBlank()) selectedUserType else "$selectedUserType at $company" },
                                         role = role,
                                         company = company,
                                         avatarUrl = "", // will be updated by saveOnboarding with the uploaded url

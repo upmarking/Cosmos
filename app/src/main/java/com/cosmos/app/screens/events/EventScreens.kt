@@ -27,53 +27,77 @@ import androidx.compose.runtime.collectAsState
 @Composable
 fun EventsListScreen(
     onEventTap: (String) -> Unit,
+    onPostEventTap: () -> Unit,
     onNavigate: (String) -> Unit,
-    eventViewModel: com.cosmos.app.ui.viewmodel.EventViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    eventViewModel: com.cosmos.app.ui.viewmodel.EventViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    authViewModel: com.cosmos.app.ui.viewmodel.AuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val events by eventViewModel.events.collectAsState()
+    val currentUser by authViewModel.currentUser.collectAsState()
 
     CosmosAmbientBackground {
-        Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
-            CosmosTopBar(
-                title = "Events",
-                actions = {
-                    IconButton(onClick = {}) {
-                        Icon(Icons.Default.FilterList, "Filter", tint = CosmosOnBackground)
-                    }
-                }
-            )
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                val featuredEvent = events.firstOrNull()
-                if (featuredEvent != null) {
-                    item {
-                        // Featured event
-                        Text("Featured", style = MaterialTheme.typography.titleMedium, color = CosmosOnBackground, modifier = Modifier.padding(bottom = 8.dp))
-                        FeaturedEventCard(event = featuredEvent, onTap = { onEventTap(featuredEvent.id) })
-                    }
-                }
-
-                item {
-                    Text("Upcoming", style = MaterialTheme.typography.titleMedium, color = CosmosOnBackground, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp))
-                }
-
-                if (events.isEmpty()) {
-                    item {
-                        CosmosGlassCard {
-                            Text("No upcoming events found. Check back later!", color = CosmosOnSurfaceVariant, modifier = Modifier.fillMaxWidth())
+        Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                CosmosTopBar(
+                    title = "Events",
+                    actions = {
+                        if (currentUser?.isOrganizer == true) {
+                            IconButton(onClick = onPostEventTap) {
+                                Icon(Icons.Default.Add, "Post Event", tint = CosmosOnBackground)
+                            }
+                        }
+                        IconButton(onClick = {}) {
+                            Icon(Icons.Default.FilterList, "Filter", tint = CosmosOnBackground)
                         }
                     }
-                } else {
-                    items(events) { event ->
-                        EventListCard(event = event, onTap = { onEventTap(event.id) })
-                    }
-                }
+                )
 
-                item { Spacer(Modifier.height(80.dp)) }
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    val featuredEvent = events.firstOrNull()
+                    if (featuredEvent != null) {
+                        item {
+                            // Featured event
+                            Text("Featured", style = MaterialTheme.typography.titleMedium, color = CosmosOnBackground, modifier = Modifier.padding(bottom = 8.dp))
+                            FeaturedEventCard(event = featuredEvent, onTap = { onEventTap(featuredEvent.id) })
+                        }
+                    }
+
+                    item {
+                        Text("Upcoming", style = MaterialTheme.typography.titleMedium, color = CosmosOnBackground, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp))
+                    }
+
+                    if (events.isEmpty()) {
+                        item {
+                            CosmosGlassCard {
+                                Text("No upcoming events found. Check back later!", color = CosmosOnSurfaceVariant, modifier = Modifier.fillMaxWidth())
+                            }
+                        }
+                    } else {
+                        items(events) { event ->
+                            EventListCard(event = event, onTap = { onEventTap(event.id) })
+                        }
+                    }
+
+                    item { Spacer(Modifier.height(80.dp)) }
+                }
+            }
+            
+            if (currentUser?.isOrganizer == true) {
+                FloatingActionButton(
+                    onClick = onPostEventTap,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp)
+                        .padding(bottom = 80.dp),
+                    containerColor = CosmosPrimary,
+                    contentColor = CosmosBackground
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Post Event")
+                }
             }
         }
     }
@@ -366,5 +390,187 @@ fun EventLobbyScreen(
                 item { Spacer(Modifier.height(80.dp)) }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PostEventScreen(
+    onBack: () -> Unit,
+    onEventPosted: () -> Unit,
+    eventViewModel: com.cosmos.app.ui.viewmodel.EventViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+) {
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var date by remember { mutableStateOf("") }
+    var time by remember { mutableStateOf("") }
+    var location by remember { mutableStateOf("") }
+    var maxParticipants by remember { mutableStateOf("50") }
+    var isPaid by remember { mutableStateOf(false) }
+    var price by remember { mutableStateOf("") }
+    
+    val isCreating by eventViewModel.isCreatingEvent.collectAsState()
+
+    CosmosAmbientBackground {
+        Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+            CosmosTopBar(
+                title = "Post Event",
+                onBack = onBack
+            )
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
+            ) {
+                item {
+                    EventTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = "Event Title",
+                        placeholder = "e.g., Founders Meetup",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    EventTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = "Description",
+                        placeholder = "What is this event about?",
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = false
+                    )
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        EventTextField(
+                            value = date,
+                            onValueChange = { date = it },
+                            label = "Date",
+                            placeholder = "e.g., Oct 25",
+                            modifier = Modifier.weight(1f)
+                        )
+                        EventTextField(
+                            value = time,
+                            onValueChange = { time = it },
+                            label = "Time",
+                            placeholder = "e.g., 6:00 PM",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                item {
+                    EventTextField(
+                        value = location,
+                        onValueChange = { location = it },
+                        label = "Location",
+                        placeholder = "e.g., San Francisco, CA or Zoom",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    EventTextField(
+                        value = maxParticipants,
+                        onValueChange = { maxParticipants = it.filter { char -> char.isDigit() } },
+                        label = "Max Participants",
+                        placeholder = "e.g., 50",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Text("Paid Event", color = CosmosOnBackground, modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = isPaid,
+                            onCheckedChange = { isPaid = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = CosmosPrimary, checkedTrackColor = CosmosPrimary.copy(alpha = 0.5f))
+                        )
+                    }
+                }
+                if (isPaid) {
+                    item {
+                        EventTextField(
+                            value = price,
+                            onValueChange = { price = it },
+                            label = "Price",
+                            placeholder = "e.g., $25",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    CosmosButton(
+                        text = if (isCreating) "Posting..." else "Post Event",
+                        onClick = {
+                            val event = com.cosmos.app.data.model.NetworkEvent(
+                                id = "",
+                                title = title,
+                                description = description,
+                                date = date,
+                                time = time,
+                                location = location,
+                                type = com.cosmos.app.data.model.EventType.OPEN_NETWORKING,
+                                participantCount = 0,
+                                maxParticipants = maxParticipants.toIntOrNull() ?: 50,
+                                isPaid = isPaid,
+                                price = price,
+                                coverUrl = "",
+                                tags = listOf("Networking"),
+                                createdBy = "",
+                                createdAt = 0L
+                            )
+                            eventViewModel.createEvent(
+                                event = event,
+                                onSuccess = onEventPosted,
+                                onError = { /* handle error */ }
+                            )
+                        },
+                        enabled = title.isNotBlank() && date.isNotBlank() && time.isNotBlank() && !isCreating,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EventTextField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String = "",
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = true
+) {
+    Column(modifier = modifier) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = CosmosOnSurfaceVariant,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text(placeholder, color = CosmosOnSurfaceVariant.copy(alpha = 0.5f)) },
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = CosmosPrimary,
+                unfocusedBorderColor = CosmosOutlineVariant,
+                focusedTextColor = CosmosOnBackground,
+                unfocusedTextColor = CosmosOnBackground,
+                cursorColor = CosmosPrimary,
+                focusedContainerColor = CosmosSurfaceContainerLow,
+                unfocusedContainerColor = CosmosSurfaceContainerLow
+            ),
+            singleLine = singleLine,
+            minLines = if (singleLine) 1 else 3
+        )
     }
 }

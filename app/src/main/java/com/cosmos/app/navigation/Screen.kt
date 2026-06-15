@@ -22,6 +22,7 @@ sealed class Screen(val route: String) {
 
     // ── Connect sub-screens ──────────────────────────────────────────────────
     object DiscoveryDeck : Screen("discovery_deck")
+    object SearchProfiles : Screen("search_profiles")
     object FoundersCircleFeed : Screen("founders_circle_feed")
     object MemberProfile : Screen("member_profile/{memberId}") {
         fun createRoute(memberId: String) = "member_profile/$memberId"
@@ -29,6 +30,7 @@ sealed class Screen(val route: String) {
     object EndorseExpertise : Screen("endorse_expertise/{memberId}") {
         fun createRoute(memberId: String) = "endorse_expertise/$memberId"
     }
+    object ConnectionRequests : Screen("connection_requests")
     object RequestWarmIntro : Screen("request_warm_intro/{memberId}") {
         fun createRoute(memberId: String) = "request_warm_intro/$memberId"
     }
@@ -43,6 +45,7 @@ sealed class Screen(val route: String) {
     object EventLobby : Screen("event_lobby/{eventId}") {
         fun createRoute(eventId: String) = "event_lobby/$eventId"
     }
+    object PostEvent : Screen("post_event")
 
     // ── Communities sub-screens ──────────────────────────────────────────────
     object CommunityHub : Screen("community_hub")
@@ -65,4 +68,5 @@ sealed class Screen(val route: String) {
     object Notifications : Screen("notifications")
     object Settings : Screen("settings")
     object EditProfile : Screen("edit_profile")
+    object HelpSupport : Screen("help_support")
 }

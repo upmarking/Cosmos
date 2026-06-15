@@ -33,11 +33,19 @@ fun FoundersCircleFeedScreen(
     onNavigate: (String) -> Unit,
     communityViewModel: com.cosmos.app.ui.viewmodel.CommunityViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
+    val circles by communityViewModel.circles.collectAsState()
+    val members by communityViewModel.circleMembers.collectAsState()
+
     LaunchedEffect(Unit) {
-        communityViewModel.loadCircleMembers("c1")
+        communityViewModel.loadCircles()
     }
 
-    val members by communityViewModel.circleMembers.collectAsState()
+    LaunchedEffect(circles) {
+        val foundersCircle = circles.find { it.name.contains("Founder", ignoreCase = true) }
+        if (foundersCircle != null) {
+            communityViewModel.loadCircleMembers(foundersCircle.id)
+        }
+    }
 
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
@@ -114,7 +122,9 @@ fun MemberProfileScreen(
     }
 
     val memberState by profileViewModel.selectedMember.collectAsState()
-    val isConnected by profileViewModel.isConnectionEstablished.collectAsState()
+    val connectionStatus by profileViewModel.connectionProfileStatus.collectAsState()
+    var showConnectDialog by remember { mutableStateOf(false) }
+    var connectMessage by remember { mutableStateOf("") }
 
     if (memberState == null) {
         CosmosAmbientBackground {
@@ -180,25 +190,48 @@ fun MemberProfileScreen(
                             Text("✦ ${member.membershipTier.label}", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary)
                         }
 
-                        // Action row
+                        // Action row — 4-state connection button
                         Spacer(Modifier.height(20.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (!isConnected) {
-                                CosmosButton(
-                                    text = "Connect",
-                                    onClick = { 
-                                        profileViewModel.connectWithMember(member.id) { _ -> }
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    icon = Icons.Default.PersonAdd
-                                )
-                            } else {
-                                CosmosOutlinedButton(
-                                    text = "Message",
-                                    onClick = onStartChat,
-                                    modifier = Modifier.weight(1f),
-                                    icon = Icons.Default.Chat
-                                )
+                            when (connectionStatus) {
+                                com.cosmos.app.data.model.ConnectionProfileStatus.NONE -> {
+                                    CosmosButton(
+                                        text = "Connect",
+                                        onClick = { showConnectDialog = true },
+                                        modifier = Modifier.weight(1f),
+                                        icon = Icons.Default.PersonAdd
+                                    )
+                                }
+                                com.cosmos.app.data.model.ConnectionProfileStatus.PENDING_SENT -> {
+                                    CosmosOutlinedButton(
+                                        text = "Request Sent ✓",
+                                        onClick = { profileViewModel.withdrawConnectionRequest(member.id) },
+                                        modifier = Modifier.weight(1f),
+                                        icon = Icons.Default.Check
+                                    )
+                                }
+                                com.cosmos.app.data.model.ConnectionProfileStatus.PENDING_RECEIVED -> {
+                                    CosmosButton(
+                                        text = "Accept",
+                                        onClick = { profileViewModel.acceptConnectionFromProfile(member.id) },
+                                        modifier = Modifier.weight(1f),
+                                        icon = Icons.Default.Check
+                                    )
+                                    CosmosOutlinedButton(
+                                        text = "Decline",
+                                        onClick = { profileViewModel.declineConnectionFromProfile(member.id) },
+                                        modifier = Modifier.wrapContentWidth(),
+                                        icon = Icons.Default.Close
+                                    )
+                                }
+                                com.cosmos.app.data.model.ConnectionProfileStatus.CONNECTED -> {
+                                    CosmosOutlinedButton(
+                                        text = "Message",
+                                        onClick = onStartChat,
+                                        modifier = Modifier.weight(1f),
+                                        icon = Icons.Default.Chat
+                                    )
+                                }
                             }
                             CosmosOutlinedButton(
                                 text = "Intro",
@@ -278,6 +311,56 @@ fun MemberProfileScreen(
                 }
             }
         }
+    }
+
+    // Connection Request Dialog
+    if (showConnectDialog) {
+        AlertDialog(
+            onDismissRequest = { showConnectDialog = false; connectMessage = "" },
+            title = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, size = 56.dp, isLinkedInConnected = member.isLinkedInConnected)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Connect with ${member.name}", style = MaterialTheme.typography.titleMedium, color = CosmosOnBackground)
+                }
+            },
+            text = {
+                Column {
+                    Text(member.headline, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = connectMessage,
+                        onValueChange = { connectMessage = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Add a note (optional)...", color = CosmosOnSurfaceVariant.copy(alpha = 0.5f)) },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CosmosPrimary, unfocusedBorderColor = CosmosOutlineVariant,
+                            focusedTextColor = CosmosOnBackground, unfocusedTextColor = CosmosOnBackground,
+                            cursorColor = CosmosPrimary, focusedContainerColor = CosmosSurfaceContainerLow,
+                            unfocusedContainerColor = CosmosSurfaceContainerLow
+                        ),
+                        maxLines = 3,
+                        minLines = 2
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    profileViewModel.connectWithMember(member.id, connectMessage) { _ -> }
+                    showConnectDialog = false
+                    connectMessage = ""
+                }) {
+                    Text("Send Request", color = CosmosPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConnectDialog = false; connectMessage = "" }) {
+                    Text("Cancel", color = CosmosOnSurfaceVariant)
+                }
+            },
+            containerColor = CosmosSurfaceContainerLow
+        )
     }
 }
 

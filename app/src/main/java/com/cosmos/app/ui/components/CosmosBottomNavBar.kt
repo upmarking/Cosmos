@@ -19,6 +19,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
+import com.cosmos.app.data.repository.ServiceLocator
 import com.cosmos.app.navigation.Screen
 import com.cosmos.app.ui.theme.*
 
@@ -53,8 +56,7 @@ val cosmosBottomNavItems = listOf(
         label = "Chats",
         route = Screen.Conversations.route,
         selectedIcon = Icons.Filled.Forum,
-        unselectedIcon = Icons.Outlined.Forum,
-        badgeCount = 2
+        unselectedIcon = Icons.Outlined.Forum
     ),
     BottomNavItem(
         label = "Profile",
@@ -68,6 +70,19 @@ val cosmosBottomNavItems = listOf(
 fun CosmosBottomNavBar(navController: NavController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    // Get current logged-in user dynamically
+    val currentUserState by ServiceLocator.authRepository.currentUser.collectAsState(initial = null)
+    val userId = currentUserState?.id
+
+    // Collect unread count reactively if user is logged in
+    val unreadChatCount by remember(userId) {
+        if (userId != null) {
+            ServiceLocator.chatRepository.getUnreadCountTotal(userId)
+        } else {
+            kotlinx.coroutines.flow.flowOf(0)
+        }
+    }.collectAsState(initial = 0)
 
     // Only show bottom nav on top-level tab routes
     val topLevelRoutes = cosmosBottomNavItems.map { it.route }
@@ -97,8 +112,13 @@ fun CosmosBottomNavBar(navController: NavController) {
         ) {
             cosmosBottomNavItems.forEach { item ->
                 val isSelected = currentRoute == item.route
+                val displayItem = if (item.route == Screen.Conversations.route) {
+                    item.copy(badgeCount = unreadChatCount)
+                } else {
+                    item
+                }
                 CosmosNavBarItem(
-                    item = item,
+                    item = displayItem,
                     isSelected = isSelected,
                     onClick = {
                         if (!isSelected) {

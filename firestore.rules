@@ -61,7 +61,8 @@ service cloud.firestore {
       allow read: if isSignedIn();
       // Allow join transaction to increment memberCount
       allow update: if isSignedIn();
-      allow create, delete: if false;
+      allow create: if isSignedIn();
+      allow delete: if false;
 
       match /members/{userId} {
         allow read: if isSignedIn();
@@ -77,7 +78,21 @@ service cloud.firestore {
       }
     }
 
-    // 6. Notifications collection rules
+    // 6. Connection Requests collection rules
+    match /connection_requests/{requestId} {
+      allow read: if isSignedIn() && (
+        resource.data.senderId == request.auth.uid ||
+        resource.data.receiverId == request.auth.uid
+      );
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.senderId;
+      allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.receiverId ||
+        request.auth.uid == resource.data.senderId
+      );
+      allow delete: if false;
+    }
+
+    // 7. Notifications collection rules
     match /notifications/{notificationId} {
       allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
       // Let clients create notifications (e.g., when warm intro is requested) or mark as read
@@ -85,6 +100,12 @@ service cloud.firestore {
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid && 
                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // 8. Support tickets rules
+    match /support_tickets/{ticketId} {
+      allow create: if isSignedIn();
+      allow read, update, delete: if false; // Only admin/backend processes tickets
     }
   }
 }

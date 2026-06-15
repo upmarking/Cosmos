@@ -18,8 +18,10 @@ import com.cosmos.app.screens.communities.ExploreCirclesScreen
 import com.cosmos.app.screens.communities.PrivateCircleFeedScreen
 import com.cosmos.app.screens.connect.DiscoveryDeckScreen
 import com.cosmos.app.screens.connect.EndorseExpertiseScreen
+import com.cosmos.app.screens.connect.ConnectionRequestsScreen
 import com.cosmos.app.screens.connect.FoundersCircleFeedScreen
 import com.cosmos.app.screens.connect.MemberProfileScreen
+import com.cosmos.app.screens.connect.SearchScreen
 import com.cosmos.app.screens.conversations.ConversationsListScreen
 import com.cosmos.app.screens.conversations.RelationshipCrmChatScreen
 import com.cosmos.app.screens.events.EventLobbyScreen
@@ -37,6 +39,7 @@ import com.cosmos.app.screens.profile.NetworkingDashboardScreen
 import com.cosmos.app.screens.profile.NotificationsCenterScreen
 import com.cosmos.app.screens.profile.SettingsPrivacyScreen
 import com.cosmos.app.screens.profile.EditProfileScreen
+import com.cosmos.app.screens.profile.HelpSupportScreen
 
 @Composable
 fun CosmosNavHost(
@@ -119,6 +122,14 @@ fun CosmosNavHost(
                 onNavigate = { route -> navController.navigate(route) }
             )
         }
+        composable(Screen.SearchProfiles.route) {
+            SearchScreen(
+                onProfileTap = { memberId ->
+                    navController.navigate(Screen.MemberProfile.createRoute(memberId))
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
         composable(Screen.FoundersCircleFeed.route) {
             FoundersCircleFeedScreen(
                 onProfileTap = { memberId ->
@@ -151,6 +162,18 @@ fun CosmosNavHost(
                 memberId = memberId,
                 onBack = { navController.popBackStack() },
                 onDone = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.ConnectionRequests.route) {
+            ConnectionRequestsScreen(
+                onBack = { navController.popBackStack() },
+                onProfileTap = { memberId ->
+                    navController.navigate(Screen.MemberProfile.createRoute(memberId))
+                },
+                onChatTap = { connectionId ->
+                    navController.navigate(Screen.CrmChat.createRoute(connectionId))
+                },
+                onNavigate = { route -> navController.navigate(route) }
             )
         }
 
@@ -198,7 +221,16 @@ fun CosmosNavHost(
                 onEventTap = { eventId ->
                     navController.navigate(Screen.EventLobby.createRoute(eventId))
                 },
+                onPostEventTap = {
+                    navController.navigate(Screen.PostEvent.route)
+                },
                 onNavigate = { route -> navController.navigate(route) }
+            )
+        }
+        composable(Screen.PostEvent.route) {
+            com.cosmos.app.screens.events.PostEventScreen(
+                onBack = { navController.popBackStack() },
+                onEventPosted = { navController.popBackStack() }
             )
         }
         composable(
@@ -321,6 +353,11 @@ fun CosmosNavHost(
         }
         composable(Screen.EditProfile.route) {
             EditProfileScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.HelpSupport.route) {
+            HelpSupportScreen(
                 onBack = { navController.popBackStack() }
             )
         }
