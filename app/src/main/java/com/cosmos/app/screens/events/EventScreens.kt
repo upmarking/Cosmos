@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cosmos.app.data.model.NetworkEvent
@@ -34,30 +36,98 @@ fun EventsListScreen(
 ) {
     val events by eventViewModel.events.collectAsState()
     val currentUser by authViewModel.currentUser.collectAsState()
+    val selectedTypes by eventViewModel.selectedEventTypes.collectAsState()
+    val pricingFilter by eventViewModel.pricingFilter.collectAsState()
+    val showRegisteredOnly by eventViewModel.showRegisteredOnly.collectAsState()
+
+    var showFilterSheet by remember { mutableStateOf(false) }
+    val isFilterActive = selectedTypes.isNotEmpty() ||
+            pricingFilter != com.cosmos.app.ui.viewmodel.PricingFilter.ALL ||
+            showRegisteredOnly
+
+    // Derive filtered events reactively
+    val displayEvents = remember(events, selectedTypes, pricingFilter, showRegisteredOnly) {
+        eventViewModel.filteredEvents
+    }
 
     CosmosAmbientBackground {
         Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             Column(modifier = Modifier.fillMaxSize()) {
-                CosmosTopBar(
-                    title = "Events",
-                    actions = {
+                CosmosGlassTopBar(
+                    pageTitle = "Events",
+                    extraActions = {
                         if (currentUser?.isOrganizer == true) {
-                            IconButton(onClick = onPostEventTap) {
-                                Icon(Icons.Default.Add, "Post Event", tint = CosmosOnBackground)
-                            }
+                            GlassIconButton(
+                                icon = Icons.Default.Add,
+                                contentDescription = "Post Event",
+                                onClick = onPostEventTap
+                            )
                         }
-                        IconButton(onClick = {}) {
-                            Icon(Icons.Default.FilterList, "Filter", tint = CosmosOnBackground)
+                        // Filter button with active-filter indicator dot
+                        Box {
+                            GlassIconButton(
+                                icon = Icons.Default.FilterList,
+                                contentDescription = "Filter",
+                                onClick = { showFilterSheet = true }
+                            )
+                            if (isFilterActive) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = 2.dp, y = (-2).dp)
+                                        .size(10.dp)
+                                        .clip(androidx.compose.foundation.shape.CircleShape)
+                                        .background(
+                                            Brush.radialGradient(
+                                                listOf(CosmosPrimary, CosmosGradientStart)
+                                            )
+                                        )
+                                )
+                            }
                         }
                     }
                 )
+
+                // Active filters summary chip row
+                if (isFilterActive) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.FilterList,
+                            contentDescription = null,
+                            tint = CosmosPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = buildFilterSummary(selectedTypes, pricingFilter, showRegisteredOnly),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = CosmosPrimary,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(CosmosError.copy(alpha = 0.15f))
+                                .clickable { eventViewModel.resetFilters() }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("Clear", style = MaterialTheme.typography.labelSmall, color = CosmosError)
+                        }
+                    }
+                }
 
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    val featuredEvent = events.firstOrNull()
+                    val featuredEvent = displayEvents.firstOrNull()
                     if (featuredEvent != null) {
                         item {
                             // Featured event
@@ -70,14 +140,45 @@ fun EventsListScreen(
                         Text("Upcoming", style = MaterialTheme.typography.titleMedium, color = CosmosOnBackground, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp))
                     }
 
-                    if (events.isEmpty()) {
+                    if (displayEvents.isEmpty()) {
                         item {
                             CosmosGlassCard {
-                                Text("No upcoming events found. Check back later!", color = CosmosOnSurfaceVariant, modifier = Modifier.fillMaxWidth())
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        if (isFilterActive) "🔍" else "📅",
+                                        style = MaterialTheme.typography.displaySmall
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        if (isFilterActive) "No events match your filters"
+                                        else "No upcoming events found. Check back later!",
+                                        color = CosmosOnSurfaceVariant,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    if (isFilterActive) {
+                                        Spacer(Modifier.height(12.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(20.dp))
+                                                .background(
+                                                    Brush.linearGradient(
+                                                        listOf(CosmosGradientStart, CosmosGradientEnd)
+                                                    )
+                                                )
+                                                .clickable { eventViewModel.resetFilters() }
+                                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                        ) {
+                                            Text("Clear Filters", color = CosmosBackground, style = MaterialTheme.typography.labelMedium)
+                                        }
+                                    }
+                                }
                             }
                         }
                     } else {
-                        items(events) { event ->
+                        items(displayEvents) { event ->
                             EventListCard(event = event, onTap = { onEventTap(event.id) })
                         }
                     }
@@ -100,6 +201,242 @@ fun EventsListScreen(
                 }
             }
         }
+    }
+
+    // ── Filter Bottom Sheet ──────────────────────────────────────────────────
+    if (showFilterSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showFilterSheet = false },
+            containerColor = Color(0xFF16191F),
+            contentColor = CosmosOnBackground,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            tonalElevation = 0.dp,
+            scrimColor = Color.Black.copy(alpha = 0.5f)
+        ) {
+            EventFilterSheetContent(
+                selectedTypes = selectedTypes,
+                pricingFilter = pricingFilter,
+                showRegisteredOnly = showRegisteredOnly,
+                onToggleType = { eventViewModel.toggleEventType(it) },
+                onSetPricing = { eventViewModel.setPricingFilter(it) },
+                onToggleRegistered = { eventViewModel.toggleRegisteredOnly() },
+                onReset = { eventViewModel.resetFilters() },
+                onApply = { showFilterSheet = false }
+            )
+        }
+    }
+}
+
+/** Builds a concise human-readable summary of active filters */
+@Composable
+private fun buildFilterSummary(
+    types: Set<com.cosmos.app.data.model.EventType>,
+    pricing: com.cosmos.app.ui.viewmodel.PricingFilter,
+    registeredOnly: Boolean
+): String {
+    val parts = mutableListOf<String>()
+    if (types.isNotEmpty()) {
+        parts.add(types.joinToString(", ") { it.label })
+    }
+    if (pricing != com.cosmos.app.ui.viewmodel.PricingFilter.ALL) {
+        parts.add(pricing.label)
+    }
+    if (registeredOnly) {
+        parts.add("Registered")
+    }
+    return parts.joinToString(" · ")
+}
+
+/** Premium glassmorphic filter sheet content */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun EventFilterSheetContent(
+    selectedTypes: Set<com.cosmos.app.data.model.EventType>,
+    pricingFilter: com.cosmos.app.ui.viewmodel.PricingFilter,
+    showRegisteredOnly: Boolean,
+    onToggleType: (com.cosmos.app.data.model.EventType) -> Unit,
+    onSetPricing: (com.cosmos.app.ui.viewmodel.PricingFilter) -> Unit,
+    onToggleRegistered: () -> Unit,
+    onReset: () -> Unit,
+    onApply: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 32.dp)
+    ) {
+        // Handle bar
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .width(40.dp)
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(CosmosOnSurfaceVariant.copy(alpha = 0.3f))
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.FilterList,
+                    contentDescription = null,
+                    tint = CosmosPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Filter Events",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = CosmosOnBackground,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = onReset)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text("Reset", style = MaterialTheme.typography.labelMedium, color = CosmosOnSurfaceVariant)
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        // ── Event Type Section ───────────────────────────────────────────────
+        Text(
+            "Event Type",
+            style = MaterialTheme.typography.labelLarge,
+            color = CosmosOnSurfaceVariant,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        // Chips as a flow row
+        val allTypes = com.cosmos.app.data.model.EventType.values()
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            allTypes.forEach { type ->
+                val isSelected = type in selectedTypes
+                FilterChip(
+                    label = type.label,
+                    isSelected = isSelected,
+                    onClick = { onToggleType(type) }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        // ── Pricing Section ──────────────────────────────────────────────────
+        Text(
+            "Pricing",
+            style = MaterialTheme.typography.labelLarge,
+            color = CosmosOnSurfaceVariant,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            com.cosmos.app.ui.viewmodel.PricingFilter.values().forEach { filter ->
+                val isSelected = pricingFilter == filter
+                FilterChip(
+                    label = filter.label,
+                    isSelected = isSelected,
+                    onClick = { onSetPricing(filter) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        // ── Registered Only ──────────────────────────────────────────────────
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(CosmosGlass)
+                .border(1.dp, CosmosGlassBorder, RoundedCornerShape(12.dp))
+                .clickable(onClick = onToggleRegistered)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text("Registered Only", style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
+                Text("Show only events you've joined", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+            }
+            Switch(
+                checked = showRegisteredOnly,
+                onCheckedChange = { onToggleRegistered() },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = CosmosPrimary,
+                    checkedTrackColor = CosmosPrimary.copy(alpha = 0.4f),
+                    uncheckedThumbColor = CosmosOnSurfaceVariant,
+                    uncheckedTrackColor = CosmosSurfaceContainerHigh
+                )
+            )
+        }
+
+        Spacer(Modifier.height(28.dp))
+
+        // ── Apply Button ─────────────────────────────────────────────────────
+        CosmosButton(
+            text = "Apply Filters",
+            onClick = onApply,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+/** Reusable filter chip with glassmorphic selected state */
+@Composable
+private fun FilterChip(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                if (isSelected) Brush.linearGradient(
+                    listOf(CosmosGradientStart.copy(alpha = 0.85f), CosmosGradientEnd.copy(alpha = 0.85f))
+                )
+                else Brush.linearGradient(
+                    listOf(CosmosSurfaceContainerHigh, CosmosSurfaceContainerHigh)
+                )
+            )
+            .border(
+                width = 1.dp,
+                color = if (isSelected) CosmosPrimary.copy(alpha = 0.5f) else CosmosOutlineVariant.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (isSelected) Color.White else CosmosOnSurfaceVariant,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+        )
     }
 }
 

@@ -130,7 +130,15 @@ class FirebaseAuthRepository(
             return ServiceLocator.mockAuthRepository.signIn(email, password)
         }
         return try {
-            auth.signInWithEmailAndPassword(email.trim(), password).await()
+            val result = auth.signInWithEmailAndPassword(email.trim(), password).await()
+            val firebaseUser = result.user ?: throw IllegalStateException("Firebase user is null")
+            
+            // Sync credentials to mock store so we keep them aligned in mixed mode
+            val normalizedEmail = email.trim().lowercase()
+            LocalStore.userPasswords[normalizedEmail] = password
+            LocalStore.userEmailsToIds[normalizedEmail] = firebaseUser.uid
+            LocalStore.save()
+            
             Result.success(Unit)
         } catch (e: Exception) {
             if (e.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
@@ -186,6 +194,21 @@ class FirebaseAuthRepository(
                 "updatedAt" to FieldValue.serverTimestamp()
             )
             firestore.collection("users").document(uid).set(basicUserMap).await()
+
+            // Sync to mock store
+            val normalizedEmail = email.trim().lowercase()
+            val newUser = Member(
+                id = uid, name = name.trim(), email = normalizedEmail,
+                headline = "$primaryType at Cosmos", role = primaryType, company = "Cosmos",
+                avatarUrl = "", location = "",
+                membershipTier = MembershipTier.EXPLORER, primaryUserType = primaryType,
+                userRole = UserRole.ORGANIZER
+            )
+            LocalStore.users[uid] = newUser
+            LocalStore.userPasswords[normalizedEmail] = password
+            LocalStore.userEmailsToIds[normalizedEmail] = uid
+            LocalStore.save()
+
             Result.success(Unit)
         } catch (e: FirebaseAuthUserCollisionException) {
             Result.failure(Exception("An account already exists with this email. Please sign in instead."))
@@ -200,12 +223,12 @@ class FirebaseAuthRepository(
     }
 
     override suspend fun signOut(): Result<Unit> {
-        return if (ServiceLocator.forceMockMode) {
-            ServiceLocator.mockAuthRepository.signOut()
-        } else {
-            runCatching {
-                auth.signOut()
-            }
+        val mockResult = ServiceLocator.mockAuthRepository.signOut()
+        return try {
+            auth.signOut()
+            mockResult
+        } catch (e: Exception) {
+            mockResult
         }
     }
 
@@ -279,30 +302,48 @@ class FirebaseAuthRepository(
         val emailValidation = ValidationUtils.validateEmail(email)
         if (!emailValidation.isValid) return Result.failure(Exception(emailValidation.errorMessage))
 
-        if (ServiceLocator.forceMockMode) {
-            return ServiceLocator.mockAuthRepository.resetPassword(email)
-        }
+        // Always try Firebase Auth first regardless of mock mode,
+        // because password reset emails can ONLY be sent by Firebase Auth.
         return try {
             auth.sendPasswordResetEmail(email.trim()).await()
             Result.success(Unit)
         } catch (e: Exception) {
+            e.printStackTrace()
+            // Return the actual exception so we can see the exact Firebase error (e.g. invalid user or configuration error)
             Result.failure(e)
         }
     }
 
     override suspend fun deleteAccount(): Result<Unit> {
+        val mockResult = ServiceLocator.mockAuthRepository.deleteAccount()
         if (ServiceLocator.forceMockMode) {
-            return ServiceLocator.mockAuthRepository.deleteAccount()
+            return mockResult
         }
         return try {
             val uid = auth.currentUser?.uid ?: throw IllegalStateException("Not logged in")
+            val email = auth.currentUser?.email ?: ""
             // Delete Firestore user document
             firestore.collection("users").document(uid).delete().await()
             // Delete auth account
             auth.currentUser?.delete()?.await()
+
+            // Sync to mock store
+            LocalStore.users.remove(uid)
+            val emailNorm = email.trim().lowercase()
+            if (emailNorm.isNotBlank()) {
+                LocalStore.userPasswords.remove(emailNorm)
+                LocalStore.userEmailsToIds.remove(emailNorm)
+            }
+            LocalStore.save()
+
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.failure(e)
+            if (e.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
+                ServiceLocator.forceMockMode = true
+                mockResult
+            } else {
+                Result.failure(e)
+            }
         }
     }
 
@@ -310,14 +351,35 @@ class FirebaseAuthRepository(
         val emailValidation = ValidationUtils.validateEmail(newEmail)
         if (!emailValidation.isValid) return Result.failure(Exception(emailValidation.errorMessage))
 
+        val mockResult = ServiceLocator.mockAuthRepository.updateEmail(newEmail)
         if (ServiceLocator.forceMockMode) {
-            return ServiceLocator.mockAuthRepository.updateEmail(newEmail)
+            return mockResult
         }
         return try {
+            val user = auth.currentUser ?: throw IllegalStateException("User not logged in")
+            val oldEmail = user.email ?: throw IllegalStateException("User email not found")
             auth.currentUser?.verifyBeforeUpdateEmail(newEmail.trim())?.await()
+
+            // Sync to mock store on successful Firebase update
+            val oldEmailNorm = oldEmail.trim().lowercase()
+            val newEmailNorm = newEmail.trim().lowercase()
+            if (oldEmailNorm.isNotBlank()) {
+                val pwd = LocalStore.userPasswords[oldEmailNorm]
+                LocalStore.userPasswords.remove(oldEmailNorm)
+                LocalStore.userEmailsToIds.remove(oldEmailNorm)
+                if (pwd != null) LocalStore.userPasswords[newEmailNorm] = pwd
+            }
+            LocalStore.userEmailsToIds[newEmailNorm] = user.uid
+            LocalStore.save()
+
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.failure(e)
+            if (e.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
+                ServiceLocator.forceMockMode = true
+                mockResult
+            } else {
+                Result.failure(e)
+            }
         }
     }
 
@@ -326,8 +388,9 @@ class FirebaseAuthRepository(
         val passwordValidation = ValidationUtils.validatePassword(newPassword)
         if (!passwordValidation.isValid) return Result.failure(Exception(passwordValidation.errorMessage))
 
+        val mockResult = ServiceLocator.mockAuthRepository.updatePassword(currentPassword, newPassword)
         if (ServiceLocator.forceMockMode) {
-            return ServiceLocator.mockAuthRepository.updatePassword(currentPassword, newPassword)
+            return mockResult
         }
         return try {
             val user = auth.currentUser ?: throw IllegalStateException("User not logged in")
@@ -335,9 +398,19 @@ class FirebaseAuthRepository(
             val credential = com.google.firebase.auth.EmailAuthProvider.getCredential(email, currentPassword)
             user.reauthenticate(credential).await()
             user.updatePassword(newPassword).await()
+
+            // Sync to mock store on successful Firebase update
+            LocalStore.userPasswords[email.trim().lowercase()] = newPassword
+            LocalStore.save()
+
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.failure(e)
+            if (e.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
+                ServiceLocator.forceMockMode = true
+                mockResult
+            } else {
+                Result.failure(e)
+            }
         }
     }
 

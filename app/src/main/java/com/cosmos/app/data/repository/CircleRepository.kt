@@ -40,18 +40,6 @@ class FirestoreCircleRepository(
 
     override fun getCircles(currentUserId: String): Flow<List<Circle>> = callbackFlow {
 
-        // Seed circles if collection is empty (first launch)
-        launch {
-            try {
-                val snapshot = firestore.collection("circles").get().await()
-                if (snapshot.isEmpty) {
-                    FirestoreSeedService.seedCircles(firestore)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-
         val registration = firestore.collection("circles")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
@@ -119,38 +107,6 @@ class FirestoreCircleRepository(
                 transaction.update(circleRef, "memberCount", currentCount + 1)
             }
         }.await()
-
-        if (isPrivateCircle) {
-            // Simulate approval after 5 seconds
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
-                kotlinx.coroutines.delay(5000)
-                try {
-                    firestore.runTransaction { transaction ->
-                        val circleRef = firestore.collection("circles").document(circleId)
-                        val circleDoc = transaction.get(circleRef)
-                        val currentCount = circleDoc.getLong("memberCount") ?: 0
-
-                        val memberRef = circleRef.collection("members").document(userId)
-                        transaction.update(memberRef, "status", "APPROVED")
-                        transaction.update(circleRef, "memberCount", currentCount + 1)
-                    }.await()
-
-                    // Add a notification for the user
-                    val notifDoc = mapOf(
-                        "type" to com.cosmos.app.data.model.NotificationType.COMMUNITY_ANNOUNCEMENT.name,
-                        "title" to "Access Approved! 🎉",
-                        "body" to "Your request to join $circleName has been approved by the moderator.",
-                        "timestamp" to FieldValue.serverTimestamp(),
-                        "isRead" to false,
-                        "actionId" to circleId
-                    )
-                    firestore.collection("users").document(userId)
-                        .collection("notifications").add(notifDoc).await()
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        }
         Unit
     }
 

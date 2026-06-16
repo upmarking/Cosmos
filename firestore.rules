@@ -15,7 +15,10 @@ service cloud.firestore {
 
     // Helper: Checks if user is a member of the connection
     function isConnectionMember(connectionId) {
-      return isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/connections/$(connectionId)).data.members;
+      return isSignedIn() && (
+        connectionId.matches('.*' + request.auth.uid + '.*') ||
+        request.auth.uid in get(/databases/$(database)/documents/connections/$(connectionId)).data.members
+      );
     }
 
     // 1. Users collection rules
@@ -72,9 +75,7 @@ service cloud.firestore {
       match /posts/{postId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn();
-        allow update, delete: if isSignedIn() && (
-          resource.data.authorName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
-        );
+        allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
       }
     }
 

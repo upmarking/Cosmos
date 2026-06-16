@@ -174,8 +174,8 @@ fun ReviewIntroRequestScreen(
                     CosmosGlassCard {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                             Row(horizontalArrangement = Arrangement.spacedBy((-16).dp)) {
-                                CosmosAvatar(avatarUrl = request.requester.avatarUrl, name = request.requester.name, modifier = Modifier, size = 64.dp)
-                                CosmosAvatar(avatarUrl = request.target.avatarUrl, name = request.target.name, modifier = Modifier, size = 64.dp)
+                                CosmosAvatar(avatarUrl = request.requester.avatarUrl, name = request.requester.name, modifier = Modifier, size = 64.dp, isLinkedInConnected = request.requester.isLinkedInConnected)
+                                CosmosAvatar(avatarUrl = request.target.avatarUrl, name = request.target.name, modifier = Modifier, size = 64.dp, isLinkedInConnected = request.target.isLinkedInConnected)
                             }
                             Spacer(Modifier.height(12.dp))
                             Text("${request.requester.name} wants to meet ${request.target.name}", style = MaterialTheme.typography.titleLarge, color = CosmosOnBackground, fontWeight = FontWeight.SemiBold)
@@ -280,17 +280,16 @@ fun ThreeWayIntroductionScreen(
                     Text("All three parties have been notified.", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant)
                     Spacer(Modifier.height(32.dp))
 
-                    // Three party cards
                     listOf(
-                        Triple(request.connector.name, "The Connector", CosmosTertiary),
-                        Triple(request.requester.name, "The Requester", CosmosPrimary),
-                        Triple(request.target.name, "The Target", CosmosSecondary)
-                    ).forEach { (name, role, color) ->
+                        Triple(request.connector, "The Connector", CosmosTertiary),
+                        Triple(request.requester, "The Requester", CosmosPrimary),
+                        Triple(request.target, "The Target", CosmosSecondary)
+                    ).forEach { (m, role, color) ->
                         CosmosGlassCard(modifier = Modifier.padding(bottom = 10.dp), showTopGradientBorder = false) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                CosmosAvatar(avatarUrl = "", name = name, modifier = Modifier, size = 48.dp)
+                                CosmosAvatar(avatarUrl = m.avatarUrl, name = m.name, modifier = Modifier, size = 48.dp, isLinkedInConnected = m.isLinkedInConnected)
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
+                                    Text(m.name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
                                     Text(role, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
                                 }
                                 Box(modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(color.copy(alpha = 0.15f)).padding(horizontal = 10.dp, vertical = 4.dp)) {

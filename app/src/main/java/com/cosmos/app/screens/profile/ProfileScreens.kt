@@ -25,6 +25,7 @@ import com.cosmos.app.navigation.Screen
 import com.cosmos.app.ui.components.*
 import com.cosmos.app.ui.theme.*
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.cosmos.app.data.ValidationUtils
 import kotlinx.coroutines.launch
 
@@ -68,40 +69,33 @@ fun NetworkingDashboardScreen(
     }
 
     CosmosAmbientBackground {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().systemBarsPadding(),
-            contentPadding = PaddingValues(bottom = 100.dp)
-        ) {
-            // Profile hero
-            item {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    // Top actions
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("COSMOS", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp, top = 12.dp))
-                        Row {
-                            IconButton(onClick = onNotificationsTap) {
-                                if (unreadCount > 0) {
-                                    BadgedBox(badge = { Badge(containerColor = CosmosError) { Text("$unreadCount") } }) {
-                                        Icon(Icons.Outlined.Notifications, "Notifications", tint = CosmosOnBackground)
-                                    }
-                                } else {
-                                    Icon(Icons.Outlined.Notifications, "Notifications", tint = CosmosOnBackground)
-                                }
-                            }
-                            IconButton(onClick = onSettingsTap) {
-                                Icon(Icons.Outlined.Settings, "Settings", tint = CosmosOnBackground)
-                            }
-                        }
-                    }
+        Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
 
+            // ── Premium sticky top bar ────────────────────────────────────────
+            CosmosGlassTopBar(
+                pageTitle = "Dashboard",
+                notificationCount = unreadCount,
+                onNotificationsClick = onNotificationsTap,
+                extraActions = {
+                    GlassIconButton(
+                        icon = Icons.Outlined.Settings,
+                        contentDescription = "Settings",
+                        onClick = onSettingsTap
+                    )
+                }
+            )
+
+            // ── Scrollable content ────────────────────────────────────────────
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 100.dp)
+            ) {
+                // Profile hero
+                item {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Spacer(Modifier.height(32.dp))
                         CosmosAvatar(
                             avatarUrl = me.avatarUrl,
                             name = me.name,
@@ -125,101 +119,101 @@ fun NetworkingDashboardScreen(
                         }
                     }
                 }
-            }
 
-            // Monthly progress
-            item {
-                Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                    CosmosSectionHeader("Monthly Progress")
-                    Spacer(Modifier.height(8.dp))
-                    CosmosGlassCard {
-                        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                            Text("Connections this month", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
-                            Text("${me.connectionsCount} of 10", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary, fontWeight = FontWeight.Bold)
-                        }
-                        val progress = (me.connectionsCount.toFloat() / 10f).coerceIn(0f, 1f)
-                        LinearProgressIndicator(
-                            progress = { progress },
-                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                            color = CosmosPrimary,
-                            trackColor = CosmosSurfaceContainerHigh
-                        )
+                // Monthly progress
+                item {
+                    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                        CosmosSectionHeader("Monthly Progress")
                         Spacer(Modifier.height(8.dp))
-                        Text("${10 - me.connectionsCount} more curated introductions available this month.", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                        CosmosGlassCard {
+                            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                                Text("Connections this month", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                                Text("${me.connectionsCount} of 10", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary, fontWeight = FontWeight.Bold)
+                            }
+                            val progress = (me.connectionsCount.toFloat() / 10f).coerceIn(0f, 1f)
+                            LinearProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                                color = CosmosPrimary,
+                                trackColor = CosmosSurfaceContainerHigh
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text("${10 - me.connectionsCount} more curated introductions available this month.", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                        }
                     }
                 }
-            }
 
-            // Stats grid
-            item {
-                Spacer(Modifier.height(16.dp))
-                Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                    CosmosSectionHeader("Networking Stats")
+                // Stats grid
+                item {
+                    Spacer(Modifier.height(16.dp))
+                    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                        CosmosSectionHeader("Networking Stats")
+                        Spacer(Modifier.height(8.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            CosmosStatCard("Connections", "${me.connectionsCount}", modifier = Modifier.weight(1f))
+                            CosmosStatCard("Events", "${me.eventsAttended}", modifier = Modifier.weight(1f), accent = CosmosSecondary)
+                            CosmosStatCard("Follow-ups", "${me.followUpsCompleted}", modifier = Modifier.weight(1f), accent = CosmosTertiary)
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            CosmosStatCard(label = "Intros Made", value = "${me.introsMade}", modifier = Modifier.weight(1f), accent = CosmosGradientStart)
+                            CosmosStatCard(label = "Goals Hit", value = "${me.goalsHit}", modifier = Modifier.weight(1f), accent = CosmosSuccess)
+                            CosmosStatCard(label = "Circles", value = "$joinedCirclesCount", modifier = Modifier.weight(1f), accent = CosmosSecondary)
+                        }
+                    }
+                }
+
+                // Top endorsed skills
+                item {
+                    Spacer(Modifier.height(16.dp))
+                    CosmosSectionHeader(title = "Top Endorsements")
                     Spacer(Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        CosmosStatCard("Connections", "${me.connectionsCount}", modifier = Modifier.weight(1f))
-                        CosmosStatCard("Events", "${me.eventsAttended}", modifier = Modifier.weight(1f), accent = CosmosSecondary)
-                        CosmosStatCard("Follow-ups", "${me.followUpsCompleted}", modifier = Modifier.weight(1f), accent = CosmosTertiary)
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        CosmosStatCard(label = "Intros Made", value = "${me.introsMade}", modifier = Modifier.weight(1f), accent = CosmosGradientStart)
-                        CosmosStatCard(label = "Goals Hit", value = "${me.goalsHit}", modifier = Modifier.weight(1f), accent = CosmosSuccess)
-                        CosmosStatCard(label = "Circles", value = "$joinedCirclesCount", modifier = Modifier.weight(1f), accent = CosmosSecondary)
-                    }
-                }
-            }
-
-            // Top endorsed skills
-            item {
-                Spacer(Modifier.height(16.dp))
-                CosmosSectionHeader(title = "Top Endorsements")
-                Spacer(Modifier.height(8.dp))
-                if (me.endorsedSkills.isEmpty()) {
-                    Text("No skill endorsements yet.", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp))
-                } else {
-                    me.endorsedSkills.take(3).forEach { skill ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(skill.name, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground)
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                LinearProgressIndicator(
-                                    progress = { skill.count.toFloat() / 50f },
-                                    modifier = Modifier.width(80.dp).height(4.dp).clip(RoundedCornerShape(2.dp)),
-                                    color = CosmosPrimary,
-                                    trackColor = CosmosSurfaceContainerHigh
-                                )
-                                Text("${skill.count}", style = MaterialTheme.typography.labelSmall, color = CosmosOnSurfaceVariant, modifier = Modifier.width(28.dp))
+                    if (me.endorsedSkills.isEmpty()) {
+                        Text("No skill endorsements yet.", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp))
+                    } else {
+                        me.endorsedSkills.take(3).forEach { skill ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(skill.name, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    LinearProgressIndicator(
+                                        progress = { skill.count.toFloat() / 50f },
+                                        modifier = Modifier.width(80.dp).height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                        color = CosmosPrimary,
+                                        trackColor = CosmosSurfaceContainerHigh
+                                    )
+                                    Text("${skill.count}", style = MaterialTheme.typography.labelSmall, color = CosmosOnSurfaceVariant, modifier = Modifier.width(28.dp))
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // Quick actions
-            item {
-                Spacer(Modifier.height(16.dp))
-                CosmosSectionHeader(title = "Quick Actions")
-                Spacer(Modifier.height(8.dp))
-                listOf(
-                    Triple(Icons.Default.Edit, "Edit Profile", Screen.EditProfile.route),
-                    Triple(Icons.Default.Star, "Membership & Tiers", Screen.MembershipTiers.route),
-                    Triple(Icons.Default.Settings, "Settings & Privacy", Screen.Settings.route),
-                    Triple(Icons.Default.HelpOutline, "Help & Support", Screen.HelpSupport.route)
-                ).forEach { (icon, label, route) ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { if (route.isNotEmpty()) onNavigate(route) }.padding(horizontal = 20.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Icon(icon, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(22.dp))
-                        Text(label, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground, modifier = Modifier.weight(1f))
-                        Icon(Icons.Default.ChevronRight, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(18.dp))
+                // Quick actions
+                item {
+                    Spacer(Modifier.height(16.dp))
+                    CosmosSectionHeader(title = "Quick Actions")
+                    Spacer(Modifier.height(8.dp))
+                    listOf(
+                        Triple(Icons.Default.Edit, "Edit Profile", Screen.EditProfile.route),
+                        Triple(Icons.Default.Star, "Membership & Tiers", Screen.MembershipTiers.route),
+                        Triple(Icons.Default.Settings, "Settings & Privacy", Screen.Settings.route),
+                        Triple(Icons.Default.HelpOutline, "Help & Support", Screen.HelpSupport.route)
+                    ).forEach { (icon, label, route) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { if (route.isNotEmpty()) onNavigate(route) }.padding(horizontal = 20.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Icon(icon, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(22.dp))
+                            Text(label, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground, modifier = Modifier.weight(1f))
+                            Icon(Icons.Default.ChevronRight, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(18.dp))
+                        }
+                        Divider(modifier = Modifier.padding(horizontal = 20.dp), color = CosmosOutlineVariant.copy(alpha = 0.2f), thickness = 0.5.dp)
                     }
-                    Divider(modifier = Modifier.padding(horizontal = 20.dp), color = CosmosOutlineVariant.copy(alpha = 0.2f), thickness = 0.5.dp)
                 }
             }
         }
@@ -532,223 +526,233 @@ fun SettingsPrivacyScreen(
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             CosmosTopBar(title = "Settings & Privacy", onBack = onBack)
 
-            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp)) {
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp)) {
                 // ── Account Section ──────────────────────────────────────────
-                item { CosmosSectionHeader(title = "Account") }
-                
-                // Edit Profile
                 item {
-                    SettingsItem(
-                        title = "Edit Profile",
-                        onClick = onEditProfileTap
+                    Text(
+                        text = "ACCOUNT",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                        color = CosmosPrimary,
+                        modifier = Modifier.padding(start = 24.dp, top = 8.dp, bottom = 8.dp)
                     )
                 }
-
-                // Change Password
                 item {
-                    SettingsItem(
-                        title = "Change Password",
-                        onClick = { showChangePasswordDialog = true }
-                    )
-                }
-
-                // Connected Accounts
-                item {
-                    SettingsItem(
-                        title = "Connected Accounts",
-                        onClick = { showConnectedAccountsDialog = true }
-                    )
-                }
-
-                // LinkedIn Connection
-                item {
-                    SettingsItemWithTrailingText(
-                        title = "LinkedIn Connection",
-                        valueText = if (user.isLinkedInConnected) "Connected" else "Not Connected",
-                        onClick = {
-                            if (user.isLinkedInConnected) {
-                                showDisconnectConfirm = true
-                            } else {
-                                triggerConnectLinkedIn()
-                            }
-                        }
-                    )
+                    CosmosSettingsCard {
+                        SettingsItem(
+                            title = "Edit Profile",
+                            icon = Icons.Outlined.Person,
+                            onClick = onEditProfileTap
+                        )
+                        SettingsItem(
+                            title = "Change Password",
+                            icon = Icons.Outlined.Lock,
+                            onClick = { showChangePasswordDialog = true }
+                        )
+                        SettingsItem(
+                            title = "Connected Accounts",
+                            icon = Icons.Outlined.Link,
+                            onClick = { showConnectedAccountsDialog = true }
+                        )
+                        SettingsItemWithTrailingText(
+                            title = "LinkedIn Connection",
+                            icon = Icons.Default.Handshake,
+                            valueText = if (user.isLinkedInConnected) "Connected" else "Not Connected",
+                            onClick = {
+                                if (user.isLinkedInConnected) {
+                                    showDisconnectConfirm = true
+                                } else {
+                                    triggerConnectLinkedIn()
+                                }
+                            },
+                            showDivider = false
+                        )
+                    }
                 }
 
                 // ── Notifications Section ────────────────────────────────────
-                item { CosmosSectionHeader(title = "Notifications") }
-
                 item {
-                    SettingsItemWithSwitch(
-                        title = "New Matches",
-                        checked = user.notificationNewMatches,
-                        onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationNewMatches = newVal)) }
+                    Text(
+                        text = "NOTIFICATIONS",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                        color = CosmosPrimary,
+                        modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp)
                     )
                 }
                 item {
-                    SettingsItemWithSwitch(
-                        title = "Messages",
-                        checked = user.notificationMessages,
-                        onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationMessages = newVal)) }
-                    )
-                }
-                item {
-                    SettingsItemWithSwitch(
-                        title = "Event Invitations",
-                        checked = user.notificationEventInvitations,
-                        onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationEventInvitations = newVal)) }
-                    )
-                }
-                item {
-                    SettingsItemWithSwitch(
-                        title = "Event Reminders",
-                        checked = user.notificationEventReminders,
-                        onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationEventReminders = newVal)) }
-                    )
-                }
-                item {
-                    SettingsItemWithSwitch(
-                        title = "AI Summaries",
-                        checked = user.notificationAiSummaries,
-                        onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationAiSummaries = newVal)) }
-                    )
-                }
-                item {
-                    SettingsItemWithSwitch(
-                        title = "Follow-up Reminders",
-                        checked = user.notificationFollowUpReminders,
-                        onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationFollowUpReminders = newVal)) }
-                    )
-                }
-                item {
-                    SettingsItemWithSwitch(
-                        title = "Warm Intro Requests",
-                        checked = user.notificationWarmIntroRequests,
-                        onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationWarmIntroRequests = newVal)) }
-                    )
-                }
-                item {
-                    SettingsItemWithSwitch(
-                        title = "Community Announcements",
-                        checked = user.notificationCommunityAnnouncements,
-                        onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationCommunityAnnouncements = newVal)) }
-                    )
-                }
-                item {
-                    SettingsItemWithSwitch(
-                        title = "Endorsements",
-                        checked = user.notificationEndorsements,
-                        onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationEndorsements = newVal)) }
-                    )
+                    CosmosSettingsCard {
+                        SettingsItemWithSwitch(
+                            title = "New Matches",
+                            icon = Icons.Outlined.Favorite,
+                            checked = user.notificationNewMatches,
+                            onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationNewMatches = newVal)) }
+                        )
+                        SettingsItemWithSwitch(
+                            title = "Messages",
+                            icon = Icons.Outlined.Chat,
+                            checked = user.notificationMessages,
+                            onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationMessages = newVal)) }
+                        )
+                        SettingsItemWithSwitch(
+                            title = "Event Invitations",
+                            icon = Icons.Outlined.Event,
+                            checked = user.notificationEventInvitations,
+                            onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationEventInvitations = newVal)) }
+                        )
+                        SettingsItemWithSwitch(
+                            title = "Event Reminders",
+                            icon = Icons.Outlined.NotificationsActive,
+                            checked = user.notificationEventReminders,
+                            onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationEventReminders = newVal)) }
+                        )
+                        SettingsItemWithSwitch(
+                            title = "AI Summaries",
+                            icon = Icons.Default.AutoAwesome,
+                            checked = user.notificationAiSummaries,
+                            onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationAiSummaries = newVal)) }
+                        )
+                        SettingsItemWithSwitch(
+                            title = "Follow-up Reminders",
+                            icon = Icons.Outlined.Notifications,
+                            checked = user.notificationFollowUpReminders,
+                            onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationFollowUpReminders = newVal)) }
+                        )
+                        SettingsItemWithSwitch(
+                            title = "Warm Intro Requests",
+                            icon = Icons.Outlined.PersonAdd,
+                            checked = user.notificationWarmIntroRequests,
+                            onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationWarmIntroRequests = newVal)) }
+                        )
+                        SettingsItemWithSwitch(
+                            title = "Community Announcements",
+                            icon = Icons.Outlined.Campaign,
+                            checked = user.notificationCommunityAnnouncements,
+                            onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationCommunityAnnouncements = newVal)) }
+                        )
+                        SettingsItemWithSwitch(
+                            title = "Endorsements",
+                            icon = Icons.Outlined.Star,
+                            checked = user.notificationEndorsements,
+                            onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(notificationEndorsements = newVal)) },
+                            showDivider = false
+                        )
+                    }
                 }
 
                 // ── Privacy Section ──────────────────────────────────────────
-                item { CosmosSectionHeader(title = "Privacy") }
-
                 item {
-                    SettingsItemWithSwitch(
-                        title = "Profile Visibility",
-                        checked = user.privacyProfileVisibility,
-                        onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(privacyProfileVisibility = newVal)) }
+                    Text(
+                        text = "PRIVACY",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                        color = CosmosPrimary,
+                        modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp)
                     )
                 }
                 item {
-                    SettingsItemWithSwitch(
-                        title = "Show LinkedIn Connection",
-                        checked = user.privacyShowLinkedIn,
-                        onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(privacyShowLinkedIn = newVal)) }
-                    )
-                }
-                item {
-                    SettingsItemWithSwitch(
-                        title = "Allow Warm Intro Requests",
-                        checked = user.privacyAllowWarmIntros,
-                        onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(privacyAllowWarmIntros = newVal)) }
-                    )
-                }
-                item {
-                    SettingsItemWithSwitch(
-                        title = "Show Mutual Connections",
-                        checked = user.privacyShowMutualConnections,
-                        onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(privacyShowMutualConnections = newVal)) }
-                    )
-                }
-                item {
-                    SettingsItemWithSwitch(
-                        title = "Data & Analytics",
-                        checked = user.privacyDataAnalytics,
-                        onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(privacyDataAnalytics = newVal)) }
-                    )
+                    CosmosSettingsCard {
+                        SettingsItemWithSwitch(
+                            title = "Profile Visibility",
+                            icon = Icons.Outlined.Visibility,
+                            checked = user.privacyProfileVisibility,
+                            onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(privacyProfileVisibility = newVal)) }
+                        )
+                        SettingsItemWithSwitch(
+                            title = "Show LinkedIn Connection",
+                            icon = Icons.Outlined.AccountCircle,
+                            checked = user.privacyShowLinkedIn,
+                            onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(privacyShowLinkedIn = newVal)) }
+                        )
+                        SettingsItemWithSwitch(
+                            title = "Allow Warm Intro Requests",
+                            icon = Icons.Outlined.Link,
+                            checked = user.privacyAllowWarmIntros,
+                            onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(privacyAllowWarmIntros = newVal)) }
+                        )
+                        SettingsItemWithSwitch(
+                            title = "Show Mutual Connections",
+                            icon = Icons.Outlined.People,
+                            checked = user.privacyShowMutualConnections,
+                            onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(privacyShowMutualConnections = newVal)) }
+                        )
+                        SettingsItemWithSwitch(
+                            title = "Data & Analytics",
+                            icon = Icons.Outlined.Analytics,
+                            checked = user.privacyDataAnalytics,
+                            onCheckedChange = { newVal -> authViewModel.updateProfile(user.copy(privacyDataAnalytics = newVal)) },
+                            showDivider = false
+                        )
+                    }
                 }
 
                 // ── Networking Section ───────────────────────────────────────
-                item { CosmosSectionHeader(title = "Networking") }
-
-                // Monthly Connection Limit
                 item {
-                    SettingsItemWithTrailingText(
-                        title = "Monthly Connection Limit",
-                        valueText = if (user.monthlyConnectionLimit > 100) "Unlimited" else "${user.monthlyConnectionLimit}",
-                        onClick = { showLimitDialog = true }
+                    Text(
+                        text = "NETWORKING",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                        color = CosmosPrimary,
+                        modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp)
                     )
                 }
-
-                // Matching Preferences
                 item {
-                    SettingsItem(
-                        title = "Matching Preferences",
-                        onClick = { showMatchingPrefsDialog = true }
-                    )
-                }
-
-                // Availability Preferences
-                item {
-                    SettingsItem(
-                        title = "Availability Preferences",
-                        onClick = { showAvailabilityDialog = true }
-                    )
-                }
-
-                // Blocked Users
-                item {
-                    SettingsItem(
-                        title = "Blocked Users",
-                        onClick = { showBlockedUsersDialog = true }
-                    )
+                    CosmosSettingsCard {
+                        SettingsItemWithTrailingText(
+                            title = "Monthly Connection Limit",
+                            icon = Icons.Outlined.TrendingUp,
+                            valueText = if (user.monthlyConnectionLimit > 100) "Unlimited" else "${user.monthlyConnectionLimit}",
+                            onClick = { showLimitDialog = true }
+                        )
+                        SettingsItem(
+                            title = "Matching Preferences",
+                            icon = Icons.Outlined.Tune,
+                            onClick = { showMatchingPrefsDialog = true }
+                        )
+                        SettingsItem(
+                            title = "Availability Preferences",
+                            icon = Icons.Outlined.Schedule,
+                            onClick = { showAvailabilityDialog = true }
+                        )
+                        SettingsItem(
+                            title = "Blocked Users",
+                            icon = Icons.Outlined.Block,
+                            onClick = { showBlockedUsersDialog = true },
+                            showDivider = false
+                        )
+                    }
                 }
 
                 // ── Danger Zone Section ──────────────────────────────────────
-                item { CosmosSectionHeader(title = "Danger Zone") }
-
-                // Sign Out
                 item {
-                    SettingsItemDanger(
-                        title = "Sign Out",
-                        onClick = {
-                            authViewModel.signOut {
-                                onSignOut()
+                    Text(
+                        text = "DANGER ZONE",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                        color = CosmosError,
+                        modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp)
+                    )
+                }
+                item {
+                    CosmosSettingsCard {
+                        SettingsItemDanger(
+                            title = "Sign Out",
+                            icon = Icons.Outlined.ExitToApp,
+                            onClick = {
+                                authViewModel.signOut {
+                                    onSignOut()
+                                }
                             }
-                        }
-                    )
-                }
-
-                // Pause Account
-                item {
-                    SettingsItemDanger(
-                        title = "Pause Account",
-                        onClick = { showPauseAccountConfirm = true }
-                    )
-                }
-
-                // Delete Account
-                item {
-                    SettingsItemDanger(
-                        title = "Delete Account",
-                        onClick = { showDeleteAccountConfirm = true }
-                    )
+                        )
+                        SettingsItemDanger(
+                            title = "Pause Account",
+                            icon = Icons.Outlined.PauseCircle,
+                            onClick = { showPauseAccountConfirm = true }
+                        )
+                        SettingsItemDanger(
+                            title = "Delete Account",
+                            icon = Icons.Outlined.Delete,
+                            onClick = { showDeleteAccountConfirm = true },
+                            showDivider = false
+                        )
+                    }
                 }
             }
-        }
 
         // ── Dialogs ──────────────────────────────────────────────────────────
 
@@ -1321,100 +1325,228 @@ fun SettingsPrivacyScreen(
         }
     }
 }
+}
+
+@Composable
+fun CosmosSettingsCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Box(modifier = modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFF16191F).copy(alpha = 0.64f))
+                .border(
+                    width = 1.dp,
+                    color = Color(0x1AFFFFFF),
+                    shape = RoundedCornerShape(16.dp)
+                ),
+            content = content
+        )
+        // Subtle top border glint
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .padding(horizontal = 1.dp)
+                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color.Transparent,
+                            CosmosPrimary.copy(alpha = 0.4f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+    }
+}
 
 @Composable
 fun SettingsItem(
     title: String,
-    onClick: () -> Unit
+    icon: ImageVector,
+    onClick: () -> Unit,
+    showDivider: Boolean = true
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+            .padding(horizontal = 20.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground)
-        Icon(Icons.Default.ChevronRight, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(18.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = CosmosPrimary,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.width(16.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = CosmosOnBackground,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = CosmosOnSurfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.size(16.dp)
+        )
     }
-    Divider(modifier = Modifier.padding(horizontal = 20.dp), color = CosmosOutlineVariant.copy(alpha = 0.2f), thickness = 0.5.dp)
+    if (showDivider) {
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            color = CosmosOutlineVariant.copy(alpha = 0.15f),
+            thickness = 0.5.dp
+        )
+    }
 }
 
 @Composable
 fun SettingsItemWithTrailingText(
     title: String,
+    icon: ImageVector,
     valueText: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    showDivider: Boolean = true
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+            .padding(horizontal = 20.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = valueText,
-                style = MaterialTheme.typography.bodySmall,
-                color = CosmosPrimary
-            )
-            Icon(Icons.Default.ChevronRight, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(18.dp))
-        }
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = CosmosPrimary,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.width(16.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = CosmosOnBackground,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = valueText,
+            style = MaterialTheme.typography.bodySmall,
+            color = CosmosPrimary,
+            modifier = Modifier.padding(end = 4.dp)
+        )
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = CosmosOnSurfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.size(16.dp)
+        )
     }
-    Divider(modifier = Modifier.padding(horizontal = 20.dp), color = CosmosOutlineVariant.copy(alpha = 0.2f), thickness = 0.5.dp)
+    if (showDivider) {
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            color = CosmosOutlineVariant.copy(alpha = 0.15f),
+            thickness = 0.5.dp
+        )
+    }
 }
 
 @Composable
 fun SettingsItemWithSwitch(
     title: String,
+    icon: ImageVector,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    showDivider: Boolean = true
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onCheckedChange(!checked) }
             .padding(horizontal = 20.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground)
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = CosmosPrimary,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.width(16.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = CosmosOnBackground,
+            modifier = Modifier.weight(1f)
+        )
         Switch(
             checked = checked,
             onCheckedChange = null,
             colors = SwitchDefaults.colors(
                 checkedTrackColor = CosmosPrimary,
-                uncheckedTrackColor = CosmosSurfaceContainerHigh
+                checkedThumbColor = Color.White,
+                uncheckedTrackColor = CosmosSurfaceContainerHigh.copy(alpha = 0.5f),
+                uncheckedBorderColor = CosmosOutlineVariant.copy(alpha = 0.3f)
             )
         )
     }
-    Divider(modifier = Modifier.padding(horizontal = 20.dp), color = CosmosOutlineVariant.copy(alpha = 0.2f), thickness = 0.5.dp)
+    if (showDivider) {
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            color = CosmosOutlineVariant.copy(alpha = 0.15f),
+            thickness = 0.5.dp
+        )
+    }
 }
 
 @Composable
 fun SettingsItemDanger(
     title: String,
-    onClick: () -> Unit
+    icon: ImageVector,
+    onClick: () -> Unit,
+    showDivider: Boolean = true
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+            .padding(horizontal = 20.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, style = MaterialTheme.typography.bodyMedium, color = CosmosError)
-        Icon(Icons.Default.ChevronRight, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(18.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = CosmosError,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.width(16.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = CosmosError,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = CosmosError.copy(alpha = 0.5f),
+            modifier = Modifier.size(16.dp)
+        )
     }
-    Divider(modifier = Modifier.padding(horizontal = 20.dp), color = CosmosOutlineVariant.copy(alpha = 0.2f), thickness = 0.5.dp)
+    if (showDivider) {
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            color = CosmosOutlineVariant.copy(alpha = 0.15f),
+            thickness = 0.5.dp
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -1706,25 +1838,20 @@ fun EditProfileScreen(
                                              else CosmosSurfaceContainerHigh,
                             textColor = if (selectedUserType == type) CosmosPrimary else CosmosOnSurfaceVariant,
                             onClick = {
-                                val oldUserType = selectedUserType
                                 val trimmedHeadline = headline.trim()
-                                val oldTypeLower = oldUserType.lowercase()
-                                val isDefaultHeadline = trimmedHeadline.isBlank() ||
-                                    trimmedHeadline.lowercase() == oldTypeLower ||
-                                    trimmedHeadline.lowercase().startsWith("$oldTypeLower at") ||
-                                    (initialUserType.isNotEmpty() && (
-                                        trimmedHeadline.lowercase() == initialUserType.lowercase() ||
-                                        trimmedHeadline.lowercase().startsWith("${initialUserType.lowercase()} at")
-                                    ))
+                                val isDefaultHeadline = trimmedHeadline.isBlank() || userTypes.any { t ->
+                                    val tLower = t.lowercase()
+                                    trimmedHeadline.lowercase() == tLower || trimmedHeadline.lowercase().startsWith("$tLower at")
+                                }
                                 if (isDefaultHeadline) {
-                                    val companySuffix = when {
-                                        trimmedHeadline.lowercase().startsWith("$oldTypeLower at") -> {
-                                            trimmedHeadline.substring(oldTypeLower.length + 4).trim()
-                                        }
-                                        initialUserType.isNotEmpty() && trimmedHeadline.lowercase().startsWith("${initialUserType.lowercase()} at") -> {
-                                            trimmedHeadline.substring(initialUserType.length + 4).trim()
-                                        }
-                                        else -> company
+                                    val matchingType = userTypes.find { t ->
+                                        val tLower = t.lowercase()
+                                        trimmedHeadline.lowercase() == tLower || trimmedHeadline.lowercase().startsWith("$tLower at")
+                                    }
+                                    val companySuffix = if (matchingType != null && trimmedHeadline.lowercase().startsWith("${matchingType.lowercase()} at")) {
+                                        trimmedHeadline.substring(matchingType.length + 4).trim()
+                                    } else {
+                                        company
                                     }
                                     headline = if (companySuffix.isBlank()) type else "$type at $companySuffix"
                                 }
@@ -1744,16 +1871,11 @@ fun EditProfileScreen(
                     label = "Company",
                     value = company,
                     onValueChange = { newCompany ->
-                        val oldCompany = company
                         val trimmedHeadline = headline.trim()
-                        val typeLower = selectedUserType.lowercase()
-                        val isDefaultHeadline = trimmedHeadline.isBlank() ||
-                            trimmedHeadline.lowercase() == typeLower ||
-                            trimmedHeadline.lowercase().startsWith("$typeLower at") ||
-                            (initialUserType.isNotEmpty() && (
-                                trimmedHeadline.lowercase() == initialUserType.lowercase() ||
-                                trimmedHeadline.lowercase().startsWith("${initialUserType.lowercase()} at")
-                            ))
+                        val isDefaultHeadline = trimmedHeadline.isBlank() || userTypes.any { t ->
+                            val tLower = t.lowercase()
+                            trimmedHeadline.lowercase() == tLower || trimmedHeadline.lowercase().startsWith("$tLower at")
+                        }
                         if (isDefaultHeadline) {
                             headline = if (newCompany.isBlank()) selectedUserType else "$selectedUserType at $newCompany"
                         }
@@ -1823,6 +1945,7 @@ fun EditProfileScreen(
                                     role = role,
                                     company = company,
                                     location = location,
+                                    email = currentUserState?.email ?: "",
                                     primaryUserType = selectedUserType,
                                     bio = bio,
                                     avatarUrl = currentAvatarUrl,

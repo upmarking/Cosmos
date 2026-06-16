@@ -124,6 +124,11 @@ class FirestoreIntroRepository(
                 "createdAt" to FieldValue.serverTimestamp()
             )
             firestore.collection("connections").document(connectionId).set(connectionData).await()
+
+            // Increment connectionsCount for requester, target, and connector
+            firestore.collection("users").document(requesterId).update("connectionsCount", FieldValue.increment(1)).await()
+            firestore.collection("users").document(targetId).update("connectionsCount", FieldValue.increment(1)).await()
+            firestore.collection("users").document(connectorId).update("connectionsCount", FieldValue.increment(1)).await()
         }
         Unit
     }

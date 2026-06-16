@@ -21,6 +21,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
+import com.cosmos.app.data.ValidationUtils
+import com.cosmos.app.data.ValidationResult
 import androidx.compose.ui.unit.dp
 import com.cosmos.app.data.model.Member
 import com.cosmos.app.data.model.MembershipTier
@@ -58,6 +67,7 @@ fun CompleteIdentityScreen(
     var yearsExperience by remember { mutableStateOf("") }
     var selectedUserType by remember { mutableStateOf("") }
     var localError by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
     // Track whether the user has already been registered (handles back-nav from onboarding)
     var alreadySignedUp by remember { mutableStateOf(false) }
     var lastSignedUpEmail by remember { mutableStateOf("") }
@@ -68,6 +78,7 @@ fun CompleteIdentityScreen(
     var showPhotoOptions by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -94,15 +105,39 @@ fun CompleteIdentityScreen(
     val isLoading by authViewModel.isLoading.collectAsState()
     val currentUser by authViewModel.currentUser.collectAsState()
 
-    // If user comes back to this screen while already logged in, mark as already signed up
+    // If user comes back to this screen while already logged in, mark as already signed up and pre-fill form
     LaunchedEffect(currentUser) {
-        if (currentUser != null) {
+        val user = currentUser
+        if (user != null) {
             alreadySignedUp = true
-            if (lastSignedUpEmail.isBlank() && email.isNotBlank()) {
-                lastSignedUpEmail = email
+            if (name.isBlank() && user.name.isNotBlank()) {
+                name = user.name
             }
-            if (lastSignedUpPassword.isBlank() && password.isNotBlank()) {
-                lastSignedUpPassword = password
+            if (email.isBlank() && user.email.isNotBlank()) {
+                email = user.email
+            }
+            if (headline.isBlank() && user.headline.isNotBlank()) {
+                headline = user.headline
+            }
+            if (role.isBlank() && user.role.isNotBlank()) {
+                role = user.role
+            }
+            if (company.isBlank() && user.company.isNotBlank()) {
+                company = user.company
+            }
+            if (location.isBlank() && user.location.isNotBlank()) {
+                location = user.location
+            }
+            if (selectedUserType.isBlank() && user.primaryUserType.isNotBlank()) {
+                selectedUserType = user.primaryUserType
+            }
+            if (lastSignedUpEmail.isBlank() && user.email.isNotBlank()) {
+                lastSignedUpEmail = user.email
+            }
+            val cachedPassword = com.cosmos.app.data.repository.LocalStore.userPasswords[user.email.trim().lowercase()]
+            if (password.isBlank() && cachedPassword != null) {
+                password = cachedPassword
+                lastSignedUpPassword = cachedPassword
             }
         }
     }
@@ -267,21 +302,25 @@ fun CompleteIdentityScreen(
                                              else CosmosSurfaceContainerHigh,
                             textColor = if (selectedUserType == type) CosmosPrimary else CosmosOnSurfaceVariant,
                             onClick = {
-                                val oldUserType = selectedUserType
                                 val trimmedHeadline = headline.trim()
-                                val oldTypeLower = oldUserType.lowercase()
-                                val isDefaultHeadline = trimmedHeadline.isBlank() ||
-                                    trimmedHeadline.lowercase() == oldTypeLower ||
-                                    trimmedHeadline.lowercase().startsWith("$oldTypeLower at")
+                                val isDefaultHeadline = trimmedHeadline.isBlank() || userTypes.any { t ->
+                                    val tLower = t.lowercase()
+                                    trimmedHeadline.lowercase() == tLower || trimmedHeadline.lowercase().startsWith("$tLower at")
+                                }
                                 if (isDefaultHeadline) {
-                                    val companySuffix = if (trimmedHeadline.lowercase().startsWith("$oldTypeLower at")) {
-                                        trimmedHeadline.substring(oldTypeLower.length + 4).trim()
+                                    val matchingType = userTypes.find { t ->
+                                        val tLower = t.lowercase()
+                                        trimmedHeadline.lowercase() == tLower || trimmedHeadline.lowercase().startsWith("$tLower at")
+                                    }
+                                    val companySuffix = if (matchingType != null && trimmedHeadline.lowercase().startsWith("${matchingType.lowercase()} at")) {
+                                        trimmedHeadline.substring(matchingType.length + 4).trim()
                                     } else {
                                         company
                                     }
                                     headline = if (companySuffix.isBlank()) type else "$type at $companySuffix"
                                 }
                                 selectedUserType = type
+                                localError = ""
                             }
                         )
                     }
@@ -290,19 +329,35 @@ fun CompleteIdentityScreen(
                 Spacer(Modifier.height(24.dp))
 
                 // Input fields
-                CosmosTextField(label = "Full Name *", value = name, onValueChange = { name = it }, placeholder = "Alexandra Chen")
+                CosmosTextField(
+                    label = "Full Name *",
+                    value = name,
+                    onValueChange = { name = it; localError = "" },
+                    placeholder = "Alexandra Chen",
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                    )
+                )
                 CosmosTextField(
                     label = "Email Address *",
                     value = email,
                     onValueChange = {
                         email = it
-                        // Clear duplicate-email error when user edits the email
-                        if (isDuplicateEmailError) {
-                            isDuplicateEmailError = false
-                            localError = ""
-                        }
+                        localError = ""
+                        isDuplicateEmailError = false
                     },
-                    placeholder = "alex@nexusai.com"
+                    placeholder = "alex@nexusai.com",
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Email,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                    )
                 )
                 
                 Text(
@@ -313,11 +368,28 @@ fun CompleteIdentityScreen(
                 )
                 OutlinedTextField(
                     value = password,
-                    onValueChange = { password = it },
+                    onValueChange = { 
+                        password = it
+                        localError = ""
+                    },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                     placeholder = { Text("Password", color = CosmosOnSurfaceVariant.copy(alpha = 0.5f)) },
                     shape = RoundedCornerShape(12.dp),
-                    visualTransformation = PasswordVisualTransformation(),
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                        val description = if (passwordVisible) "Hide password" else "Show password"
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(imageVector = image, contentDescription = description, tint = CosmosOnSurfaceVariant)
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                    ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = CosmosPrimary,
                         unfocusedBorderColor = CosmosOutlineVariant,
@@ -327,27 +399,81 @@ fun CompleteIdentityScreen(
                     singleLine = true
                 )
 
-                CosmosTextField(label = "Professional Headline", value = headline, onValueChange = { headline = it }, placeholder = "Founder & CEO at NexusAI")
-                CosmosTextField(label = "Current Role", value = role, onValueChange = { role = it }, placeholder = "CEO")
+                CosmosTextField(
+                    label = "Professional Headline",
+                    value = headline,
+                    onValueChange = { headline = it },
+                    placeholder = "Founder & CEO at NexusAI",
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                    )
+                )
+                CosmosTextField(
+                    label = "Current Role",
+                    value = role,
+                    onValueChange = { role = it },
+                    placeholder = "CEO",
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                    )
+                )
                 CosmosTextField(
                     label = "Company",
                     value = company,
                     onValueChange = { newCompany ->
-                        val oldCompany = company
                         val trimmedHeadline = headline.trim()
-                        val typeLower = selectedUserType.lowercase()
-                        val isDefaultHeadline = trimmedHeadline.isBlank() ||
-                            trimmedHeadline.lowercase() == typeLower ||
-                            trimmedHeadline.lowercase().startsWith("$typeLower at")
+                        val isDefaultHeadline = trimmedHeadline.isBlank() || userTypes.any { t ->
+                            val tLower = t.lowercase()
+                            trimmedHeadline.lowercase() == tLower || trimmedHeadline.lowercase().startsWith("$tLower at")
+                        }
                         if (isDefaultHeadline) {
                             headline = if (newCompany.isBlank()) selectedUserType else "$selectedUserType at $newCompany"
                         }
                         company = newCompany
                     },
-                    placeholder = "NexusAI"
+                    placeholder = "NexusAI",
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                    )
                 )
-                CosmosTextField(label = "Location", value = location, onValueChange = { location = it }, placeholder = "San Francisco, CA")
-                CosmosTextField(label = "Years of Experience", value = yearsExperience, onValueChange = { yearsExperience = it }, placeholder = "8")
+                CosmosTextField(
+                    label = "Location",
+                    value = location,
+                    onValueChange = { location = it },
+                    placeholder = "San Francisco, CA",
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                    )
+                )
+                CosmosTextField(
+                    label = "Years of Experience",
+                    value = yearsExperience,
+                    onValueChange = { yearsExperience = it },
+                    placeholder = "8",
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = { focusManager.clearFocus() }
+                    )
+                )
 
                 // LinkedIn connect card
                 Spacer(Modifier.height(8.dp))
@@ -478,7 +604,20 @@ fun CompleteIdentityScreen(
                     CosmosButton(
                         text = "Continue",
                         onClick = {
-                            if (name.isNotBlank() && email.isNotBlank() && password.isNotBlank() && selectedUserType.isNotBlank()) {
+                            localError = ""
+                            val nameVal = ValidationUtils.validateName(name)
+                            val emailVal = ValidationUtils.validateEmail(email)
+                            val pwdVal = ValidationUtils.validatePassword(password)
+                            val typeVal = if (selectedUserType.isBlank()) {
+                                ValidationResult.Error("Please select a user type")
+                            } else {
+                                ValidationResult.Valid
+                            }
+
+                            val aggregate = ValidationUtils.validateAll(nameVal, emailVal, pwdVal, typeVal)
+                            if (!aggregate.isValid) {
+                                localError = aggregate.errorMessage ?: "Invalid input"
+                            } else {
                                 // Helper: build member data and save onboarding, then navigate
                                 val proceedToSaveAndNavigate: () -> Unit = {
                                     // Extract photo bytes if user picked one
@@ -510,6 +649,7 @@ fun CompleteIdentityScreen(
                                         company = company,
                                         avatarUrl = "", // will be updated by saveOnboarding with the uploaded url
                                         location = location,
+                                        email = email,
                                         isLinkedInConnected = isLinkedInConnected,
                                         membershipTier = MembershipTier.EXPLORER,
                                         primaryUserType = selectedUserType
@@ -534,8 +674,6 @@ fun CompleteIdentityScreen(
                                         proceedToSaveAndNavigate()
                                     }
                                 }
-                            } else {
-                                localError = "Please fill in all required (*) fields"
                             }
                         },
                         icon = Icons.AutoMirrored.Filled.ArrowForward,
@@ -554,6 +692,8 @@ fun CosmosTextField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String = "",
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.padding(bottom = 16.dp)) {
@@ -569,6 +709,8 @@ fun CosmosTextField(
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text(placeholder, color = CosmosOnSurfaceVariant.copy(alpha = 0.5f)) },
             shape = RoundedCornerShape(12.dp),
+            keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = CosmosPrimary,
                 unfocusedBorderColor = CosmosOutlineVariant,

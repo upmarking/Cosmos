@@ -4,10 +4,12 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -25,24 +27,36 @@ class MainActivity : ComponentActivity() {
             CosmosTheme {
                 val navController = rememberNavController()
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentRoute = navBackStackEntry?.destination?.route
 
-                // Check if user is already cached in Firebase Auth on startup
-                val isUserLoggedIn = com.cosmos.app.data.repository.ServiceLocator.authRepository.currentUserId != null
-                val startDestination = if (isUserLoggedIn) Screen.Connect.route else Screen.Welcome.route
+                // Check if user is logged in and has completed onboarding on startup
+                val authRepo = com.cosmos.app.data.repository.ServiceLocator.authRepository
+                val cachedUser = authRepo.currentUserId?.let { uid ->
+                    com.cosmos.app.data.repository.LocalStore.users[uid]
+                }
+                val isUserLoggedInAndComplete = cachedUser != null && cachedUser.isProfileComplete
+                val startDestination = if (isUserLoggedInAndComplete) Screen.Connect.route else Screen.Welcome.route
 
+                // Use a Box overlay so the pill floats above content (true Instagram style)
                 Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    bottomBar = {
-                        CosmosBottomNavBar(navController = navController)
-                    },
+                    modifier       = Modifier.fillMaxSize(),
                     containerColor = com.cosmos.app.ui.theme.CosmosBackground
                 ) { innerPadding ->
-                    CosmosNavHost(
-                        navController = navController,
-                        startDestination = startDestination,
-                        modifier = Modifier.padding(innerPadding)
-                    )
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        // Screen content — full size, behind the pill
+                        CosmosNavHost(
+                            navController    = navController,
+                            startDestination = startDestination,
+                            modifier         = Modifier.fillMaxSize()
+                        )
+
+                        // Glassmorphic pill floats at the bottom of the Box
+                        Box(
+                            modifier        = Modifier.align(Alignment.BottomCenter),
+                            contentAlignment = Alignment.BottomCenter
+                        ) {
+                            CosmosBottomNavBar(navController = navController)
+                        }
+                    }
                 }
             }
         }

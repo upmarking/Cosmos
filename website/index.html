@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cosmos — Where Meaningful Connections Begin</title>
+  <meta name="description" content="Cosmos is a premium professional networking platform built for founders, operators, investors, and builders who value quality over quantity. Join curated events, build high-trust relationships, and grow your network intentionally." />
+  <meta name="keywords" content="professional networking, founder matchmaking, curated networking events, cosmos app, high-trust connections" />
+  <meta property="og:title" content="Cosmos — Where Meaningful Connections Begin" />
+  <meta property="og:description" content="A premium platform for founders, operators, and builders to build high-trust relationships that actually matter." />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ===================== NAVBAR ===================== -->
+  <header class="navbar" id="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="logo" id="logo-link">
+        <div class="logo-icon">
+          <img src="cosmos-logo.webp" alt="Cosmos Logo" width="36" height="36" class="logo-img" />
+        </div>
+        <span class="logo-text">Cosmos</span>
+      </a>
+
+      <nav class="nav-links" id="nav-links">
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#how-it-works" class="nav-link">How It Works</a>
+        <a href="#community" class="nav-link">Community</a>
+        <a href="privacy.html" class="nav-link">Privacy</a>
+        <a href="terms.html" class="nav-link">Terms</a>
+      </nav>
+
+      <div class="nav-cta">
+        <a href="#download" class="btn btn-ghost">Sign In</a>
+        <a href="#download" class="btn btn-primary" id="nav-get-started">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 0 1-.61-.92V2.734a1 1 0 0 1 .609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.199l2.302 2.302-2.302 2.302L15.394 12l2.304-2.492zM5.864 2.658L16.8 8.991l-2.302 2.302-8.634-8.635z"/></svg>
+          Download App
+        </a>
+      </div>
+
+      <button class="hamburger" id="hamburger" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===================== HERO ===================== -->
+  <section class="hero" id="hero">
+    <div class="hero-bg">
+      <div class="hero-gradient"></div>
+      <div class="stars" id="stars"></div>
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+      <!-- Floating connection nodes -->
+      <div class="node node-1"><div class="node-dot"></div></div>
+      <div class="node node-2"><div class="node-dot"></div></div>
+      <div class="node node-3"><div class="node-dot"></div></div>
+      <div class="node node-4"><div class="node-dot"></div></div>
+      <div class="node node-5"><div class="node-dot"></div></div>
+    </div>
+
+    <div class="hero-content">
+      <div class="hero-badge" data-animate="fadeInDown">
+        <span class="badge-dot"></span>
+        Now Available on Google Play Store
+      </div>
+
+      <h1 class="hero-title" data-animate="fadeInUp">
+        Where Founders &amp;<br/>
+        <span class="gradient-text">Builders Connect</span><br/>
+        <span class="hero-subtitle-inline">with Purpose.</span>
+      </h1>
+
+      <p class="hero-desc" data-animate="fadeInUp" data-delay="100">
+        Cosmos is the premium networking platform that puts quality over quantity.
+        Discover the right people, attend curated events, and build relationships
+        that actually move your work forward — <em>not just your follower count.</em>
+      </p>
+
+      <div class="hero-actions" data-animate="fadeInUp" data-delay="200">
+        <a href="#download" class="btn btn-primary btn-lg" id="hero-cta">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 0 1-.61-.92V2.734a1 1 0 0 1 .609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.199l2.302 2.302-2.302 2.302L15.394 12l2.304-2.492zM5.864 2.658L16.8 8.991l-2.302 2.302-8.634-8.635z"/></svg>
+          Download on Play Store
+        </a>
+        <a href="#how-it-works" class="btn btn-outline btn-lg">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+          See How It Works
+        </a>
+      </div>
+
+      <div class="hero-stats" data-animate="fadeInUp" data-delay="300">
+        <div class="stat">
+          <span class="stat-num" data-count="2400">0</span><span class="stat-suffix">+</span>
+          <span class="stat-label">Founders &amp; Builders</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-num" data-count="340">0</span><span class="stat-suffix">+</span>
+          <span class="stat-label">Curated Events</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-num" data-count="96">0</span><span class="stat-suffix">%</span>
+          <span class="stat-label">Quality Match Rate</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating cosmic badges -->
+    <div class="floating-badges" aria-hidden="true">
+      <div class="cosmic-badge badge-float-1">
+        <span class="cosmic-badge-icon">🎯</span>
+        <span>Smart Matching</span>
+      </div>
+      <div class="cosmic-badge badge-float-2">
+        <span class="cosmic-badge-icon">⚡</span>
+        <span>Speed Networking</span>
+      </div>
+      <div class="cosmic-badge badge-float-3">
+        <span class="cosmic-badge-icon">🤖</span>
+        <span>AI Summaries</span>
+      </div>
+      <div class="cosmic-badge badge-float-4">
+        <span class="cosmic-badge-icon">🔒</span>
+        <span>Trust-First</span>
+      </div>
+      <div class="cosmic-badge badge-float-5">
+        <span class="cosmic-badge-icon">🌐</span>
+        <span>Curated Circles</span>
+      </div>
+    </div>
+
+    <div class="hero-scroll-hint">
+      <div class="scroll-mouse">
+        <div class="scroll-wheel"></div>
+      </div>
+      <span>Scroll to explore</span>
+    </div>
+  </section>
+
+  <!-- ===================== LOGOS / TRUST ===================== -->
+  <section class="trust-bar">
+    <div class="container">
+      <p class="trust-label">Trusted by professionals from</p>
+      <div class="logos-track">
+        <div class="logos-inner" id="logos-inner">
+          <span class="trust-logo">Google</span>
+          <span class="trust-logo">Sequoia Capital</span>
+          <span class="trust-logo">Y Combinator</span>
+          <span class="trust-logo">Stripe</span>
+          <span class="trust-logo">Notion</span>
+          <span class="trust-logo">Figma</span>
+          <span class="trust-logo">Andreessen Horowitz</span>
+          <span class="trust-logo">OpenAI</span>
+          <!-- Duplicated for seamless scroll -->
+          <span class="trust-logo">Google</span>
+          <span class="trust-logo">Sequoia Capital</span>
+          <span class="trust-logo">Y Combinator</span>
+          <span class="trust-logo">Stripe</span>
+          <span class="trust-logo">Notion</span>
+          <span class="trust-logo">Figma</span>
+          <span class="trust-logo">Andreessen Horowitz</span>
+          <span class="trust-logo">OpenAI</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FEATURES ===================== -->
+  <section class="features section" id="features">
+    <div class="container">
+      <div class="section-header" data-animate="fadeInUp">
+        <span class="section-tag">Why Cosmos</span>
+        <h2 class="section-title">Built Different.<br/>Designed for Depth.</h2>
+        <p class="section-desc">Every feature is intentionally designed to foster quality relationships — not vanity metrics.</p>
+      </div>
+
+      <div class="features-grid">
+
+        <div class="feature-card feature-card--large" data-animate="fadeInUp">
+          <div class="feature-icon-wrap icon-purple">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h3 class="feature-title">Purposeful Matchmaking</h3>
+          <p class="feature-desc">Swipe-based discovery powered by shared goals, tags, and mutual connections. Limited to 10 meaningful connections per month — because depth beats breadth.</p>
+          <div class="feature-highlight">
+            <div class="match-demo">
+              <div class="match-tag">🎯 Shared Goal: Find Co-Founder</div>
+              <div class="match-tag">🏷️ AI · SaaS · B2B</div>
+              <div class="match-score">98% Match</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="feature-card" data-animate="fadeInUp" data-delay="50">
+          <div class="feature-icon-wrap icon-blue">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </div>
+          <h3 class="feature-title">Curated Events</h3>
+          <p class="feature-desc">Speed networking sessions, founder meetups, and industry-specific rounds — all structured, timed, and followed by AI-generated summaries.</p>
+        </div>
+
+        <div class="feature-card" data-animate="fadeInUp" data-delay="100">
+          <div class="feature-icon-wrap icon-pink">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h3 class="feature-title">Relationship CRM</h3>
+          <p class="feature-desc">Every connection gets a private workspace: notes, labels, goals, AI summaries, and follow-up reminders — so no relationship ever falls through the cracks.</p>
+        </div>
+
+        <div class="feature-card" data-animate="fadeInUp" data-delay="150">
+          <div class="feature-icon-wrap icon-green">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </div>
+          <h3 class="feature-title">Trust-First Profiles</h3>
+          <p class="feature-desc">LinkedIn-linked profiles, peer endorsements, and verifiable credentials create a high-trust environment free from spam and cold pitches.</p>
+        </div>
+
+        <div class="feature-card" data-animate="fadeInUp" data-delay="200">
+          <div class="feature-icon-wrap icon-amber">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <h3 class="feature-title">AI-Powered Insights</h3>
+          <p class="feature-desc">Auto-generated meeting summaries, smart next-step suggestions, and follow-up reminders powered by AI — so you spend less time on admin and more time building.</p>
+        </div>
+
+        <div class="feature-card feature-card--large" data-animate="fadeInUp" data-delay="250">
+          <div class="feature-icon-wrap icon-teal">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h3 class="feature-title">Curated Communities</h3>
+          <p class="feature-desc">Admin-led, invite-only circles of like-minded professionals. Participate in focused discussions, join announcements, and build within a trusted group — not a noisy feed.</p>
+          <div class="feature-highlight">
+            <div class="community-demo">
+              <div class="community-item">⚡ Founders Building in AI</div>
+              <div class="community-item">💼 Pre-Seed Investor Network</div>
+              <div class="community-item">🎨 Design-Led Startup Founders</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== HOW IT WORKS ===================== -->
+  <section class="how-section section" id="how-it-works">
+    <div class="container">
+      <div class="section-header" data-animate="fadeInUp">
+        <span class="section-tag">Simple Process</span>
+        <h2 class="section-title">From Zero to<br/><span class="gradient-text">Meaningful Connections</span></h2>
+        <p class="section-desc">Four intentional steps to build relationships that move your career forward.</p>
+      </div>
+
+      <div class="steps">
+        <div class="step" data-animate="fadeInLeft" id="step-1">
+          <div class="step-number">01</div>
+          <div class="step-content">
+            <h3 class="step-title">Build Your Trust Profile</h3>
+            <p class="step-desc">Share your professional story, goals, tags, and LinkedIn profile. The more authentic you are, the better your matches become.</p>
+          </div>
+          <div class="step-visual">
+            <div class="step-card">
+              <div class="sc-avatar">SK</div>
+              <div class="sc-info">
+                <div class="sc-name">Sarah K.</div>
+                <div class="sc-role">Founder @ BuildSpark</div>
+                <div class="sc-tags">
+                  <span class="sc-tag">🧠 AI</span>
+                  <span class="sc-tag">💰 Fundraising</span>
+                  <span class="sc-tag">🚀 B2B SaaS</span>
+                </div>
+                <div class="sc-progress">
+                  <div class="sc-progress-bar" style="width: 85%"></div>
+                  <span>85% Profile Complete</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step step-reverse" data-animate="fadeInRight" id="step-2">
+          <div class="step-number">02</div>
+          <div class="step-content">
+            <h3 class="step-title">Discover &amp; Match</h3>
+            <p class="step-desc">Swipe through curated profiles. Our algorithm surfaces the most relevant matches based on complementary goals and interests — not popularity.</p>
+          </div>
+          <div class="step-visual">
+            <div class="swipe-demo">
+              <div class="swipe-card active">
+                <div class="swipe-avatar">MR</div>
+                <div class="swipe-name">Mike R.</div>
+                <div class="swipe-role">Angel Investor · 12 yrs exp</div>
+                <div class="swipe-match">⭐ 94% Match</div>
+              </div>
+              <div class="swipe-actions">
+                <button class="swipe-no" aria-label="Skip">✕</button>
+                <button class="swipe-yes" aria-label="Connect">✓</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step" data-animate="fadeInLeft" id="step-3">
+          <div class="step-number">03</div>
+          <div class="step-content">
+            <h3 class="step-title">Attend Curated Events</h3>
+            <p class="step-desc">Join structured networking rounds, themed founder meetups, and industry sessions. Each event is timed, purposeful, and followed by AI-generated summaries.</p>
+          </div>
+          <div class="step-visual">
+            <div class="event-demo">
+              <div class="event-card">
+                <div class="event-header">🔥 Founders Speed Network</div>
+                <div class="event-meta">Tomorrow · 6:00 PM · 18 spots left</div>
+                <div class="event-timer">Starts in: <strong>23:14:07</strong></div>
+                <button class="event-btn" id="event-join-btn">Join Event</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step step-reverse" data-animate="fadeInRight" id="step-4">
+          <div class="step-number">04</div>
+          <div class="step-content">
+            <h3 class="step-title">Nurture Relationships</h3>
+            <p class="step-desc">Use the CRM workspace for every connection — chat, notes, goals, labels, and AI follow-up reminders ensure every relationship grows intentionally.</p>
+          </div>
+          <div class="step-visual">
+            <div class="crm-demo">
+              <div class="crm-item">
+                <div class="crm-avatar">MR</div>
+                <div class="crm-details">
+                  <div class="crm-name">Mike R.</div>
+                  <div class="crm-note">💡 Intro call done · Next: Share deck</div>
+                </div>
+                <div class="crm-status status-warm">Warm</div>
+              </div>
+              <div class="crm-item">
+                <div class="crm-avatar crm-avatar-blue">SP</div>
+                <div class="crm-details">
+                  <div class="crm-name">Sophia P.</div>
+                  <div class="crm-note">🤝 Potential Partner · Follow up Fri</div>
+                </div>
+                <div class="crm-status status-active">Active</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== TESTIMONIALS ===================== -->
+  <section class="testimonials section" id="community">
+    <div class="container">
+      <div class="section-header" data-animate="fadeInUp">
+        <span class="section-tag">Community Love</span>
+        <h2 class="section-title">What Our Members<br/>Are Saying</h2>
+      </div>
+
+      <div class="testimonials-grid">
+        <div class="testimonial-card" data-animate="fadeInUp">
+          <div class="testimonial-stars">★★★★★</div>
+          <p class="testimonial-text">"Cosmos is the only platform where I've had conversations that directly led to a co-founder relationship. The quality filters just work."</p>
+          <div class="testimonial-author">
+            <div class="t-avatar ta-purple">DR</div>
+            <div>
+              <div class="t-name">Daniel R.</div>
+              <div class="t-role">CEO · NeuralEdge AI</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="testimonial-card testimonial-featured" data-animate="fadeInUp" data-delay="50">
+          <div class="testimonial-stars">★★★★★</div>
+          <p class="testimonial-text">"I've been on LinkedIn, Twitter, and countless other platforms. Nothing comes close to the quality of introductions you get on Cosmos. It's like a curated mastermind, not a noisy feed."</p>
+          <div class="testimonial-author">
+            <div class="t-avatar ta-blue">PL</div>
+            <div>
+              <div class="t-name">Priya L.</div>
+              <div class="t-role">Partner · Horizon Ventures</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="testimonial-card" data-animate="fadeInUp" data-delay="100">
+          <div class="testimonial-stars">★★★★★</div>
+          <p class="testimonial-text">"The events are incredible. Structured, focused, and followed up with AI summaries that actually capture the essence of every conversation."</p>
+          <div class="testimonial-author">
+            <div class="t-avatar ta-green">KC</div>
+            <div>
+              <div class="t-name">Kevin C.</div>
+              <div class="t-role">Founder · StackFlow</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="testimonial-card" data-animate="fadeInUp" data-delay="150">
+          <div class="testimonial-stars">★★★★★</div>
+          <p class="testimonial-text">"I raised my pre-seed from a connection I made through a Cosmos event. The trust signals and curated matching made the intro credible from day one."</p>
+          <div class="testimonial-author">
+            <div class="t-avatar ta-amber">SJ</div>
+            <div>
+              <div class="t-name">Sophie J.</div>
+              <div class="t-role">Founder · Luminary Health</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== WAITLIST / CTA ===================== -->
+  <section class="cta-section section" id="download">
+    <div class="container">
+      <div class="cta-card" data-animate="zoomIn">
+        <div class="cta-orb cta-orb-1"></div>
+        <div class="cta-orb cta-orb-2"></div>
+        <div class="cta-content">
+          <span class="section-tag">Available Now</span>
+          <h2 class="cta-title">Ready to Build<br/><span class="gradient-text">Relationships That Matter?</span></h2>
+          <p class="cta-desc">Download Cosmos on the Google Play Store and start connecting with founders, investors, and builders who share your vision.</p>
+
+          <div class="download-buttons">
+            <a href="https://play.google.com/store/apps/details?id=com.cosmos.app" target="_blank" rel="noopener" class="download-badge" id="play-store-btn">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 0 1-.61-.92V2.734a1 1 0 0 1 .609-.92zm10.89 10.893l2.302 2.302-10.937 6.333 8.635-8.635zm3.199-3.199l2.302 2.302-2.302 2.302L15.394 12l2.304-2.492zM5.864 2.658L16.8 8.991l-2.302 2.302-8.634-8.635z"/>
+              </svg>
+              <div class="download-badge-text">
+                <span class="download-small">GET IT ON</span>
+                <span class="download-big">Google Play</span>
+              </div>
+            </a>
+          </div>
+
+          <div class="download-info">
+            <div class="download-stat">
+              <span class="download-stat-icon">⭐</span>
+              <span>4.8 Rating</span>
+            </div>
+            <div class="download-stat">
+              <span class="download-stat-icon">📱</span>
+              <span>Android</span>
+            </div>
+            <div class="download-stat">
+              <span class="download-stat-icon">🔒</span>
+              <span>Secure & Private</span>
+            </div>
+          </div>
+
+          <div class="cta-footer-note">
+            By downloading, you agree to our
+            <a href="privacy.html">Privacy Policy</a> and <a href="terms.html">Terms of Use</a>.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a href="index.html" class="logo">
+            <div class="logo-icon">
+              <img src="cosmos-logo.webp" alt="Cosmos Logo" width="32" height="32" class="logo-img" />
+            </div>
+            <span class="logo-text">Cosmos</span>
+          </a>
+          <p class="footer-tagline">Professional networking built for depth, trust, and intentional growth.</p>
+          <div class="footer-socials">
+            <a href="#" class="social-link" aria-label="Twitter">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            </a>
+            <a href="#" class="social-link" aria-label="LinkedIn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            </a>
+            <a href="#" class="social-link" aria-label="Instagram">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
+            </a>
+          </div>
+        </div>
+
+        <div class="footer-col">
+          <h4 class="footer-col-title">Product</h4>
+          <ul class="footer-links">
+            <li><a href="#features">Features</a></li>
+            <li><a href="#how-it-works">How It Works</a></li>
+            <li><a href="#community">Community</a></li>
+            <li><a href="#download">Download</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4 class="footer-col-title">For</h4>
+          <ul class="footer-links">
+            <li><a href="#download">Founders</a></li>
+            <li><a href="#download">Investors</a></li>
+            <li><a href="#download">Operators</a></li>
+            <li><a href="#download">Students</a></li>
+            <li><a href="#download">Mentors</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4 class="footer-col-title">Legal</h4>
+          <ul class="footer-links">
+            <li><a href="privacy.html">Privacy Policy</a></li>
+            <li><a href="terms.html">Terms of Use</a></li>
+            <li><a href="privacy.html#cookies">Cookie Policy</a></li>
+            <li><a href="privacy.html#data">Data Policy</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <p>&copy; 2026 Cosmos. All rights reserved. Made with ♥ for builders everywhere.</p>
+        <div class="footer-bottom-links">
+          <a href="privacy.html">Privacy</a>
+          <a href="terms.html">Terms</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

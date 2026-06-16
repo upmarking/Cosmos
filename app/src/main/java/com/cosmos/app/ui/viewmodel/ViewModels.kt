@@ -9,6 +9,7 @@ import com.cosmos.app.data.model.ConnectionProfileStatus
 import com.cosmos.app.data.model.ConnectionRequest
 import com.cosmos.app.data.model.ConnectionRequestStatus
 import com.cosmos.app.data.model.EventRound
+import com.cosmos.app.data.model.EventType
 import com.cosmos.app.data.model.IntroRequest
 import com.cosmos.app.data.model.IntroStatus
 import com.cosmos.app.data.model.Member
@@ -36,6 +37,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+
+/** Pricing filter options for the Events screen */
+enum class PricingFilter(val label: String) {
+    ALL("All"),
+    FREE_ONLY("Free"),
+    PAID_ONLY("Paid")
+}
 
 // ── AuthViewModel ────────────────────────────────────────────────────────────
 class AuthViewModel(
@@ -178,7 +186,9 @@ class AuthViewModel(
     fun resetPassword(email: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
-            authRepo.resetPassword(email)
+            // Always use Firebase Auth directly for password reset,
+            // bypassing mock mode, so the user receives a real email.
+            ServiceLocator.firebaseAuthRepository.resetPassword(email)
                 .onSuccess {
                     _isLoading.value = false
                     onSuccess()
@@ -203,6 +213,8 @@ class DiscoveryViewModel(
 
     private val _connectionsLimitCount = MutableStateFlow(0)
     val connectionsLimitCount: StateFlow<Int> = _connectionsLimitCount.asStateFlow()
+
+    val currentUser = authRepo.currentUser
 
     init {
         loadDeck()
@@ -365,6 +377,60 @@ class EventViewModel(
 
     private val _isCreatingEvent = MutableStateFlow(false)
     val isCreatingEvent: StateFlow<Boolean> = _isCreatingEvent.asStateFlow()
+
+    // ── Filter state ─────────────────────────────────────────────────────────
+    private val _selectedEventTypes = MutableStateFlow<Set<EventType>>(emptySet())
+    val selectedEventTypes: StateFlow<Set<EventType>> = _selectedEventTypes.asStateFlow()
+
+    private val _pricingFilter = MutableStateFlow(PricingFilter.ALL)
+    val pricingFilter: StateFlow<PricingFilter> = _pricingFilter.asStateFlow()
+
+    private val _showRegisteredOnly = MutableStateFlow(false)
+    val showRegisteredOnly: StateFlow<Boolean> = _showRegisteredOnly.asStateFlow()
+
+    val isFilterActive: Boolean
+        get() = _selectedEventTypes.value.isNotEmpty() ||
+                _pricingFilter.value != PricingFilter.ALL ||
+                _showRegisteredOnly.value
+
+    /** Derived filtered list based on current filter state */
+    val filteredEvents: List<NetworkEvent>
+        get() {
+            var result = _events.value
+            val types = _selectedEventTypes.value
+            if (types.isNotEmpty()) {
+                result = result.filter { it.type in types }
+            }
+            when (_pricingFilter.value) {
+                PricingFilter.PAID_ONLY -> result = result.filter { it.isPaid }
+                PricingFilter.FREE_ONLY -> result = result.filter { !it.isPaid }
+                PricingFilter.ALL -> { /* no-op */ }
+            }
+            if (_showRegisteredOnly.value) {
+                result = result.filter { it.isRegistered }
+            }
+            return result
+        }
+
+    fun toggleEventType(type: EventType) {
+        val current = _selectedEventTypes.value.toMutableSet()
+        if (type in current) current.remove(type) else current.add(type)
+        _selectedEventTypes.value = current
+    }
+
+    fun setPricingFilter(filter: PricingFilter) {
+        _pricingFilter.value = filter
+    }
+
+    fun toggleRegisteredOnly() {
+        _showRegisteredOnly.value = !_showRegisteredOnly.value
+    }
+
+    fun resetFilters() {
+        _selectedEventTypes.value = emptySet()
+        _pricingFilter.value = PricingFilter.ALL
+        _showRegisteredOnly.value = false
+    }
 
     init {
         loadEvents()
@@ -694,6 +760,7 @@ class ProfileViewModel(
             ServiceLocator.connectionRequestRepository.acceptConnectionRequest(requestId)
                 .onSuccess {
                     _connectionProfileStatus.value = ConnectionProfileStatus.CONNECTED
+                    loadProfile(memberId)
                 }
         }
     }

@@ -3,8 +3,12 @@ package com.cosmos.app.screens.onboarding
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.*
@@ -17,12 +21,54 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import com.cosmos.app.data.ValidationUtils
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cosmos.app.ui.components.*
 import com.cosmos.app.ui.theme.*
 import kotlinx.coroutines.delay
+
+data class DepartmentSlide(
+    val title: String,
+    val headline: String,
+    val description: String,
+    val icon: String
+)
+
+val departmentSlides = listOf(
+    DepartmentSlide(
+        title = "CONNECT",
+        headline = "Curated Matchmaking & Swipe Discovery",
+        description = "Discover world-class founders and professionals based on shared interest tags, intent, and mutual relevance.",
+        icon = "🤝"
+    ),
+    DepartmentSlide(
+        title = "EVENTS",
+        headline = "Structured Networking & Curated Rounds",
+        description = "Register for invite-only events with live scheduled rounds, matching preferences, and feedback loops.",
+        icon = "📅"
+    ),
+    DepartmentSlide(
+        title = "COMMUNITIES",
+        headline = "Curated Manager-Led Groups",
+        description = "Engage in highly focused, moderated circles built for strategic learning and industry collaboration.",
+        icon = "👥"
+    ),
+    DepartmentSlide(
+        title = "CONVERSATIONS",
+        headline = "CRM Chat & AI Meeting Summaries",
+        description = "Track relationship milestones, add private goals and notes, and view AI-powered meeting summaries.",
+        icon = "💬"
+    )
+)
 
 @Composable
 fun WelcomeScreen(
@@ -34,11 +80,30 @@ fun WelcomeScreen(
     var visible by remember { mutableStateOf(false) }
     var showSignIn by remember { mutableStateOf(initialShowSignIn) }
     var email by remember { mutableStateOf("") }
+
+    val pagerState = rememberPagerState(pageCount = { departmentSlides.size })
+
+    // Auto-sliding loop for the department slides
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(4000)
+            if (!pagerState.isScrollInProgress) {
+                val nextPage = (pagerState.currentPage + 1) % departmentSlides.size
+                pagerState.animateScrollToPage(nextPage)
+            }
+        }
+    }
     var password by remember { mutableStateOf("") }
     var localError by remember { mutableStateOf("") }
     var forgotPasswordMode by remember { mutableStateOf(false) }
+    var passwordVisible by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(showSignIn, forgotPasswordMode) {
+        passwordVisible = false
+    }
     
     val context = androidx.compose.ui.platform.LocalContext.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val isLoading by authViewModel.isLoading.collectAsState()
     val currentUser by authViewModel.currentUser.collectAsState()
 
@@ -48,10 +113,13 @@ fun WelcomeScreen(
     }
 
     LaunchedEffect(currentUser) {
-        // Only auto-navigate when the user is on the Sign In panel.
-        // During registration, navigation is handled by the signUp callback.
-        if (currentUser != null && showSignIn) {
-            onSignIn()
+        val user = currentUser
+        if (user != null) {
+            if (user.isProfileComplete) {
+                onSignIn()
+            } else {
+                onGetStarted()
+            }
         }
     }
 
@@ -122,7 +190,10 @@ fun WelcomeScreen(
                                 Spacer(Modifier.height(16.dp))
                                 OutlinedTextField(
                                     value = email,
-                                    onValueChange = { email = it },
+                                    onValueChange = { 
+                                        email = it
+                                        localError = ""
+                                    },
                                     label = { Text("Email Address", color = CosmosOnSurfaceVariant) },
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
@@ -148,7 +219,7 @@ fun WelcomeScreen(
                                                 authViewModel.resetPassword(
                                                     email = email,
                                                     onSuccess = {
-                                                        android.widget.Toast.makeText(context, "Reset link sent to $email", android.widget.Toast.LENGTH_LONG).show()
+                                                        android.widget.Toast.makeText(context, "Password reset link sent to $email. Please check your inbox.", android.widget.Toast.LENGTH_LONG).show()
                                                         forgotPasswordMode = false
                                                         localError = ""
                                                     },
@@ -186,9 +257,19 @@ fun WelcomeScreen(
                             
                             OutlinedTextField(
                                 value = email,
-                                onValueChange = { email = it },
+                                onValueChange = { 
+                                    email = it
+                                    localError = ""
+                                },
                                 label = { Text("Email Address", color = CosmosOnSurfaceVariant) },
                                 modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Email,
+                                    imeAction = ImeAction.Next
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onNext = { focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down) }
+                                ),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = CosmosPrimary,
@@ -201,10 +282,37 @@ fun WelcomeScreen(
                             
                             OutlinedTextField(
                                 value = password,
-                                onValueChange = { password = it },
+                                onValueChange = { 
+                                    password = it
+                                    localError = ""
+                                },
                                 label = { Text("Password", color = CosmosOnSurfaceVariant) },
                                 modifier = Modifier.fillMaxWidth(),
-                                visualTransformation = PasswordVisualTransformation(),
+                                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                                    val description = if (passwordVisible) "Hide password" else "Show password"
+                                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                        Icon(imageVector = image, contentDescription = description, tint = CosmosOnSurfaceVariant)
+                                    }
+                                },
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Password,
+                                    imeAction = ImeAction.Done
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onDone = {
+                                        localError = ""
+                                        val emailVal = ValidationUtils.validateEmail(email)
+                                        if (!emailVal.isValid) {
+                                            localError = emailVal.errorMessage ?: "Invalid email"
+                                        } else if (password.isBlank()) {
+                                            localError = "Password is required"
+                                        } else {
+                                            authViewModel.signIn(email, password, onSignIn)
+                                        }
+                                    }
+                                ),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = CosmosPrimary,
@@ -240,10 +348,14 @@ fun WelcomeScreen(
                                 CosmosButton(
                                     text = "Sign In",
                                     onClick = {
-                                        if (email.isNotBlank() && password.isNotBlank()) {
-                                            authViewModel.signIn(email, password, onSignIn)
+                                        localError = ""
+                                        val emailVal = ValidationUtils.validateEmail(email)
+                                        if (!emailVal.isValid) {
+                                            localError = emailVal.errorMessage ?: "Invalid email"
+                                        } else if (password.isBlank()) {
+                                            localError = "Password is required"
                                         } else {
-                                            localError = "Please enter email and password"
+                                            authViewModel.signIn(email, password, onSignIn)
                                         }
                                     }
                                 )
@@ -252,6 +364,7 @@ fun WelcomeScreen(
                                     onClick = {
                                         showSignIn = false
                                         forgotPasswordMode = false
+                                        localError = ""
                                     },
                                     modifier = Modifier.align(Alignment.CenterHorizontally)
                                 ) {
@@ -261,27 +374,88 @@ fun WelcomeScreen(
                         }
                     }
                 } else {
-                    // Glass value proposition card
+                    // Sliding glass value proposition cards (Departments)
                     AnimatedVisibility(
                         visible = visible,
                         enter = fadeIn(tween(1000, delayMillis = 300)) + slideInVertically(tween(800, 300)) { it / 3 }
                     ) {
-                        CosmosGlassCard(showTopGradientBorder = true) {
-                            Text(
-                                text = "Curated Networking for World-Class Founders and Professionals.",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = CosmosOnSurface,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                text = "Join an exclusive environment designed for high-value connections and intentional engagement.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = CosmosOnSurfaceVariant.copy(alpha = 0.8f),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(210.dp)
+                        ) { page ->
+                            val slide = departmentSlides[page]
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 4.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(CosmosGlass)
+                                        .border(
+                                            width = 1.dp,
+                                            color = CosmosGlassBorder,
+                                            shape = RoundedCornerShape(16.dp)
+                                        )
+                                        .padding(20.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = slide.icon,
+                                            fontSize = 24.sp
+                                        )
+                                        Text(
+                                            text = slide.title,
+                                            style = MaterialTheme.typography.labelLarge.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = 1.sp
+                                            ),
+                                            color = CosmosPrimary
+                                        )
+                                    }
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(
+                                        text = slide.headline,
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = CosmosOnSurface,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        text = slide.description,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = CosmosOnSurfaceVariant.copy(alpha = 0.8f),
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                                // Top gradient shimmer line
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(1.dp)
+                                        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                colors = listOf(
+                                                    Color.Transparent,
+                                                    CosmosPrimary.copy(alpha = 0.5f),
+                                                    Color.Transparent
+                                                )
+                                            )
+                                        )
+                                )
+                            }
                         }
                     }
                 }
@@ -297,10 +471,10 @@ fun WelcomeScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(bottom = 40.dp)
                     ) {
-                        // Progress dots (onboarding step 1 of 5)
+                        // Sliding progress dots for the 4 departments
                         CosmosProgressDots(
-                            totalSteps = 5,
-                            currentStep = 0,
+                            totalSteps = departmentSlides.size,
+                            currentStep = pagerState.currentPage,
                             modifier = Modifier.padding(bottom = 24.dp)
                         )
 
@@ -318,7 +492,10 @@ fun WelcomeScreen(
                                 color = CosmosOnSurfaceVariant
                             )
                             TextButton(
-                                onClick = { showSignIn = true },
+                                onClick = { 
+                                    showSignIn = true
+                                    localError = ""
+                                },
                                 contentPadding = PaddingValues(0.dp),
                                 modifier = Modifier.height(24.dp)
                             ) {

@@ -16,7 +16,7 @@ object ServiceLocator {
         try {
             val app = FirebaseApp.getInstance()
             val apiKey = app.options.apiKey
-            if (apiKey != null && apiKey.contains("Dumpo", ignoreCase = true)) {
+            if (apiKey.isNullOrBlank()) {
                 forceMockMode = true
             }
         } catch (e: Exception) {

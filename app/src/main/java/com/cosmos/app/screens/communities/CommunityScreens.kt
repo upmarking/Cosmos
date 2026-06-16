@@ -84,6 +84,8 @@ import com.cosmos.app.ui.components.CosmosButton
 import com.cosmos.app.ui.components.CosmosEmptyState
 import com.cosmos.app.ui.components.CosmosErrorState
 import com.cosmos.app.ui.components.CosmosGlassCard
+import com.cosmos.app.ui.components.CosmosGlassTopBar
+import com.cosmos.app.ui.components.GlassIconButton
 import com.cosmos.app.ui.components.CosmosLoadingShimmer
 import com.cosmos.app.ui.components.CosmosSectionHeader
 import com.cosmos.app.ui.components.CosmosTagChip
@@ -152,12 +154,14 @@ fun CommunityHubScreen(
             }
         ) { paddingValues ->
             Column(modifier = Modifier.fillMaxSize().padding(paddingValues).systemBarsPadding()) {
-                CosmosTopBar(
-                    title = "My Circles",
-                    actions = {
-                        IconButton(onClick = onExplore) {
-                            Icon(Icons.Default.Explore, "Explore", tint = CosmosOnBackground)
-                        }
+                CosmosGlassTopBar(
+                    pageTitle = "Circles",
+                    extraActions = {
+                        GlassIconButton(
+                            icon = Icons.Default.Explore,
+                            contentDescription = "Explore",
+                            onClick = onExplore
+                        )
                     }
                 )
 

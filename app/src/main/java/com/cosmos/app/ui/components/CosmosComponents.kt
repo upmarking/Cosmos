@@ -1,27 +1,38 @@
 package com.cosmos.app.ui.components
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -210,18 +221,21 @@ fun CosmosAvatar(
         if (isLinkedInConnected) {
             Box(
                 modifier = Modifier
-                    .size(16.dp)
+                    .offset(x = 2.dp, y = 2.dp)
+                    .size(18.dp)
                     .clip(CircleShape)
-                    .background(CosmosLinkedIn)
-                    .offset(x = 2.dp, y = 2.dp),
+                    .background(Color.White)
+                    .padding(1.5.dp)
+                    .clip(CircleShape)
+                    .background(CosmosLinkedIn),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "in",
                     color = Color.White,
-                    fontSize = 7.sp,
+                    fontSize = 8.sp,
                     fontWeight = FontWeight.Bold,
-                    lineHeight = 7.sp
+                    lineHeight = 8.sp
                 )
             }
         }
@@ -257,7 +271,7 @@ fun CosmosTagChip(
 }
 
 /**
- * Cosmos top app bar.
+ * Premium glass top bar for sub-screens (back-button flows).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -266,35 +280,349 @@ fun CosmosTopBar(
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
-    TopAppBar(
-        title = {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                color = CosmosOnBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        navigationIcon = {
-            if (onBack != null) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = CosmosOnBackground
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        CosmosBackground.copy(alpha = 0.97f),
+                        CosmosBackground.copy(alpha = 0.88f)
                     )
+                )
+            )
+    ) {
+        // Subtle top shimmer line
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color.Transparent,
+                            CosmosPrimary.copy(alpha = 0.35f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+        TopAppBar(
+            title = {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = CosmosOnBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
+            navigationIcon = {
+                if (onBack != null) {
+                    IconButton(onClick = onBack) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(CosmosSurfaceContainerHigh.copy(alpha = 0.7f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = CosmosOnBackground,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            },
+            actions = actions,
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = Color.Transparent,
+                titleContentColor = CosmosOnBackground,
+                navigationIconContentColor = CosmosOnBackground,
+                actionIconContentColor = CosmosOnBackground
+            )
+        )
+    }
+}
+
+/**
+ * Premium glassmorphic top bar for main tabs — creative logo lockup,
+ * gradient page title, animated star, glowing badge on notification bell.
+ */
+@Composable
+fun CosmosGlassTopBar(
+    pageTitle: String,
+    notificationCount: Int = 0,
+    requestCount: Int = 0,
+    onSearchClick: (() -> Unit)? = null,
+    onNotificationsClick: (() -> Unit)? = null,
+    onRequestsClick: (() -> Unit)? = null,
+    isSearchActive: Boolean = false,
+    searchQuery: String = "",
+    onSearchQueryChange: (String) -> Unit = {},
+    onSearchClose: () -> Unit = {},
+    searchPlaceholder: String = "Search...",
+    extraActions: @Composable RowScope.() -> Unit = {}
+) {
+    // Spinning star animation
+    val infiniteTransition = rememberInfiniteTransition(label = "topBarAnim")
+    val starRotation by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(8000, easing = LinearEasing)),
+        label = "starSpin"
+    )
+    // Notification glow pulse
+    val notifPulse by infiniteTransition.animateFloat(
+        initialValue = 0.5f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "notifPulse"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Color(0xFF16191F).copy(alpha = 0.88f))
+                .border(
+                    width = 1.dp,
+                    brush = Brush.linearGradient(
+                        listOf(
+                            Color(0x44FFFFFF),
+                            Color(0x0AFFFFFF),
+                            Color(0x22C0C1FF)
+                        )
+                    ),
+                    shape = RoundedCornerShape(28.dp)
+                )
+        ) {
+            // Inner top glint
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                Color(0x55FFFFFF),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isSearchActive) {
+                    IconButton(
+                        onClick = onSearchClose,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Close Search",
+                            tint = CosmosOnSurfaceVariant
+                        )
+                    }
+                    TextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        modifier = Modifier.weight(1f),
+                        placeholder = {
+                            Text(
+                                text = searchPlaceholder,
+                                color = CosmosOnSurfaceVariant.copy(alpha = 0.5f),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = CosmosOnBackground),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            disabledContainerColor = Color.Transparent,
+                            focusedTextColor = CosmosOnBackground,
+                            unfocusedTextColor = CosmosOnBackground,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent,
+                            cursorColor = CosmosPrimary
+                        ),
+                        singleLine = true
+                    )
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(
+                            onClick = { onSearchQueryChange("") },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Clear Search",
+                                tint = CosmosOnSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    // ── LEFT: COSMOS logo lockup & title ───────────────────────
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = buildAnnotatedString {
+                                withStyle(SpanStyle(
+                                    brush = Brush.linearGradient(
+                                        listOf(CosmosPrimary, CosmosSecondary)
+                                    ),
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 12.sp,
+                                    letterSpacing = 1.5.sp
+                                )) { append("COSMOS") }
+                            }
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            text = "✦",
+                            color = CosmosPrimary.copy(alpha = 0.85f),
+                            fontSize = 8.sp,
+                            modifier = Modifier.rotate(starRotation)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = pageTitle,
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
+                            color = CosmosOnBackground,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    // ── RIGHT: action icons ───────────────────────────────────
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        extraActions()
+
+                        if (onSearchClick != null) {
+                            GlassIconButton(
+                                icon = Icons.Outlined.Search,
+                                contentDescription = "Search",
+                                onClick = onSearchClick
+                            )
+                        }
+
+                        if (onRequestsClick != null) {
+                            Box {
+                                GlassIconButton(
+                                    icon = Icons.Outlined.PersonAdd,
+                                    contentDescription = "Requests",
+                                    onClick = onRequestsClick
+                                )
+                                if (requestCount > 0) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .offset(x = 2.dp, y = (-2).dp)
+                                            .size(14.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                Brush.radialGradient(
+                                                    listOf(CosmosPrimary, CosmosGradientStart)
+                                                )
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = requestCount.coerceAtMost(9).toString(),
+                                            color = Color.White,
+                                            fontSize = 7.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (onNotificationsClick != null) {
+                            Box {
+                                GlassIconButton(
+                                    icon = Icons.Outlined.Notifications,
+                                    contentDescription = "Notifications",
+                                    onClick = onNotificationsClick
+                                )
+                                if (notificationCount > 0) {
+                                    // Pulsing glow dot
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .offset(x = 2.dp, y = (-2).dp)
+                                            .size(14.dp)
+                                            .graphicsLayer { alpha = notifPulse }
+                                            .clip(CircleShape)
+                                            .background(CosmosError),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = notificationCount.coerceAtMost(9).toString(),
+                                            color = CosmosOnError,
+                                            fontSize = 7.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
-        },
-        actions = actions,
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = CosmosBackground,
-            titleContentColor = CosmosOnBackground,
-            navigationIconContentColor = CosmosOnBackground,
-            actionIconContentColor = CosmosOnBackground
+        }
+    }
+}
+
+/** Small glass icon button used inside CosmosGlassTopBar */
+@Composable
+fun GlassIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = 0.08f))
+            .border(0.5.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = CosmosOnSurfaceVariant,
+            modifier = Modifier.size(19.dp)
         )
-    )
+    }
 }
 
 /**
@@ -331,30 +659,97 @@ fun CosmosSectionHeader(
 }
 
 /**
- * Ambient background radial gradient (matches Stitch bg-ambient CSS).
+ * Upgraded ambient background: 3 animated radial glow blobs + floating orbs.
  */
 @Composable
 fun CosmosAmbientBackground(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "ambientAnim")
+
+    // Blob 1 — top indigo pulse
+    val blob1Alpha by infiniteTransition.animateFloat(
+        initialValue = 0.12f, targetValue = 0.22f,
+        animationSpec = infiniteRepeatable(tween(3200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "blob1"
+    )
+    // Blob 2 — mid-right violet pulse
+    val blob2Alpha by infiniteTransition.animateFloat(
+        initialValue = 0.07f, targetValue = 0.15f,
+        animationSpec = infiniteRepeatable(tween(4500, easing = LinearEasing), RepeatMode.Reverse),
+        label = "blob2"
+    )
+    // Blob 3 — bottom-left deep blue pulse
+    val blob3Alpha by infiniteTransition.animateFloat(
+        initialValue = 0.05f, targetValue = 0.13f,
+        animationSpec = infiniteRepeatable(tween(5800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "blob3"
+    )
+    // Floating orb drift
+    val orbOffset by infiniteTransition.animateFloat(
+        initialValue = -15f, targetValue = 15f,
+        animationSpec = infiniteRepeatable(tween(6000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "orbDrift"
+    )
+    // Floating orb pulsing opacity
+    val orbAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.03f, targetValue = 0.09f,
+        animationSpec = infiniteRepeatable(tween(4000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "orbAlpha"
+    )
+    // Floating orb pulsing radius scale
+    val orbRadiusScale by infiniteTransition.animateFloat(
+        initialValue = 0.85f, targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(tween(5000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "orbRadiusScale"
+    )
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(CosmosBackground)
             .drawBehind {
-                // Radial gradient at top-center (like CSS: circle at 50% -20%)
+                // Blob 1 — large indigo at top-center
                 drawCircle(
                     brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFF494BD6).copy(alpha = 0.15f),
-                            Color.Transparent
-                        ),
-                        center = Offset(size.width / 2f, -size.height * 0.2f),
-                        radius = size.height * 0.85f
+                        colors = listOf(Color(0xFF494BD6).copy(alpha = blob1Alpha), Color.Transparent),
+                        center = Offset(size.width * 0.5f, -size.height * 0.1f),
+                        radius = size.height * 0.75f
                     ),
-                    radius = size.height * 0.85f,
-                    center = Offset(size.width / 2f, -size.height * 0.2f)
+                    radius = size.height * 0.75f,
+                    center = Offset(size.width * 0.5f, -size.height * 0.1f)
+                )
+                // Blob 2 — violet mid-right
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFF7B61FF).copy(alpha = blob2Alpha), Color.Transparent),
+                        center = Offset(size.width * 0.85f, size.height * 0.35f),
+                        radius = size.height * 0.45f
+                    ),
+                    radius = size.height * 0.45f,
+                    center = Offset(size.width * 0.85f, size.height * 0.35f)
+                )
+                // Blob 3 — deep blue bottom-left
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFF0566D9).copy(alpha = blob3Alpha), Color.Transparent),
+                        center = Offset(size.width * 0.15f, size.height * 0.82f),
+                        radius = size.height * 0.38f
+                    ),
+                    radius = size.height * 0.38f,
+                    center = Offset(size.width * 0.15f, size.height * 0.82f)
+                )
+                // Floating micro orb — now a soft-glowing pulsing radial blur
+                val computedRadius = 120.dp.toPx() * orbRadiusScale
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFFC0C1FF).copy(alpha = orbAlpha), Color.Transparent),
+                        center = Offset(size.width * 0.72f, size.height * 0.18f + orbOffset),
+                        radius = computedRadius
+                    ),
+                    radius = computedRadius,
+                    center = Offset(size.width * 0.72f, size.height * 0.18f + orbOffset)
                 )
             },
         content = content
