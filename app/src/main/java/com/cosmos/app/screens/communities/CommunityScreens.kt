@@ -26,10 +26,13 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Feed
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
@@ -148,14 +151,14 @@ fun CommunityHubScreen(
                         contentColor = CosmosBackground,
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        Icon(Icons.Default.Add, "Create Circle")
+                        Icon(Icons.Default.Add, "Create Orbit")
                     }
                 }
             }
         ) { paddingValues ->
             Column(modifier = Modifier.fillMaxSize().padding(paddingValues).systemBarsPadding()) {
                 CosmosGlassTopBar(
-                    pageTitle = "Circles",
+                    pageTitle = "Orbits",
                     extraActions = {
                         GlassIconButton(
                             icon = Icons.Default.Explore,
@@ -185,9 +188,9 @@ fun CommunityHubScreen(
                         // Show empty state
                         CosmosEmptyState(
                             icon = Icons.Default.Hub,
-                            title = "No Circles Yet",
-                            subtitle = "Explore and join circles to connect with like-minded professionals.",
-                            actionLabel = "Explore Circles",
+                            title = "No Orbits Yet",
+                            subtitle = "Explore and join orbits to connect with like-minded professionals.",
+                            actionLabel = "Explore Orbits",
                             onAction = onExplore,
                             modifier = Modifier.fillMaxSize()
                         )
@@ -207,7 +210,7 @@ fun CommunityHubScreen(
                                 val joinedCircles = circles.filter { it.isJoined }
                                 if (joinedCircles.isNotEmpty()) {
                                     items(joinedCircles) { circle ->
-                                        CircleCard(circle = circle, onTap = { onCircleTap(circle.id) })
+                                        OrbitCard(circle = circle, onTap = { onCircleTap(circle.id) })
                                     }
                                 }
 
@@ -219,11 +222,11 @@ fun CommunityHubScreen(
                                     }
 
                                     items(suggestedCircles) { circle ->
-                                        CircleCard(circle = circle, onTap = {
+                                        OrbitCard(circle = circle, onTap = {
                                             if (circle.isJoined) {
                                                 onCircleTap(circle.id)
                                             } else {
-                                                onNavigate(Screen.CircleMembers.createRoute(circle.id))
+                                                onNavigate(Screen.OrbitMembers.createRoute(circle.id))
                                             }
                                         })
                                     }
@@ -238,7 +241,7 @@ fun CommunityHubScreen(
         }
 
         if (showCreateDialog) {
-            CreateCircleDialog(
+            CreateOrbitDialog(
                 onDismiss = { showCreateDialog = false },
                 onCreate = { name, desc, theme, tags, isPrivate ->
                     communityViewModel.createCircle(name, desc, theme, tags, isPrivate) {
@@ -252,7 +255,7 @@ fun CommunityHubScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateCircleDialog(
+fun CreateOrbitDialog(
     onDismiss: () -> Unit,
     onCreate: (name: String, description: String, theme: String, tags: List<String>, isPrivate: Boolean) -> Unit
 ) {
@@ -266,7 +269,7 @@ fun CreateCircleDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                "Create New Circle",
+                "Create New Orbit",
                 style = MaterialTheme.typography.titleLarge,
                 color = CosmosOnBackground,
                 fontWeight = FontWeight.Bold
@@ -280,7 +283,7 @@ fun CreateCircleDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Circle Name") },
+                    label = { Text("Orbit Name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -380,15 +383,21 @@ fun CreateCircleDialog(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun CircleCard(circle: Circle, onTap: () -> Unit) {
-    CosmosGlassCard(modifier = Modifier.clickable(onClick = onTap), showTopGradientBorder = false) {
-        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Circle icon
+fun OrbitCard(circle: Circle, onTap: () -> Unit) {
+    val currentMemberCount = circle.memberCount
+    CosmosGlassCard(
+        modifier = Modifier.clickable(onClick = onTap)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Orbit icon
             Box(
-                modifier = Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(CosmosPrimary.copy(alpha = 0.15f)),
+                modifier = Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(CosmosPrimary.copy(alpha = 0.08f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Hub, "Circle", tint = CosmosPrimary, modifier = Modifier.size(28.dp))
+                Icon(Icons.Default.Hub, "Orbit", tint = CosmosPrimary, modifier = Modifier.size(28.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
                 Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -402,7 +411,7 @@ fun CircleCard(circle: Circle, onTap: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Default.People, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(14.dp))
-                        Text("${circle.memberCount} members", style = MaterialTheme.typography.labelSmall, color = CosmosOnSurfaceVariant)
+                        Text("$currentMemberCount members", style = MaterialTheme.typography.labelSmall, color = CosmosOnSurfaceVariant)
                     }
                     if (circle.isJoined) {
                         Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(CosmosSuccess.copy(alpha = 0.15f)).padding(horizontal = 8.dp, vertical = 3.dp)) {
@@ -423,7 +432,7 @@ fun CircleCard(circle: Circle, onTap: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExploreCirclesScreen(
+fun ExploreOrbitsScreen(
     onBack: () -> Unit,
     onCircleTap: (String) -> Unit,
     communityViewModel: CommunityViewModel = viewModel()
@@ -451,13 +460,13 @@ fun ExploreCirclesScreen(
 
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
-            CosmosTopBar(title = "Explore Circles", onBack = onBack)
+            CosmosTopBar(title = "Explore Orbits", onBack = onBack)
 
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("Search circles...", color = CosmosOnSurfaceVariant.copy(alpha = 0.5f)) },
+                placeholder = { Text("Search orbits...", color = CosmosOnSurfaceVariant.copy(alpha = 0.5f)) },
                 leadingIcon = { Icon(Icons.Default.Search, null, tint = CosmosOnSurfaceVariant) },
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -507,8 +516,8 @@ fun ExploreCirclesScreen(
                     if (filtered.isEmpty()) {
                         CosmosEmptyState(
                             icon = Icons.Default.Search,
-                            title = "No Circles Found",
-                            subtitle = if (searchQuery.isNotEmpty()) "Try a different search term" else "No circles in this category yet",
+                            title = "No Orbits Found",
+                            subtitle = if (searchQuery.isNotEmpty()) "Try a different search term" else "No orbits in this category yet",
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
@@ -523,7 +532,7 @@ fun ExploreCirclesScreen(
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 items(filtered) { circle ->
-                                    ExploreCircleCard(
+                                    ExploreOrbitCard(
                                         circle = circle, 
                                         onTap = { onCircleTap(circle.id) },
                                         onJoin = { communityViewModel.joinCircle(circle.id) }
@@ -540,7 +549,7 @@ fun ExploreCirclesScreen(
 }
 
 @Composable
-fun ExploreCircleCard(circle: Circle, onTap: () -> Unit, onJoin: () -> Unit) {
+fun ExploreOrbitCard(circle: Circle, onTap: () -> Unit, onJoin: () -> Unit) {
     CosmosGlassCard(modifier = Modifier.clickable(onClick = onTap), showTopGradientBorder = false) {
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
@@ -573,23 +582,30 @@ fun ExploreCircleCard(circle: Circle, onTap: () -> Unit, onJoin: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CircleMembersScreen(
+fun OrbitMembersScreen(
     circleId: String,
     onBack: () -> Unit,
     onMemberTap: (String) -> Unit,
     onFeedTap: () -> Unit,
     communityViewModel: CommunityViewModel = viewModel()
 ) {
-    LaunchedEffect(circleId) {
-        communityViewModel.loadCircleMembers(circleId)
-        communityViewModel.loadCircles()
-    }
-
+    val currentUserState by communityViewModel.currentUser.collectAsState(initial = null)
+    val currentUserId = currentUserState?.id ?: ""
     val circles by communityViewModel.circles.collectAsState()
     val circleMembers by communityViewModel.circleMembers.collectAsState()
+    val pendingMembers by communityViewModel.pendingCircleMembers.collectAsState()
     val isMembersLoading by communityViewModel.isMembersLoading.collectAsState()
     
     val circle = circles.find { it.id == circleId } ?: Circle(id = circleId, name = "Loading...", description = "", coverUrl = "", memberCount = 0, theme = "", tags = emptyList(), isJoined = false, isPrivate = false, adminName = "")
+    val isAdmin = circle.createdBy == currentUserId && currentUserId.isNotEmpty()
+
+    LaunchedEffect(circleId, isAdmin) {
+        communityViewModel.loadCircleMembers(circleId)
+        if (isAdmin) {
+            communityViewModel.loadPendingCircleMembers(circleId)
+        }
+        communityViewModel.loadCircles()
+    }
 
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
@@ -620,7 +636,7 @@ fun CircleMembersScreen(
                                 text = if (circle.isPrivate) {
                                     if (circle.isPending) "Request Pending" else "Request Access"
                                 } else {
-                                    "Join Circle"
+                                    "Join Orbit"
                                 },
                                 onClick = {
                                     communityViewModel.joinCircle(circle.id)
@@ -637,7 +653,7 @@ fun CircleMembersScreen(
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = CosmosError),
                                 border = BorderStroke(1.dp, CosmosError.copy(alpha = 0.5f))
                             ) {
-                                Text("Leave Circle")
+                                Text("Leave Orbit")
                             }
                         }
                     }
@@ -658,7 +674,7 @@ fun CircleMembersScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Lock,
-                                    contentDescription = "Private Circle",
+                                    contentDescription = "Private Orbit",
                                     tint = CosmosOnSurfaceVariant,
                                     modifier = Modifier.size(64.dp)
                                 )
@@ -669,7 +685,7 @@ fun CircleMembersScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Only approved members of this circle can view members and feed posts.",
+                                    text = "Only approved members of this orbit can view members and feed posts.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = CosmosOnSurfaceVariant,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -678,6 +694,38 @@ fun CircleMembersScreen(
                         }
                     }
                 } else {
+                    if (isAdmin && pendingMembers.isNotEmpty()) {
+                        item { CosmosSectionHeader("Pending Requests (${pendingMembers.size})") }
+                        items(pendingMembers) { member ->
+                            CosmosGlassCard(showTopGradientBorder = false) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, size = 48.dp, isLinkedInConnected = member.isLinkedInConnected)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(member.name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
+                                        Text(member.headline, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, maxLines = 1)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        IconButton(
+                                            onClick = { communityViewModel.approveCircleJoinRequest(circle.id, member.id) },
+                                            modifier = Modifier.size(36.dp).background(CosmosSuccess.copy(alpha = 0.15f), CircleShape)
+                                        ) {
+                                            Icon(Icons.Default.Check, "Approve", tint = CosmosSuccess, modifier = Modifier.size(18.dp))
+                                        }
+                                        IconButton(
+                                            onClick = { communityViewModel.declineCircleJoinRequest(circle.id, member.id) },
+                                            modifier = Modifier.size(36.dp).background(CosmosError.copy(alpha = 0.15f), CircleShape)
+                                        ) {
+                                            Icon(Icons.Default.Close, "Decline", tint = CosmosError, modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     item { CosmosSectionHeader("Members") }
 
                     if (isMembersLoading && circleMembers.isEmpty()) {
@@ -692,7 +740,7 @@ fun CircleMembersScreen(
                             CosmosEmptyState(
                                 icon = Icons.Default.People,
                                 title = "No Members Yet",
-                                subtitle = "Be the first to join this circle!",
+                                subtitle = "Be the first to join this orbit!",
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
@@ -720,7 +768,7 @@ fun CircleMembersScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PrivateCircleFeedScreen(
+fun PrivateOrbitFeedScreen(
     circleId: String,
     onBack: () -> Unit,
     onMembersTap: () -> Unit,
@@ -770,7 +818,7 @@ fun PrivateCircleFeedScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Lock,
-                                        contentDescription = "Private Circle",
+                                        contentDescription = "Private Orbit",
                                         tint = CosmosOnSurfaceVariant,
                                         modifier = Modifier.size(80.dp)
                                     )
@@ -798,7 +846,7 @@ fun PrivateCircleFeedScreen(
                             }
                         }
                     } else {
-                        // Public circle, not joined: show join banner instead of post composer
+                        // Public orbit, not joined: show join banner instead of post composer
                         item {
                             CosmosGlassCard(showTopGradientBorder = false) {
                                 Column(
@@ -807,20 +855,20 @@ fun PrivateCircleFeedScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text(
-                                        text = "Join this Circle",
+                                        text = "Join this Orbit",
                                         style = MaterialTheme.typography.titleSmall,
                                         color = CosmosOnBackground,
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = "You are viewing this public circle in read-only mode.",
+                                        text = "You are viewing this public orbit in read-only mode.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = CosmosOnSurfaceVariant,
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                     )
                                     Spacer(Modifier.height(4.dp))
                                     CosmosButton(
-                                        text = "Join Circle",
+                                        text = "Join Orbit",
                                         onClick = {
                                             communityViewModel.joinCircle(circle.id)
                                         },
@@ -840,14 +888,14 @@ fun PrivateCircleFeedScreen(
                                 CosmosEmptyState(
                                     icon = Icons.AutoMirrored.Filled.Feed,
                                     title = "No Posts Yet",
-                                    subtitle = "Join this circle to be the first to share an update!",
+                                    subtitle = "Join this orbit to be the first to share an update!",
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
                         } else {
                             items(posts) { post ->
                                 val isLiked = likedPostIds.contains(post.id)
-                                CircleFeedPost(
+                                OrbitFeedPost(
                                     author = post.author, 
                                     avatarUrl = post.avatarUrl,
                                     content = post.content, 
@@ -869,7 +917,7 @@ fun PrivateCircleFeedScreen(
                         }
                     }
                 } else {
-                    // Joined circle: show post composer and posts list
+                    // Joined orbit: show post composer and posts list
                     item {
                         CosmosGlassCard(showTopGradientBorder = false) {
                             OutlinedTextField(
@@ -921,7 +969,7 @@ fun PrivateCircleFeedScreen(
                     } else {
                         items(posts) { post ->
                             val isLiked = likedPostIds.contains(post.id)
-                            CircleFeedPost(
+                            OrbitFeedPost(
                                 author = post.author, 
                                 avatarUrl = post.avatarUrl,
                                 content = post.content, 
@@ -950,7 +998,7 @@ fun PrivateCircleFeedScreen(
 }
 
 @Composable
-fun CircleFeedPost(
+fun OrbitFeedPost(
     author: String,
     avatarUrl: String,
     content: String,

@@ -42,7 +42,8 @@ class FirestoreChatRepository(
             .whereArrayContains("members", userId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    android.util.Log.e("ChatRepository", "Error fetching connections for user $userId: ${error.message}", error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 if (snapshot == null) {
@@ -104,7 +105,8 @@ class FirestoreChatRepository(
         val registration = firestore.collection("connections").document(connectionId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    android.util.Log.e("ChatRepository", "Error fetching connection $connectionId: ${error.message}", error)
+                    trySend(null)
                     return@addSnapshotListener
                 }
                 if (snapshot == null || !snapshot.exists()) {
@@ -166,7 +168,8 @@ class FirestoreChatRepository(
             .orderBy("timestamp", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    android.util.Log.e("ChatRepository", "Error fetching messages for connection $connectionId: ${error.message}", error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 if (snapshot == null) {

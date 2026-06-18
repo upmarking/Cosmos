@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "swipes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "likerId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "notifications",
       "queryScope": "COLLECTION",
       "fields": [

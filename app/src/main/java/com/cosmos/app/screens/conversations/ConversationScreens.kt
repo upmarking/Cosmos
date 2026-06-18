@@ -37,11 +37,11 @@ fun ConversationsListScreen(
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             CosmosGlassTopBar(
-                pageTitle = "Chats",
+                pageTitle = "Messenger",
                 extraActions = {
                     GlassIconButton(
                         icon = Icons.Default.Edit,
-                        contentDescription = "New Chat",
+                        contentDescription = "New Message",
                         onClick = {}
                     )
                 }

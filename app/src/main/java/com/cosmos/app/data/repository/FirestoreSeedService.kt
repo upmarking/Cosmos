@@ -122,7 +122,11 @@ object FirestoreSeedService {
 
         for (user in users) {
             val uid = user["id"] as String
-            firestore.collection("users").document(uid).set(user).await()
+            val userWithMembership = user.toMutableMap().apply {
+                put("joinedCircles", emptyList<String>())
+                put("pendingCircles", emptyList<String>())
+            }
+            firestore.collection("users").document(uid).set(userWithMembership).await()
         }
     }
 
@@ -132,90 +136,6 @@ object FirestoreSeedService {
         if (usersSnapshot.isEmpty) {
             seedUsers(firestore)
         }
-
-        val calendar = Calendar.getInstance()
-        val sdf = SimpleDateFormat("MMM dd, yyyy", Locale.US)
-
-        calendar.add(Calendar.DAY_OF_YEAR, 1)
-        val date1 = sdf.format(calendar.time)
-
-        calendar.add(Calendar.DAY_OF_YEAR, 3)
-        val date2 = sdf.format(calendar.time)
-
-        calendar.add(Calendar.DAY_OF_YEAR, 6)
-        val date3 = sdf.format(calendar.time)
-
-        val events = listOf(
-            "event_1" to mapOf(
-                "title" to "Founder Speed Matchmaking",
-                "description" to "Intentional 1-on-1 networking matches for founders and operators seeking co-founders.",
-                "date" to date1,
-                "time" to "6:00 PM UTC",
-                "location" to "Cosmos Virtual Room",
-                "type" to EventType.FOUNDER_MEETUP.name,
-                "participantCount" to 18,
-                "maxParticipants" to 30,
-                "isPaid" to false,
-                "price" to "",
-                "coverUrl" to "",
-                "tags" to listOf("Speed Dating", "Co-Founder", "Interactive"),
-                "createdBy" to "system"
-            ),
-            "event_2" to mapOf(
-                "title" to "AI & B2B SaaS Showcase",
-                "description" to "Presenting three breakout startups building AI-first enterprise workflows.",
-                "date" to date2,
-                "time" to "4:00 PM UTC",
-                "location" to "Cosmos Hall",
-                "type" to EventType.INDUSTRY_SPECIFIC.name,
-                "participantCount" to 45,
-                "maxParticipants" to 100,
-                "isPaid" to false,
-                "price" to "",
-                "coverUrl" to "",
-                "tags" to listOf("AI", "B2B SaaS", "Showcase"),
-                "createdBy" to "system"
-            ),
-            "event_3" to mapOf(
-                "title" to "Cosmos Open Networking Hour",
-                "description" to "Meet and chat with other members of the club in a relaxed, open format.",
-                "date" to date3,
-                "time" to "7:00 PM UTC",
-                "location" to "Cosmos Lounge",
-                "type" to EventType.OPEN_NETWORKING.name,
-                "participantCount" to 22,
-                "maxParticipants" to 50,
-                "isPaid" to false,
-                "price" to "",
-                "coverUrl" to "",
-                "tags" to listOf("Networking", "Open", "Social"),
-                "createdBy" to "system"
-            )
-        )
-
-        val batch = firestore.batch()
-        for ((id, data) in events) {
-            batch.set(firestore.collection("events").document(id), data)
-        }
-        batch.commit().await()
-
-        // Add rounds to first event
-        val userIds = firestore.collection("users").get().await().documents.map { it.id }
-        val roundsRef = firestore.collection("events").document("event_1").collection("rounds")
-        roundsRef.document("r1").set(
-            mapOf(
-                "title" to "Round 1: Intros",
-                "duration" to 15,
-                "participantIds" to userIds.take(2)
-            )
-        ).await()
-        roundsRef.document("r2").set(
-            mapOf(
-                "title" to "Round 2: Collaborative Ideas",
-                "duration" to 15,
-                "participantIds" to userIds.drop(2).take(2)
-            )
-        ).await()
     }
 
     suspend fun seedCircles(firestore: FirebaseFirestore) {
@@ -294,6 +214,10 @@ object FirestoreSeedService {
                         "joinedAt" to FieldValue.serverTimestamp(),
                         "status" to "APPROVED"
                     )).await()
+
+                // Update user document to cache circle membership
+                firestore.collection("users").document(uid)
+                    .update("joinedCircles", FieldValue.arrayUnion(circleId)).await()
             }
         }
 
@@ -380,4 +304,100 @@ object FirestoreSeedService {
             }
         }
     }
+
+    suspend fun seedSocialPosts(firestore: FirebaseFirestore) {
+        // Ensure users exist
+        val usersSnapshot = firestore.collection("users").get().await()
+        if (usersSnapshot.isEmpty) {
+            seedUsers(firestore)
+        }
+
+        // Only seed if social_posts collection is empty
+        val postsSnapshot = firestore.collection("social_posts").get().await()
+        if (!postsSnapshot.isEmpty) return
+
+        val posts = listOf(
+            mapOf(
+                "authorId" to "mock_user_sarah",
+                "authorName" to "Sarah Jenkins",
+                "authorAvatarUrl" to "",
+                "authorHeadline" to "Founder & CEO at BioSphere",
+                "content" to "Excited to share that BioSphere has closed our seed round! We are building sustainable climate-tech and Biotech systems to revolutionize agriculture. A huge thank you to our team and early supporters! 🚀🌱 #ClimateTech #BioTech #Founders",
+                "timestamp" to FieldValue.serverTimestamp(),
+                "likesCount" to 2,
+                "repliesCount" to 2,
+                "likes" to listOf("mock_user_david", "mock_user_marcus")
+            ),
+            mapOf(
+                "authorId" to "mock_user_david",
+                "authorName" to "David Chen",
+                "authorAvatarUrl" to "",
+                "authorHeadline" to "General Partner at Nexus Ventures",
+                "content" to "Investing in early-stage AI is all about finding founders who understand agentic workflows and product-market fit. If you're building in the B2B SaaS or AI space, let's connect at our next founder meetup! ✦ #AI #VC #Investing",
+                "timestamp" to FieldValue.serverTimestamp(),
+                "likesCount" to 2,
+                "repliesCount" to 1,
+                "likes" to listOf("mock_user_sarah", "mock_user_elena")
+            ),
+            mapOf(
+                "authorId" to "mock_user_elena",
+                "authorName" to "Elena Rostova",
+                "authorAvatarUrl" to "",
+                "authorHeadline" to "Lead Designer at Cosmos Studio",
+                "content" to "Just finished updating the Cosmos Design System. Focusing on premium glassmorphism, harmonious color palettes (Outfit font + Deep Indigo highlights), and subtle micro-animations. Check it out and let me know your thoughts! 🎨✨ #UIDesign #ProductDesign #Aesthetics",
+                "timestamp" to FieldValue.serverTimestamp(),
+                "likesCount" to 3,
+                "repliesCount" to 0,
+                "likes" to listOf("mock_user_sarah", "mock_user_david", "mock_user_marcus")
+            ),
+            mapOf(
+                "authorId" to "mock_user_marcus",
+                "authorName" to "Marcus Vance",
+                "authorAvatarUrl" to "",
+                "authorHeadline" to "VP of Product at ScaleUp",
+                "content" to "Scaling a product from 0 to 1 requires ruthless prioritization. Don't build features just because users ask for them; build them because they solve the core problem. What's your product strategy for Q3? #ProductManagement #Scaling #Growth",
+                "timestamp" to FieldValue.serverTimestamp(),
+                "likesCount" to 1,
+                "repliesCount" to 0,
+                "likes" to listOf("mock_user_sarah")
+            )
+        )
+
+        for (post in posts) {
+            val docRef = firestore.collection("social_posts").add(post).await()
+            
+            // Seed a couple of replies for each post to demonstrate commenting
+            if (post["authorId"] == "mock_user_sarah") {
+                val reply1 = mapOf(
+                    "authorId" to "mock_user_marcus",
+                    "authorName" to "Marcus Vance",
+                    "authorAvatarUrl" to "",
+                    "authorHeadline" to "VP of Product at ScaleUp",
+                    "content" to "Congrats Sarah! Huge milestone.",
+                    "timestamp" to FieldValue.serverTimestamp()
+                )
+                val reply2 = mapOf(
+                    "authorId" to "mock_user_david",
+                    "authorName" to "David Chen",
+                    "authorAvatarUrl" to "",
+                    "authorHeadline" to "General Partner at Nexus Ventures",
+                    "content" to "Well deserved, let's catch up soon!",
+                    "timestamp" to FieldValue.serverTimestamp()
+                )
+                docRef.collection("replies").add(reply1).await()
+                docRef.collection("replies").add(reply2).await()
+            } else if (post["authorId"] == "mock_user_david") {
+                val reply1 = mapOf(
+                    "authorId" to "mock_user_sarah",
+                    "authorName" to "Sarah Jenkins",
+                    "authorAvatarUrl" to "",
+                    "authorHeadline" to "Founder & CEO at BioSphere",
+                    "content" to "Agreed, alignment is key.",
+                    "timestamp" to FieldValue.serverTimestamp()
+                )
+                docRef.collection("replies").add(reply1).await()
+            }
+        }
+    }
 }
+

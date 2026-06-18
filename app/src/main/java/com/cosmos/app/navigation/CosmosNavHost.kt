@@ -12,14 +12,14 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-import com.cosmos.app.screens.communities.CircleMembersScreen
+import com.cosmos.app.screens.communities.OrbitMembersScreen
 import com.cosmos.app.screens.communities.CommunityHubScreen
-import com.cosmos.app.screens.communities.ExploreCirclesScreen
-import com.cosmos.app.screens.communities.PrivateCircleFeedScreen
+import com.cosmos.app.screens.communities.ExploreOrbitsScreen
+import com.cosmos.app.screens.communities.PrivateOrbitFeedScreen
 import com.cosmos.app.screens.connect.DiscoveryDeckScreen
 import com.cosmos.app.screens.connect.EndorseExpertiseScreen
 import com.cosmos.app.screens.connect.ConnectionRequestsScreen
-import com.cosmos.app.screens.connect.FoundersCircleFeedScreen
+import com.cosmos.app.screens.connect.FoundersOrbitFeedScreen
 import com.cosmos.app.screens.connect.MemberProfileScreen
 import com.cosmos.app.screens.connect.SearchScreen
 import com.cosmos.app.screens.conversations.ConversationsListScreen
@@ -40,6 +40,11 @@ import com.cosmos.app.screens.profile.NotificationsCenterScreen
 import com.cosmos.app.screens.profile.SettingsPrivacyScreen
 import com.cosmos.app.screens.profile.EditProfileScreen
 import com.cosmos.app.screens.profile.HelpSupportScreen
+import com.cosmos.app.screens.social.SocialFeedScreen
+import com.cosmos.app.screens.social.PostDetailScreen
+
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 
 @Composable
 fun CosmosNavHost(
@@ -47,6 +52,35 @@ fun CosmosNavHost(
     startDestination: String = Screen.Welcome.route,
     modifier: Modifier = Modifier
 ) {
+    val authViewModel: com.cosmos.app.ui.viewmodel.AuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val currentUserState by authViewModel.currentUser.collectAsState()
+
+    androidx.compose.runtime.LaunchedEffect(currentUserState) {
+        val user = currentUserState
+        if (user != null && !user.isProfileComplete && !user.isFromCache) {
+            val currentRoute = navController.currentDestination?.route
+            val onboardingRoutes = listOf(
+                Screen.Welcome.route,
+                Screen.WelcomeSignIn.route,
+                Screen.CompleteIdentity.route,
+                Screen.DefineIntent.route,
+                Screen.YourVision.route,
+                Screen.AiMatchingRefinement.route
+            )
+            if (currentRoute != null && currentRoute !in onboardingRoutes) {
+                val targetRoute = when {
+                    user.name.isBlank() || user.primaryUserType.isBlank() -> Screen.CompleteIdentity.route
+                    user.tags.isEmpty() -> Screen.DefineIntent.route
+                    user.goalStatement.isBlank() -> Screen.YourVision.route
+                    else -> Screen.AiMatchingRefinement.route
+                }
+                navController.navigate(targetRoute) {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = startDestination,
@@ -118,7 +152,7 @@ fun CosmosNavHost(
                 onProfileTap = { memberId ->
                     navController.navigate(Screen.MemberProfile.createRoute(memberId))
                 },
-                onNavigateToFeed = { navController.navigate(Screen.FoundersCircleFeed.route) },
+                onNavigateToFeed = { navController.navigate(Screen.FoundersOrbitFeed.route) },
                 onNavigate = { route -> navController.navigate(route) }
             )
         }
@@ -130,8 +164,8 @@ fun CosmosNavHost(
                 onBack = { navController.popBackStack() }
             )
         }
-        composable(Screen.FoundersCircleFeed.route) {
-            FoundersCircleFeedScreen(
+        composable(Screen.FoundersOrbitFeed.route) {
+            FoundersOrbitFeedScreen(
                 onProfileTap = { memberId ->
                     navController.navigate(Screen.MemberProfile.createRoute(memberId))
                 },
@@ -245,47 +279,73 @@ fun CosmosNavHost(
             )
         }
 
-        // ── Communities ───────────────────────────────────────────────────────
-        composable(Screen.Communities.route) {
-            CommunityHubScreen(
-                onExplore = { navController.navigate(Screen.ExploreCircles.route) },
-                onCircleTap = { circleId ->
-                    navController.navigate(Screen.PrivateCircleFeed.createRoute(circleId))
+        // ── Social ────────────────────────────────────────────────────────────
+        composable(Screen.Social.route) {
+            SocialFeedScreen(
+                onPostTap = { postId ->
+                    navController.navigate(Screen.SocialPostDetail.createRoute(postId))
+                },
+                onProfileTap = { memberId ->
+                    navController.navigate(Screen.MemberProfile.createRoute(memberId))
                 },
                 onNavigate = { route -> navController.navigate(route) }
             )
         }
-        composable(Screen.ExploreCircles.route) {
-            ExploreCirclesScreen(
+        composable(
+            route = Screen.SocialPostDetail.route,
+            arguments = listOf(navArgument("postId") { type = NavType.StringType })
+        ) { backStack ->
+            val postId = backStack.arguments?.getString("postId") ?: ""
+            PostDetailScreen(
+                postId = postId,
+                onBack = { navController.popBackStack() },
+                onProfileTap = { memberId ->
+                    navController.navigate(Screen.MemberProfile.createRoute(memberId))
+                }
+            )
+        }
+
+        // ── Communities ───────────────────────────────────────────────────────
+        composable(Screen.Communities.route) {
+            CommunityHubScreen(
+                onExplore = { navController.navigate(Screen.ExploreOrbits.route) },
+                onCircleTap = { circleId ->
+                    navController.navigate(Screen.PrivateOrbitFeed.createRoute(circleId))
+                },
+                onNavigate = { route -> navController.navigate(route) }
+            )
+        }
+        composable(Screen.ExploreOrbits.route) {
+            ExploreOrbitsScreen(
                 onBack = { navController.popBackStack() },
                 onCircleTap = { circleId ->
-                    navController.navigate(Screen.CircleMembers.createRoute(circleId))
+                    navController.navigate(Screen.OrbitMembers.createRoute(circleId))
                 }
             )
         }
         composable(
-            route = Screen.CircleMembers.route,
+            route = Screen.OrbitMembers.route,
             arguments = listOf(navArgument("circleId") { type = NavType.StringType })
         ) { backStack ->
             val circleId = backStack.arguments?.getString("circleId") ?: ""
-            CircleMembersScreen(
+            OrbitMembersScreen(
                 circleId = circleId,
                 onBack = { navController.popBackStack() },
                 onMemberTap = { memberId ->
                     navController.navigate(Screen.MemberProfile.createRoute(memberId))
                 },
-                onFeedTap = { navController.navigate(Screen.PrivateCircleFeed.createRoute(circleId)) }
+                onFeedTap = { navController.navigate(Screen.PrivateOrbitFeed.createRoute(circleId)) }
             )
         }
         composable(
-            route = Screen.PrivateCircleFeed.route,
+            route = Screen.PrivateOrbitFeed.route,
             arguments = listOf(navArgument("circleId") { type = NavType.StringType })
         ) { backStack ->
             val circleId = backStack.arguments?.getString("circleId") ?: ""
-            PrivateCircleFeedScreen(
+            PrivateOrbitFeedScreen(
                 circleId = circleId,
                 onBack = { navController.popBackStack() },
-                onMembersTap = { navController.navigate(Screen.CircleMembers.createRoute(circleId)) },
+                onMembersTap = { navController.navigate(Screen.OrbitMembers.createRoute(circleId)) },
                 onNavigate = { route -> navController.navigate(route) }
             )
         }
@@ -318,12 +378,14 @@ fun CosmosNavHost(
                 onMembershipTap = { navController.navigate(Screen.MembershipTiers.route) },
                 onSettingsTap = { navController.navigate(Screen.Settings.route) },
                 onNotificationsTap = { navController.navigate(Screen.Notifications.route) },
-                onNavigate = { route -> navController.navigate(route) }
+                onNavigate = { route -> navController.navigate(route) },
+                authViewModel = authViewModel
             )
         }
         composable(Screen.MembershipTiers.route) {
             MembershipTiersScreen(
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                authViewModel = authViewModel
             )
         }
         composable(Screen.Notifications.route) {
@@ -348,12 +410,14 @@ fun CosmosNavHost(
                 },
                 onEditProfileTap = {
                     navController.navigate(Screen.EditProfile.route)
-                }
+                },
+                authViewModel = authViewModel
             )
         }
         composable(Screen.EditProfile.route) {
             EditProfileScreen(
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                authViewModel = authViewModel
             )
         }
         composable(Screen.HelpSupport.route) {

@@ -16,6 +16,7 @@ sealed class Screen(val route: String) {
     // ── Main App Tabs ────────────────────────────────────────────────────────
     object Connect : Screen("connect")
     object Events : Screen("events")
+    object Social : Screen("social")
     object Communities : Screen("communities")
     object Conversations : Screen("conversations")
     object Profile : Screen("profile")
@@ -23,7 +24,7 @@ sealed class Screen(val route: String) {
     // ── Connect sub-screens ──────────────────────────────────────────────────
     object DiscoveryDeck : Screen("discovery_deck")
     object SearchProfiles : Screen("search_profiles")
-    object FoundersCircleFeed : Screen("founders_circle_feed")
+    object FoundersOrbitFeed : Screen("founders_orbit_feed")
     object MemberProfile : Screen("member_profile/{memberId}") {
         fun createRoute(memberId: String) = "member_profile/$memberId"
     }
@@ -49,12 +50,12 @@ sealed class Screen(val route: String) {
 
     // ── Communities sub-screens ──────────────────────────────────────────────
     object CommunityHub : Screen("community_hub")
-    object ExploreCircles : Screen("explore_circles")
-    object CircleMembers : Screen("circle_members/{circleId}") {
-        fun createRoute(circleId: String) = "circle_members/$circleId"
+    object ExploreOrbits : Screen("explore_orbits")
+    object OrbitMembers : Screen("orbit_members/{circleId}") {
+        fun createRoute(circleId: String) = "orbit_members/$circleId"
     }
-    object PrivateCircleFeed : Screen("private_circle_feed/{circleId}") {
-        fun createRoute(circleId: String) = "private_circle_feed/$circleId"
+    object PrivateOrbitFeed : Screen("private_orbit_feed/{circleId}") {
+        fun createRoute(circleId: String) = "private_orbit_feed/$circleId"
     }
 
     // ── Conversations sub-screens ────────────────────────────────────────────
@@ -69,4 +70,9 @@ sealed class Screen(val route: String) {
     object Settings : Screen("settings")
     object EditProfile : Screen("edit_profile")
     object HelpSupport : Screen("help_support")
+
+    // ── Social sub-screens ───────────────────────────────────────────────────
+    object SocialPostDetail : Screen("social_post_detail/{postId}") {
+        fun createRoute(postId: String) = "social_post_detail/$postId"
+    }
 }

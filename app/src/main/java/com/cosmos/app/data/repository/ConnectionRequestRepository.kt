@@ -42,24 +42,6 @@ class FirestoreConnectionRequestRepository(
     private val firestore: FirebaseFirestore
 ) : ConnectionRequestRepository {
 
-    private suspend fun <T> runWithFallback(
-        action: suspend () -> T,
-        mockFallback: suspend () -> Result<T>
-    ): Result<T> {
-        return try {
-            Result.success(action())
-        } catch (e: Exception) {
-            if (e.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true ||
-                e.message?.contains("network", ignoreCase = true) == true ||
-                e.message?.contains("unavailable", ignoreCase = true) == true) {
-                ServiceLocator.forceMockMode = true
-                mockFallback()
-            } else {
-                Result.failure(e)
-            }
-        }
-    }
-
     override suspend fun sendConnectionRequest(
         senderId: String,
         receiverId: String,
@@ -70,7 +52,10 @@ class FirestoreConnectionRequestRepository(
         receiverHeadline: String,
         receiverAvatarUrl: String,
         message: String
-    ): Result<Unit> = runWithFallback({
+    ): Result<Unit> = runCatching {
+        if (senderId == receiverId) {
+            throw IllegalArgumentException("Cannot send a connection request to yourself")
+        }
         val requestId = "req_${senderId}_${receiverId}"
 
         // Check if there's already a pending request in either direction
@@ -85,7 +70,7 @@ class FirestoreConnectionRequestRepository(
         if (existingReverse.exists() && existingReverse.getString("status") == "PENDING") {
             // The other user already sent us a request — auto-accept it
             acceptConnectionRequest("req_${receiverId}_${senderId}").getOrThrow()
-            return@runWithFallback
+            return@runCatching
         }
 
         // Check if already connected
@@ -122,14 +107,9 @@ class FirestoreConnectionRequestRepository(
             "actionId" to senderId
         )
         firestore.collection("notifications").add(notifData).await()
-    }, {
-        ServiceLocator.mockConnectionRequestRepository.sendConnectionRequest(
-            senderId, receiverId, senderName, senderHeadline, senderAvatarUrl,
-            receiverName, receiverHeadline, receiverAvatarUrl, message
-        )
-    })
+    }
 
-    override suspend fun acceptConnectionRequest(requestId: String): Result<Unit> = runWithFallback({
+    override suspend fun acceptConnectionRequest(requestId: String): Result<Unit> = runCatching {
         val requestDoc = firestore.collection("connection_requests").document(requestId).get().await()
         if (!requestDoc.exists()) throw IllegalArgumentException("Request not found")
 
@@ -184,23 +164,17 @@ class FirestoreConnectionRequestRepository(
             "actionId" to senderId
         )
         firestore.collection("notifications").add(notifData2).await()
-    }, {
-        ServiceLocator.mockConnectionRequestRepository.acceptConnectionRequest(requestId)
-    })
+    }
 
-    override suspend fun declineConnectionRequest(requestId: String): Result<Unit> = runWithFallback({
+    override suspend fun declineConnectionRequest(requestId: String): Result<Unit> = runCatching {
         firestore.collection("connection_requests").document(requestId)
             .update("status", ConnectionRequestStatus.DECLINED.name).await()
-    }, {
-        ServiceLocator.mockConnectionRequestRepository.declineConnectionRequest(requestId)
-    })
+    }
 
-    override suspend fun withdrawConnectionRequest(requestId: String): Result<Unit> = runWithFallback({
+    override suspend fun withdrawConnectionRequest(requestId: String): Result<Unit> = runCatching {
         firestore.collection("connection_requests").document(requestId)
             .update("status", ConnectionRequestStatus.WITHDRAWN.name).await()
-    }, {
-        ServiceLocator.mockConnectionRequestRepository.withdrawConnectionRequest(requestId)
-    })
+    }
 
     override fun getIncomingRequests(userId: String): Flow<List<ConnectionRequest>> = callbackFlow {
         val registration = firestore.collection("connection_requests")
@@ -209,13 +183,12 @@ class FirestoreConnectionRequestRepository(
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    if (error.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
-                        ServiceLocator.forceMockMode = true
-                    }
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
-                val requests = snapshot?.documents?.map { doc -> mapDocToRequest(doc.id, doc.data ?: emptyMap()) } ?: emptyList()
+                val requests = snapshot?.documents
+                    ?.map { doc -> mapDocToRequest(doc.id, doc.data ?: emptyMap()) }
+                    ?.filter { it.senderId != it.receiverId } ?: emptyList()
                 trySend(requests)
             }
         awaitClose { registration.remove() }
@@ -228,13 +201,12 @@ class FirestoreConnectionRequestRepository(
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    if (error.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
-                        ServiceLocator.forceMockMode = true
-                    }
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
-                val requests = snapshot?.documents?.map { doc -> mapDocToRequest(doc.id, doc.data ?: emptyMap()) } ?: emptyList()
+                val requests = snapshot?.documents
+                    ?.map { doc -> mapDocToRequest(doc.id, doc.data ?: emptyMap()) }
+                    ?.filter { it.senderId != it.receiverId } ?: emptyList()
                 trySend(requests)
             }
         awaitClose { registration.remove() }
@@ -243,30 +215,28 @@ class FirestoreConnectionRequestRepository(
     override suspend fun getConnectionStatus(
         currentUserId: String,
         otherUserId: String
-    ): Result<ConnectionProfileStatus> = runWithFallback({
+    ): Result<ConnectionProfileStatus> = runCatching {
         // 1. Check if connected
         val connectionId = if (currentUserId < otherUserId) "${currentUserId}_${otherUserId}" else "${otherUserId}_${currentUserId}"
         val connDoc = firestore.collection("connections").document(connectionId).get().await()
-        if (connDoc.exists()) return@runWithFallback ConnectionProfileStatus.CONNECTED
+        if (connDoc.exists()) return@runCatching ConnectionProfileStatus.CONNECTED
 
         // 2. Check if current user sent a pending request
         val sentId = "req_${currentUserId}_${otherUserId}"
         val sentDoc = firestore.collection("connection_requests").document(sentId).get().await()
         if (sentDoc.exists() && sentDoc.getString("status") == ConnectionRequestStatus.PENDING.name) {
-            return@runWithFallback ConnectionProfileStatus.PENDING_SENT
+            return@runCatching ConnectionProfileStatus.PENDING_SENT
         }
 
         // 3. Check if current user received a pending request
         val receivedId = "req_${otherUserId}_${currentUserId}"
         val receivedDoc = firestore.collection("connection_requests").document(receivedId).get().await()
         if (receivedDoc.exists() && receivedDoc.getString("status") == ConnectionRequestStatus.PENDING.name) {
-            return@runWithFallback ConnectionProfileStatus.PENDING_RECEIVED
+            return@runCatching ConnectionProfileStatus.PENDING_RECEIVED
         }
 
         ConnectionProfileStatus.NONE
-    }, {
-        ServiceLocator.mockConnectionRequestRepository.getConnectionStatus(currentUserId, otherUserId)
-    })
+    }
 
     override fun getConnectionStatusFlow(
         currentUserId: String,
@@ -279,12 +249,7 @@ class FirestoreConnectionRequestRepository(
 
         val connRegistration = firestore.collection("connections").document(connectionId)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    if (error.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
-                        ServiceLocator.forceMockMode = true
-                    }
-                    return@addSnapshotListener
-                }
+                if (error != null) return@addSnapshotListener
                 if (snapshot != null && snapshot.exists()) {
                     lastStatus = ConnectionProfileStatus.CONNECTED
                     trySend(lastStatus)
@@ -295,12 +260,7 @@ class FirestoreConnectionRequestRepository(
         val sentId = "req_${currentUserId}_${otherUserId}"
         val sentRegistration = firestore.collection("connection_requests").document(sentId)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    if (error.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
-                        ServiceLocator.forceMockMode = true
-                    }
-                    return@addSnapshotListener
-                }
+                if (error != null) return@addSnapshotListener
                 if (lastStatus == ConnectionProfileStatus.CONNECTED) return@addSnapshotListener
                 if (snapshot != null && snapshot.exists() && snapshot.getString("status") == ConnectionRequestStatus.PENDING.name) {
                     lastStatus = ConnectionProfileStatus.PENDING_SENT
@@ -316,12 +276,7 @@ class FirestoreConnectionRequestRepository(
         val receivedId = "req_${otherUserId}_${currentUserId}"
         val receivedRegistration = firestore.collection("connection_requests").document(receivedId)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    if (error.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
-                        ServiceLocator.forceMockMode = true
-                    }
-                    return@addSnapshotListener
-                }
+                if (error != null) return@addSnapshotListener
                 if (lastStatus == ConnectionProfileStatus.CONNECTED) return@addSnapshotListener
                 if (snapshot != null && snapshot.exists() && snapshot.getString("status") == ConnectionRequestStatus.PENDING.name) {
                     lastStatus = ConnectionProfileStatus.PENDING_RECEIVED
@@ -350,9 +305,6 @@ class FirestoreConnectionRequestRepository(
             .whereEqualTo("status", ConnectionRequestStatus.PENDING.name)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    if (error.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
-                        ServiceLocator.forceMockMode = true
-                    }
                     trySend(0)
                     return@addSnapshotListener
                 }

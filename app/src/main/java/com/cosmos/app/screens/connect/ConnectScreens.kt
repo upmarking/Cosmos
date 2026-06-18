@@ -27,7 +27,7 @@ import androidx.compose.runtime.collectAsState
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun FoundersCircleFeedScreen(
+fun FoundersOrbitFeedScreen(
     onProfileTap: (String) -> Unit,
     onBack: () -> Unit,
     onNavigate: (String) -> Unit,
@@ -49,7 +49,7 @@ fun FoundersCircleFeedScreen(
 
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
-            CosmosTopBar(title = "Founders Circle", onBack = onBack)
+            CosmosTopBar(title = "Founders Orbit", onBack = onBack)
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -59,7 +59,7 @@ fun FoundersCircleFeedScreen(
                 if (members.isEmpty()) {
                     item {
                         CosmosGlassCard {
-                            Text("No members in this circle yet.", color = CosmosOnSurfaceVariant)
+                            Text("No members in this orbit yet.", color = CosmosOnSurfaceVariant)
                         }
                     }
                 } else {
@@ -123,6 +123,7 @@ fun MemberProfileScreen(
 
     val memberState by profileViewModel.selectedMember.collectAsState()
     val connectionStatus by profileViewModel.connectionProfileStatus.collectAsState()
+    val isOwnProfile = memberId == profileViewModel.currentUserId
     var showConnectDialog by remember { mutableStateOf(false) }
     var connectMessage by remember { mutableStateOf("") }
 
@@ -190,55 +191,64 @@ fun MemberProfileScreen(
                             Text("✦ ${member.membershipTier.label}", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary)
                         }
 
-                        // Action row — 4-state connection button
+                        // Action row — Edit Profile button for own profile, 4-state connection button for others
                         Spacer(Modifier.height(20.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            when (connectionStatus) {
-                                com.cosmos.app.data.model.ConnectionProfileStatus.NONE -> {
-                                    CosmosButton(
-                                        text = "Connect",
-                                        onClick = { showConnectDialog = true },
-                                        modifier = Modifier.weight(1f),
-                                        icon = Icons.Default.PersonAdd
-                                    )
+                            if (isOwnProfile) {
+                                CosmosOutlinedButton(
+                                    text = "Edit Profile",
+                                    onClick = { onNavigate(Screen.EditProfile.route) },
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Default.Edit
+                                )
+                            } else {
+                                when (connectionStatus) {
+                                    com.cosmos.app.data.model.ConnectionProfileStatus.NONE -> {
+                                        CosmosButton(
+                                            text = "Connect",
+                                            onClick = { showConnectDialog = true },
+                                            modifier = Modifier.weight(1f),
+                                            icon = Icons.Default.PersonAdd
+                                        )
+                                    }
+                                    com.cosmos.app.data.model.ConnectionProfileStatus.PENDING_SENT -> {
+                                        CosmosOutlinedButton(
+                                            text = "Request Sent ✓",
+                                            onClick = { profileViewModel.withdrawConnectionRequest(member.id) },
+                                            modifier = Modifier.weight(1f),
+                                            icon = Icons.Default.Check
+                                        )
+                                    }
+                                    com.cosmos.app.data.model.ConnectionProfileStatus.PENDING_RECEIVED -> {
+                                        CosmosButton(
+                                            text = "Accept",
+                                            onClick = { profileViewModel.acceptConnectionFromProfile(member.id) },
+                                            modifier = Modifier.weight(1f),
+                                            icon = Icons.Default.Check
+                                        )
+                                        CosmosOutlinedButton(
+                                            text = "Decline",
+                                            onClick = { profileViewModel.declineConnectionFromProfile(member.id) },
+                                            modifier = Modifier.wrapContentWidth(),
+                                            icon = Icons.Default.Close
+                                        )
+                                    }
+                                    com.cosmos.app.data.model.ConnectionProfileStatus.CONNECTED -> {
+                                        CosmosOutlinedButton(
+                                            text = "Message",
+                                            onClick = onStartChat,
+                                            modifier = Modifier.weight(1f),
+                                            icon = Icons.Default.Chat
+                                        )
+                                    }
                                 }
-                                com.cosmos.app.data.model.ConnectionProfileStatus.PENDING_SENT -> {
-                                    CosmosOutlinedButton(
-                                        text = "Request Sent ✓",
-                                        onClick = { profileViewModel.withdrawConnectionRequest(member.id) },
-                                        modifier = Modifier.weight(1f),
-                                        icon = Icons.Default.Check
-                                    )
-                                }
-                                com.cosmos.app.data.model.ConnectionProfileStatus.PENDING_RECEIVED -> {
-                                    CosmosButton(
-                                        text = "Accept",
-                                        onClick = { profileViewModel.acceptConnectionFromProfile(member.id) },
-                                        modifier = Modifier.weight(1f),
-                                        icon = Icons.Default.Check
-                                    )
-                                    CosmosOutlinedButton(
-                                        text = "Decline",
-                                        onClick = { profileViewModel.declineConnectionFromProfile(member.id) },
-                                        modifier = Modifier.wrapContentWidth(),
-                                        icon = Icons.Default.Close
-                                    )
-                                }
-                                com.cosmos.app.data.model.ConnectionProfileStatus.CONNECTED -> {
-                                    CosmosOutlinedButton(
-                                        text = "Message",
-                                        onClick = onStartChat,
-                                        modifier = Modifier.weight(1f),
-                                        icon = Icons.Default.Chat
-                                    )
-                                }
+                                CosmosOutlinedButton(
+                                    text = "Intro",
+                                    onClick = onWarmIntro,
+                                    modifier = Modifier.wrapContentWidth(),
+                                    icon = Icons.Default.Link
+                                )
                             }
-                            CosmosOutlinedButton(
-                                text = "Intro",
-                                onClick = onWarmIntro,
-                                modifier = Modifier.wrapContentWidth(),
-                                icon = Icons.Default.Link
-                            )
                         }
                     }
                 }

@@ -65,6 +65,9 @@ fun CheckoutDialog(
     var paymentMethod by remember { mutableStateOf(PaymentMethod.GOOGLE_PAY) }
     var checkoutState by remember { mutableStateOf(CheckoutState.INPUT) }
 
+    // Track whether a real UPI app was launched (vs simulation fallback)
+    var isRealUpiLaunch by remember { mutableStateOf(false) }
+
     // Card inputs
     var cardNumber by remember { mutableStateOf("") }
     var cardholderName by remember { mutableStateOf("") }
@@ -90,47 +93,61 @@ fun CheckoutDialog(
         PaymentMethod.VISA -> "Visa Card"
     }
 
-    // UPI Intent Launcher
+    // UPI Intent Launcher — handles the result from the actual Google Pay / PhonePe app
     val upiLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK && result.data != null) {
-            val response = result.data?.getStringExtra("response")
-            if (response != null) {
-                val statusMatch = response.split("&").find { it.startsWith("Status=", ignoreCase = true) }
-                val status = statusMatch?.split("=")?.getOrNull(1) ?: ""
-                
-                if (status.equals("SUCCESS", ignoreCase = true) || status.equals("SUBMITTED", ignoreCase = true)) {
-                    generatedTxId = "pay_" + UUID.randomUUID().toString().replace("-", "").take(14)
-                    checkoutState = CheckoutState.SUCCESS
-                } else {
-                    Toast.makeText(context, "Payment Failed or Cancelled", Toast.LENGTH_SHORT).show()
-                    checkoutState = CheckoutState.INPUT
-                }
+        // Parse the UPI response regardless of resultCode, since some UPI apps
+        // return RESULT_CANCELED even on success and pass status in extras.
+        val response = result.data?.getStringExtra("response")
+        if (response != null) {
+            val params = response.split("&").associate {
+                val parts = it.split("=", limit = 2)
+                parts[0].lowercase() to (parts.getOrNull(1) ?: "")
+            }
+            val status = params["status"] ?: params["Status"] ?: ""
+
+            if (status.equals("SUCCESS", ignoreCase = true) || status.equals("SUBMITTED", ignoreCase = true)) {
+                generatedTxId = "pay_" + UUID.randomUUID().toString().replace("-", "").take(14)
+                checkoutState = CheckoutState.SUCCESS
             } else {
-                Toast.makeText(context, "Payment Failed (No response)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Payment failed: ${status.ifBlank { "Unknown" }}", Toast.LENGTH_SHORT).show()
+                isRealUpiLaunch = false
                 checkoutState = CheckoutState.INPUT
             }
         } else {
-            Toast.makeText(context, "Payment Cancelled", Toast.LENGTH_SHORT).show()
+            // User pressed back / cancelled in the UPI app
+            Toast.makeText(context, "Payment cancelled", Toast.LENGTH_SHORT).show()
+            isRealUpiLaunch = false
             checkoutState = CheckoutState.INPUT
         }
     }
 
-    // Launch simulations
+    // State-machine transitions
     LaunchedEffect(checkoutState) {
-        if (checkoutState == CheckoutState.PROCESSING) {
-            delay(2000)
-            if (paymentMethod == PaymentMethod.VISA) {
-                checkoutState = CheckoutState.OTP_VERIFICATION
-            } else {
-                checkoutState = CheckoutState.UPI_COUNTDOWN
+        when (checkoutState) {
+            CheckoutState.PROCESSING -> {
+                delay(2000)
+                if (paymentMethod == PaymentMethod.VISA) {
+                    checkoutState = CheckoutState.OTP_VERIFICATION
+                } else {
+                    // This path is only reached for simulation fallback
+                    checkoutState = CheckoutState.UPI_COUNTDOWN
+                }
             }
-        } else if (checkoutState == CheckoutState.UPI_COUNTDOWN) {
-            delay(3000) // Simulating approval in background
-            generatedTxId = "pay_" + UUID.randomUUID().toString().replace("-", "").take(14)
-            checkoutState = CheckoutState.SUCCESS
-        } else if (checkoutState == CheckoutState.SUCCESS) {
-            delay(2500)
-            onPaymentSuccess(generatedTxId, readableMethodString)
+            CheckoutState.UPI_COUNTDOWN -> {
+                if (!isRealUpiLaunch) {
+                    // Simulation only — auto-approve after 3 s when app was not found
+                    delay(3000)
+                    generatedTxId = "pay_" + UUID.randomUUID().toString().replace("-", "").take(14)
+                    checkoutState = CheckoutState.SUCCESS
+                }
+                // When isRealUpiLaunch == true we do nothing here;
+                // the upiLauncher callback will drive the next state transition.
+            }
+            CheckoutState.SUCCESS -> {
+                delay(2500)
+                onPaymentSuccess(generatedTxId, readableMethodString)
+            }
+            else -> { /* INPUT, OTP_VERIFICATION — no auto-transition */ }
         }
     }
 
@@ -515,29 +532,44 @@ fun CheckoutDialog(
                                                 Toast.makeText(context, "Please enter a valid UPI ID", Toast.LENGTH_SHORT).show()
                                                 return@Button
                                             }
-                                            
-                                            // Launch actual UPI Intent
-                                            val uri = Uri.parse("upi://pay").buildUpon()
-                                                .appendQueryParameter("pa", "merchant@upi") // Dummy merchant VPA
+
+                                            // Build UPI deep-link intent
+                                            val upiUri = Uri.parse("upi://pay").buildUpon()
+                                                .appendQueryParameter("pa", "merchant@upi") // Merchant VPA
                                                 .appendQueryParameter("pn", "Cosmos App")
-                                                .appendQueryParameter("tn", tierName)
+                                                .appendQueryParameter("tn", "$tierName Membership")
                                                 .appendQueryParameter("am", billDetails.grandTotal.toInt().toString())
                                                 .appendQueryParameter("cu", "INR")
                                                 .build()
-                                                
-                                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                                data = uri
-                                                if (paymentMethod == PaymentMethod.GOOGLE_PAY) {
-                                                    setPackage("com.google.android.apps.nbu.paisa.user")
-                                                } else if (paymentMethod == PaymentMethod.PHONE_PE) {
-                                                    setPackage("com.phonepe.app")
-                                                }
+
+                                            val targetPackage = when (paymentMethod) {
+                                                PaymentMethod.GOOGLE_PAY -> "com.google.android.apps.nbu.paisa.user"
+                                                PaymentMethod.PHONE_PE   -> "com.phonepe.app"
+                                                else -> null
                                             }
-                                            
-                                            try {
-                                                upiLauncher.launch(intent)
-                                            } catch (e: Exception) {
-                                                Toast.makeText(context, "UPI App not found! Proceeding with simulation.", Toast.LENGTH_SHORT).show()
+
+                                            val intent = Intent(Intent.ACTION_VIEW, upiUri).apply {
+                                                targetPackage?.let { setPackage(it) }
+                                            }
+
+                                            // Check if the specific UPI app is installed
+                                            val resolvedActivities = context.packageManager.queryIntentActivities(intent, 0)
+                                            if (resolvedActivities.isNotEmpty()) {
+                                                // Real UPI app is available — launch it
+                                                try {
+                                                    isRealUpiLaunch = true
+                                                    checkoutState = CheckoutState.UPI_COUNTDOWN
+                                                    upiLauncher.launch(intent)
+                                                } catch (e: Exception) {
+                                                    // Edge case: resolve succeeded but launch failed
+                                                    isRealUpiLaunch = false
+                                                    Toast.makeText(context, "Could not open ${readableMethodString}. Using simulation.", Toast.LENGTH_SHORT).show()
+                                                    checkoutState = CheckoutState.PROCESSING
+                                                }
+                                            } else {
+                                                // App not installed — fall back to simulation
+                                                isRealUpiLaunch = false
+                                                Toast.makeText(context, "$readableMethodString not installed. Simulating payment.", Toast.LENGTH_SHORT).show()
                                                 checkoutState = CheckoutState.PROCESSING
                                             }
                                         }
@@ -632,9 +664,37 @@ fun CheckoutDialog(
                                 CircularProgressIndicator(color = CosmosSuccess, modifier = Modifier.size(44.dp))
                                 Spacer(Modifier.height(16.dp))
                                 Text("Awaiting UPI Approval", style = MaterialTheme.typography.titleMedium, color = CosmosOnBackground)
-                                Text("A collect request of ₹${billDetails.grandTotal.toInt()} has been sent to your registered UPI address ($upiId) via $readableMethodString. Please open the app and authorize the transaction.", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp))
-                                Spacer(Modifier.height(12.dp))
-                                Text("Simulating auto-approval in 3 seconds...", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary)
+                                if (isRealUpiLaunch) {
+                                    Text(
+                                        "Complete the payment of ₹${billDetails.grandTotal.toInt()} in $readableMethodString. This screen will update automatically once the payment is processed.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = CosmosOnSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text("Waiting for $readableMethodString response…", style = MaterialTheme.typography.labelMedium, color = CosmosSuccess)
+                                    Spacer(Modifier.height(20.dp))
+                                    OutlinedButton(
+                                        onClick = {
+                                            isRealUpiLaunch = false
+                                            checkoutState = CheckoutState.INPUT
+                                        },
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text("Cancel & Go Back", color = CosmosOnSurfaceVariant)
+                                    }
+                                } else {
+                                    Text(
+                                        "A collect request of ₹${billDetails.grandTotal.toInt()} has been sent to your UPI address ($upiId) via $readableMethodString.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = CosmosOnSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text("Simulating auto-approval in 3 seconds…", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary)
+                                }
                             }
                         }
                         CheckoutState.SUCCESS -> {

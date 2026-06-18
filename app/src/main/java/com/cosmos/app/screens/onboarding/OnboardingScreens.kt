@@ -338,7 +338,8 @@ fun AiMatchingRefinementScreen(
                         onClick = {
                             currentUser?.let { member ->
                                 val updated = member.copy(
-                                    membershipTier = MembershipTier.MEMBER
+                                    membershipTier = MembershipTier.MEMBER,
+                                    isProfileComplete = true
                                 )
                                 authViewModel.saveOnboarding(member = updated, onSuccess = onFinish)
                             } ?: onFinish()

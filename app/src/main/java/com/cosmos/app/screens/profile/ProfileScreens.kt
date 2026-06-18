@@ -56,7 +56,18 @@ fun NetworkingDashboardScreen(
     communityViewModel: com.cosmos.app.ui.viewmodel.CommunityViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val currentUserState by authViewModel.currentUser.collectAsState()
-    val me = currentUserState ?: SampleData.sampleMember
+    if (currentUserState == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(CosmosBackground),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(color = CosmosPrimary)
+        }
+        return
+    }
+    val me = currentUserState!!
 
     val notifications by profileViewModel.notifications.collectAsState()
     val unreadCount = notifications.count { !it.isRead }
@@ -73,7 +84,7 @@ fun NetworkingDashboardScreen(
 
             // ── Premium sticky top bar ────────────────────────────────────────
             CosmosGlassTopBar(
-                pageTitle = "Dashboard",
+                pageTitle = "Settings",
                 notificationCount = unreadCount,
                 onNotificationsClick = onNotificationsTap,
                 extraActions = {
@@ -158,7 +169,7 @@ fun NetworkingDashboardScreen(
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             CosmosStatCard(label = "Intros Made", value = "${me.introsMade}", modifier = Modifier.weight(1f), accent = CosmosGradientStart)
                             CosmosStatCard(label = "Goals Hit", value = "${me.goalsHit}", modifier = Modifier.weight(1f), accent = CosmosSuccess)
-                            CosmosStatCard(label = "Circles", value = "$joinedCirclesCount", modifier = Modifier.weight(1f), accent = CosmosSecondary)
+                            CosmosStatCard(label = "Orbits", value = "$joinedCirclesCount", modifier = Modifier.weight(1f), accent = CosmosSecondary)
                         }
                     }
                 }
@@ -200,7 +211,7 @@ fun NetworkingDashboardScreen(
                     listOf(
                         Triple(Icons.Default.Edit, "Edit Profile", Screen.EditProfile.route),
                         Triple(Icons.Default.Star, "Membership & Tiers", Screen.MembershipTiers.route),
-                        Triple(Icons.Default.Settings, "Settings & Privacy", Screen.Settings.route),
+                        Triple(Icons.Default.Settings, "Control Center", Screen.Settings.route),
                         Triple(Icons.Default.HelpOutline, "Help & Support", Screen.HelpSupport.route)
                     ).forEach { (icon, label, route) ->
                         Row(
@@ -524,7 +535,7 @@ fun SettingsPrivacyScreen(
 
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
-            CosmosTopBar(title = "Settings & Privacy", onBack = onBack)
+            CosmosTopBar(title = "Control Center", onBack = onBack)
 
             LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp)) {
                 // ── Account Section ──────────────────────────────────────────
@@ -1952,6 +1963,7 @@ fun EditProfileScreen(
                                     isLinkedInConnected = isLinkedInConnected
                                 )
 
+                                android.widget.Toast.makeText(context, "Profile updated successfully!", android.widget.Toast.LENGTH_SHORT).show()
                                 authViewModel.saveOnboarding(
                                     member = updatedMember,
                                     onSuccess = onBack,

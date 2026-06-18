@@ -114,12 +114,12 @@ fun WelcomeScreen(
 
     LaunchedEffect(currentUser) {
         val user = currentUser
-        if (user != null) {
-            if (user.isProfileComplete) {
-                onSignIn()
-            } else {
-                onGetStarted()
-            }
+        // Only auto-redirect users with completed profiles to the main screen.
+        // Don't auto-redirect incomplete profiles to CompleteIdentity (signup form),
+        // as this causes redirect loops when Firestore is unavailable and the
+        // fallback creates a default member with isProfileComplete=false.
+        if (user != null && user.isProfileComplete) {
+            onSignIn()
         }
     }
 

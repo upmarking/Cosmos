@@ -40,6 +40,15 @@ import com.cosmos.app.navigation.Screen
 import com.cosmos.app.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.sp
+
+import androidx.compose.material.icons.automirrored.filled.Feed
+import androidx.compose.material.icons.automirrored.outlined.Feed
 
 data class BottomNavItem(
     val label: String,
@@ -57,28 +66,34 @@ val cosmosBottomNavItems = listOf(
         unselectedIcon = Icons.Outlined.People
     ),
     BottomNavItem(
-        label = "Events",
+        label = "Organize",
         route = Screen.Events.route,
         selectedIcon = Icons.Filled.Event,
         unselectedIcon = Icons.Outlined.Event
     ),
     BottomNavItem(
-        label = "Circles",
-        route = Screen.Communities.route,
-        selectedIcon = Icons.Filled.Hub,
-        unselectedIcon = Icons.Outlined.Hub
+        label = "Social",
+        route = Screen.Social.route,
+        selectedIcon = Icons.AutoMirrored.Filled.Feed,
+        unselectedIcon = Icons.AutoMirrored.Outlined.Feed
     ),
     BottomNavItem(
-        label = "Chats",
+        label = "Messenger",
         route = Screen.Conversations.route,
         selectedIcon = Icons.Filled.Forum,
         unselectedIcon = Icons.Outlined.Forum
     ),
     BottomNavItem(
-        label = "Profile",
+        label = "Orbits",
+        route = Screen.Communities.route,
+        selectedIcon = Icons.Filled.Hub,
+        unselectedIcon = Icons.Outlined.Hub
+    ),
+    BottomNavItem(
+        label = "Settings",
         route = Screen.Profile.route,
-        selectedIcon = Icons.Filled.AccountCircle,
-        unselectedIcon = Icons.Outlined.AccountCircle
+        selectedIcon = Icons.Filled.Settings,
+        unselectedIcon = Icons.Outlined.Settings
     )
 )
 
@@ -189,27 +204,17 @@ fun CosmosBottomNavBar(navController: NavController) {
                 .background(glassColor)
                 // Gradient border overlay
                 .drawBehind {
-                    drawIntoCanvas { canvas ->
-                        val strokePx = 1.2.dp.toPx()
-                        val framePaint = Paint().apply {
-                            asFrameworkPaint().apply {
-                                isAntiAlias = true
-                                style = android.graphics.Paint.Style.STROKE
-                                strokeWidth = strokePx
-                            }
-                        }
-                        // Draw rounded rect border
-                        val rr = size.height / 2f
-                        canvas.drawRoundRect(
-                            left   = strokePx / 2,
-                            top    = strokePx / 2,
-                            right  = size.width - strokePx / 2,
-                            bottom = size.height - strokePx / 2,
-                            radiusX = rr,
-                            radiusY = rr,
-                            paint   = framePaint
-                        )
-                    }
+                    val strokeWidth = 1.2.dp.toPx()
+                    drawRoundRect(
+                        brush = borderBrush,
+                        topLeft = Offset(strokeWidth / 2, strokeWidth / 2),
+                        size = this.size.copy(
+                            width = this.size.width - strokeWidth,
+                            height = this.size.height - strokeWidth
+                        ),
+                        cornerRadius = CornerRadius(this.size.height / 2),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+                    )
                 }
         ) {
             // Subtle inner white top-glint strip
@@ -310,6 +315,13 @@ private fun RowScope.GlassNavBarItem(
         label = "navLabelColor"
     )
 
+    // ✦ COSMOS acrostic — first letter accent
+    val accentLetterColor by animateColorAsState(
+        targetValue = if (isSelected) Color(0xFFFFD54F) else Color(0xFFA5B0D0),
+        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+        label = "navAccentLetter"
+    )
+
     // Pill indicator height (grows when selected)
     val indicatorSize by animateDpAsState(
         targetValue = if (isSelected) 36.dp else 0.dp,
@@ -336,8 +348,8 @@ private fun RowScope.GlassNavBarItem(
 
             // Glowing pill behind selected icon
             Box(contentAlignment = Alignment.Center) {
-                // Glow pill — visible only when selected
-                if (isSelected) {
+                // Glow pill — visible and animates smoothly on selection change
+                if (indicatorSize > 0.dp) {
                     Box(
                         modifier = Modifier
                             .width(indicatorSize)
@@ -346,8 +358,8 @@ private fun RowScope.GlassNavBarItem(
                             .background(
                                 Brush.radialGradient(
                                     colors = listOf(
-                                        CosmosPrimary.copy(alpha = 0.25f),
-                                        CosmosPrimary.copy(alpha = 0.08f),
+                                        CosmosPrimary.copy(alpha = 0.22f * (indicatorSize.value / 36f).coerceIn(0f, 1f)),
+                                        CosmosPrimary.copy(alpha = 0.06f * (indicatorSize.value / 36f).coerceIn(0f, 1f)),
                                         Color.Transparent
                                     )
                                 )
@@ -381,12 +393,35 @@ private fun RowScope.GlassNavBarItem(
 
             Spacer(Modifier.height(3.dp))
 
+            // First letter highlighted to reveal C·O·S·M·O·S
             Text(
-                text  = item.label,
+                text = buildAnnotatedString {
+                    // Accented first letter
+                    withStyle(
+                        SpanStyle(
+                            color = accentLetterColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.5.sp
+                        )
+                    ) {
+                        append(item.label.first())
+                    }
+                    // Remaining characters
+                    withStyle(
+                        SpanStyle(
+                            color = labelColor,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            fontSize = 10.sp
+                        )
+                    ) {
+                        append(item.label.drop(1))
+                    }
+                },
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = MaterialTheme.typography.labelSmall.fontSize
+                    letterSpacing = 0.3.sp
                 ),
-                color = labelColor
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

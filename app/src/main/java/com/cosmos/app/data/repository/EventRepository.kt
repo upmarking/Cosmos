@@ -12,6 +12,8 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -36,22 +38,11 @@ class FirestoreEventRepository(
 ) : EventRepository {
 
     override fun getEvents(): Flow<List<NetworkEvent>> = callbackFlow {
-        // Check if events collection is empty and seed if needed
-        launch {
-            try {
-                val snapshot = firestore.collection("events").get().await()
-                if (snapshot.isEmpty) {
-                    FirestoreSeedService.seedEvents(firestore)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-
         val registration = firestore.collection("events")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    android.util.Log.e("CosmosEvents", "Error fetching events", error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 if (snapshot == null) {
@@ -84,7 +75,8 @@ class FirestoreEventRepository(
         
         val eventReg = eventRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
-                close(error)
+                android.util.Log.e("EventRepository", "Error fetching event details: ${error.message}", error)
+                trySend(null)
                 return@addSnapshotListener
             }
             if (snapshot != null && snapshot.exists()) {
@@ -97,7 +89,8 @@ class FirestoreEventRepository(
         
         val registrantReg = registrantRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
-                close(error)
+                android.util.Log.e("EventRepository", "Error fetching registrant details: ${error.message}", error)
+                // Do not close flow; just continue without crashing
                 return@addSnapshotListener
             }
             isRegistered = snapshot?.exists() == true
@@ -162,7 +155,8 @@ class FirestoreEventRepository(
             .collection("rounds")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    android.util.Log.e("EventRepository", "Error fetching event rounds: ${error.message}", error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 if (snapshot == null) {
@@ -171,26 +165,32 @@ class FirestoreEventRepository(
                 }
                 
                 launch {
-                    val rounds = snapshot.documents.map { doc ->
-                        val data = doc.data ?: emptyMap()
-                        val participantIds = (data["participantIds"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
-                        
-                        val participants = participantIds.mapNotNull { uid ->
-                            try {
-                                val userDoc = firestore.collection("users").document(uid).get().await()
-                                if (userDoc.exists()) {
-                                    FirebaseAuthRepository.mapDocumentToMember(userDoc.id, userDoc.data ?: emptyMap())
-                                } else null
-                            } catch (e: Exception) { null }
+                    val deferredRounds = snapshot.documents.map { doc ->
+                        async {
+                            val data = doc.data ?: emptyMap()
+                            val participantIds = (data["participantIds"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+                            
+                            val deferredParticipants = participantIds.map { uid ->
+                                async {
+                                    try {
+                                        val userDoc = firestore.collection("users").document(uid).get().await()
+                                        if (userDoc.exists()) {
+                                            FirebaseAuthRepository.mapDocumentToMember(userDoc.id, userDoc.data ?: emptyMap())
+                                        } else null
+                                    } catch (e: Exception) { null }
+                                }
+                            }
+                            val participants = deferredParticipants.awaitAll().filterNotNull()
+                            
+                            EventRound(
+                                id = doc.id,
+                                title = doc.getString("title") ?: "",
+                                duration = doc.getLong("duration")?.toInt() ?: 15,
+                                participants = participants
+                            )
                         }
-                        
-                        EventRound(
-                            id = doc.id,
-                            title = doc.getString("title") ?: "",
-                            duration = doc.getLong("duration")?.toInt() ?: 15,
-                            participants = participants
-                        )
                     }
+                    val rounds = deferredRounds.awaitAll()
                     trySend(rounds)
                 }
             }
@@ -225,7 +225,8 @@ class FirestoreEventRepository(
             .collection("registrants")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    android.util.Log.e("EventRepository", "Error fetching event participants: ${error.message}", error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 if (snapshot == null) {
@@ -234,14 +235,17 @@ class FirestoreEventRepository(
                 }
                 launch {
                     val participantIds = snapshot.documents.map { it.id }
-                    val members = participantIds.mapNotNull { uid ->
-                        try {
-                            val doc = firestore.collection("users").document(uid).get().await()
-                            if (doc.exists()) {
-                                FirebaseAuthRepository.mapDocumentToMember(doc.id, doc.data ?: emptyMap())
-                            } else null
-                        } catch (e: Exception) { null }
+                    val deferredMembers = participantIds.map { uid ->
+                        async {
+                            try {
+                                val doc = firestore.collection("users").document(uid).get().await()
+                                if (doc.exists()) {
+                                    FirebaseAuthRepository.mapDocumentToMember(doc.id, doc.data ?: emptyMap())
+                                } else null
+                            } catch (e: Exception) { null }
+                        }
                     }
+                    val members = deferredMembers.awaitAll().filterNotNull()
                     trySend(members)
                 }
             }

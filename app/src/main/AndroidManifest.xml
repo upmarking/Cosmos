@@ -3,6 +3,16 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Package visibility for UPI payment apps (required on Android 11+) -->
+    <queries>
+        <package android:name="com.google.android.apps.nbu.paisa.user" /> <!-- Google Pay -->
+        <package android:name="com.phonepe.app" />                       <!-- PhonePe -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:largeHeap="true"

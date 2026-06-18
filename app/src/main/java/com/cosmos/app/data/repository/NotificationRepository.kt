@@ -30,17 +30,20 @@ class FirestoreNotificationRepository(
     override fun getNotifications(userId: String): Flow<List<Notification>> = callbackFlow {
         val registration = firestore.collection("notifications")
             .whereEqualTo("userId", userId)
-            .orderBy("timestamp", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    android.util.Log.e("CosmosNotifications", "Error fetching notifications for $userId", error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 if (snapshot == null) {
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
-                val notifications = snapshot.documents.map { doc ->
+                val sortedDocs = snapshot.documents.sortedByDescending { doc ->
+                    doc.getTimestamp("timestamp") ?: com.google.firebase.Timestamp(0, 0)
+                }
+                val notifications = sortedDocs.map { doc ->
                     val data = doc.data ?: emptyMap()
                     val typeStr = data["type"] as? String ?: NotificationType.NEW_MATCH.name
                     val type = runCatching { NotificationType.valueOf(typeStr) }.getOrDefault(NotificationType.NEW_MATCH)

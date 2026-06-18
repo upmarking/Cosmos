@@ -24,6 +24,9 @@ import com.cosmos.app.data.model.NetworkEvent
 import com.cosmos.app.ui.components.*
 import com.cosmos.app.ui.theme.*
 import androidx.compose.runtime.collectAsState
+import java.text.SimpleDateFormat
+import java.util.Locale
+import androidx.compose.ui.graphics.vector.ImageVector
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,7 +57,7 @@ fun EventsListScreen(
         Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             Column(modifier = Modifier.fillMaxSize()) {
                 CosmosGlassTopBar(
-                    pageTitle = "Events",
+                    pageTitle = "Organize",
                     extraActions = {
                         if (currentUser?.isOrganizer == true) {
                             GlassIconButton(
@@ -637,7 +640,12 @@ fun EventLobbyScreen(
                                 Text(event.description, style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant)
                                 Spacer(Modifier.height(12.dp))
                                 Text("Format", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary, modifier = Modifier.padding(bottom = 4.dp))
-                                Text("Multiple 15-minute networking rounds with AI-matched participants.", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                                val formatText = if (eventRounds.isNotEmpty()) {
+                                    "${eventRounds.size} rounds of ${eventRounds.first().duration}-minute networking with AI-matched participants."
+                                } else {
+                                    "Multiple networking rounds with AI-matched participants."
+                                }
+                                Text(formatText, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
                                 if (event.isPaid) {
                                     Spacer(Modifier.height(12.dp))
                                     Text("Refund Policy", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary, modifier = Modifier.padding(bottom = 4.dp))
@@ -670,12 +678,42 @@ fun EventLobbyScreen(
                     }
                     2 -> {
                         item {
-                            listOf("6:00 PM" to "Registration & Welcome", "6:30 PM" to "Round 1 — AI Matching", "6:50 PM" to "Round 2 — Open Swap", "7:10 PM" to "Round 3 — Industry Focus", "7:30 PM" to "Open Networking", "8:30 PM" to "Feedback & Wrap-up").forEach { (time, activity) ->
-                                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    Text(time, style = MaterialTheme.typography.labelMedium, color = CosmosPrimary, modifier = Modifier.width(56.dp))
-                                    Text(activity, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground)
+                            val scheduleItems = mutableListOf<Pair<String, String>>()
+                            var offset = 0
+                            
+                            scheduleItems.add(addMinutesToTimeString(event.time, offset) to "Registration & Welcome")
+                            offset += 15
+                            
+                            if (eventRounds.isNotEmpty()) {
+                                eventRounds.forEach { round ->
+                                    val roundTime = addMinutesToTimeString(event.time, offset)
+                                    scheduleItems.add(roundTime to "${round.title} (${round.duration} min)")
+                                    offset += round.duration
                                 }
-                                Divider(color = CosmosOutlineVariant.copy(alpha = 0.2f))
+                            } else {
+                                val defaultRounds = listOf(
+                                    "Round 1 — AI Matching" to 20,
+                                    "Round 2 — Open Swap" to 20,
+                                    "Round 3 — Industry Focus" to 20
+                                )
+                                defaultRounds.forEach { (title, duration) ->
+                                    scheduleItems.add(addMinutesToTimeString(event.time, offset) to title)
+                                    offset += duration
+                                }
+                            }
+                            
+                            scheduleItems.add(addMinutesToTimeString(event.time, offset) to "Open Networking")
+                            offset += 60
+                            scheduleItems.add(addMinutesToTimeString(event.time, offset) to "Feedback & Wrap-up")
+                            
+                            Column {
+                                scheduleItems.forEach { (time, activity) ->
+                                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                        Text(time, style = MaterialTheme.typography.labelMedium, color = CosmosPrimary, modifier = Modifier.width(80.dp))
+                                        Text(activity, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground)
+                                    }
+                                    Divider(color = CosmosOutlineVariant.copy(alpha = 0.2f))
+                                }
                             }
                         }
                     }
@@ -707,13 +745,14 @@ fun EventLobbyScreen(
                                     }
                                 } else {
                                     roundsWithOtherParticipant.forEachIndexed { index, (round, member) ->
+                                        val roundStartTime = getRoundStartTime(event.time, eventRounds, index)
                                         CosmosGlassCard(showTopGradientBorder = false) {
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                                 Text("Round ${index + 1}", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary, modifier = Modifier.width(64.dp))
                                                 CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, size = 40.dp)
                                                 Column(modifier = Modifier.weight(1f)) {
                                                     Text(member.name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
-                                                    Text("${round.duration} min · ${if (index == 0) "6:30 PM" else "6:50 PM"}", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                                                    Text("${round.duration} min · $roundStartTime", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
                                                 }
                                             }
                                         }
@@ -745,6 +784,11 @@ fun PostEventScreen(
     var maxParticipants by remember { mutableStateOf("50") }
     var isPaid by remember { mutableStateOf(false) }
     var price by remember { mutableStateOf("") }
+
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    val datePickerState = rememberDatePickerState()
+    val timePickerState = rememberTimePickerState()
     
     val isCreating by eventViewModel.isCreatingEvent.collectAsState()
 
@@ -781,18 +825,20 @@ fun PostEventScreen(
                 }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        EventTextField(
-                            value = date,
-                            onValueChange = { date = it },
+                        EventPickerField(
                             label = "Date",
-                            placeholder = "e.g., Oct 25",
+                            value = date,
+                            placeholder = "Select Date",
+                            icon = Icons.Default.Event,
+                            onClick = { showDatePicker = true },
                             modifier = Modifier.weight(1f)
                         )
-                        EventTextField(
-                            value = time,
-                            onValueChange = { time = it },
+                        EventPickerField(
                             label = "Time",
-                            placeholder = "e.g., 6:00 PM",
+                            value = time,
+                            placeholder = "Select Time",
+                            icon = Icons.Default.Schedule,
+                            onClick = { showTimePicker = true },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -872,6 +918,171 @@ fun PostEventScreen(
             }
         }
     }
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val utcCal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+                            utcCal.timeInMillis = millis
+                            
+                            val localCal = java.util.Calendar.getInstance()
+                            localCal.set(utcCal.get(java.util.Calendar.YEAR), utcCal.get(java.util.Calendar.MONTH), utcCal.get(java.util.Calendar.DAY_OF_MONTH))
+                            
+                            val format = SimpleDateFormat("MMM d, yyyy", Locale.US)
+                            date = format.format(localCal.time)
+                        }
+                        showDatePicker = false
+                    }
+                ) {
+                    Text("Select", color = CosmosPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel", color = CosmosOnSurfaceVariant)
+                }
+            },
+            colors = DatePickerDefaults.colors(
+                containerColor = Color(0xFF16191F),
+                titleContentColor = CosmosOnBackground,
+                headlineContentColor = CosmosOnBackground,
+                weekdayContentColor = CosmosOnSurfaceVariant,
+                subheadContentColor = CosmosOnSurfaceVariant,
+                navigationContentColor = CosmosOnBackground,
+                yearContentColor = CosmosOnSurfaceVariant,
+                selectedYearContentColor = Color.White,
+                selectedYearContainerColor = CosmosPrimaryContainer,
+                dayContentColor = CosmosOnBackground,
+                selectedDayContentColor = Color.White,
+                selectedDayContainerColor = CosmosGradientStart,
+                todayContentColor = CosmosPrimary,
+                todayDateBorderColor = CosmosPrimary
+            ),
+            shape = RoundedCornerShape(24.dp)
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showTimePicker) {
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val cal = java.util.Calendar.getInstance()
+                        cal.set(java.util.Calendar.HOUR_OF_DAY, timePickerState.hour)
+                        cal.set(java.util.Calendar.MINUTE, timePickerState.minute)
+                        val format = SimpleDateFormat("h:mm a", Locale.US)
+                        time = format.format(cal.time)
+                        showTimePicker = false
+                    }
+                ) {
+                    Text("Select", color = CosmosPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) {
+                    Text("Cancel", color = CosmosOnSurfaceVariant)
+                }
+            },
+            title = {
+                Text(
+                    text = "Select Time",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = CosmosOnBackground,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    TimePicker(
+                        state = timePickerState,
+                        colors = TimePickerDefaults.colors(
+                            clockDialColor = CosmosSurfaceContainerHigh,
+                            clockDialSelectedContentColor = Color.White,
+                            clockDialUnselectedContentColor = CosmosOnSurfaceVariant,
+                            selectorColor = CosmosPrimary,
+                            periodSelectorBorderColor = CosmosOutlineVariant,
+                            periodSelectorSelectedContainerColor = CosmosPrimaryContainer,
+                            periodSelectorUnselectedContainerColor = CosmosSurfaceContainerLow,
+                            periodSelectorSelectedContentColor = Color.White,
+                            periodSelectorUnselectedContentColor = CosmosOnSurfaceVariant,
+                            timeSelectorSelectedContainerColor = CosmosPrimaryContainer,
+                            timeSelectorUnselectedContainerColor = CosmosSurfaceContainerLow,
+                            timeSelectorSelectedContentColor = Color.White,
+                            timeSelectorUnselectedContentColor = CosmosOnSurfaceVariant
+                        )
+                    )
+                }
+            },
+            containerColor = Color(0xFF16191F),
+            shape = RoundedCornerShape(24.dp)
+        )
+    }
+}
+
+@Composable
+fun EventPickerField(
+    label: String,
+    value: String,
+    placeholder: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = CosmosOnSurfaceVariant,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(CosmosSurfaceContainerLow)
+                .border(1.dp, CosmosOutlineVariant, RoundedCornerShape(12.dp))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (value.isEmpty()) {
+                    Text(
+                        text = placeholder,
+                        color = CosmosOnSurfaceVariant.copy(alpha = 0.5f),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                } else {
+                    Text(
+                        text = value,
+                        color = CosmosOnBackground,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = CosmosPrimary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -911,3 +1122,42 @@ fun EventTextField(
         )
     }
 }
+
+fun addMinutesToTimeString(timeStr: String, minutesToAdd: Int): String {
+    val regex = """(\d{1,2}):(\d{2})\s*(AM|PM)(?:\s+(\w+))?""".toRegex(RegexOption.IGNORE_CASE)
+    val match = regex.find(timeStr.trim())
+    if (match != null) {
+        var hour = match.groupValues[1].toInt()
+        val minute = match.groupValues[2].toInt()
+        val amPm = match.groupValues[3].uppercase()
+        val tz = match.groupValues[4]
+        
+        if (amPm == "PM" && hour < 12) hour += 12
+        if (amPm == "AM" && hour == 12) hour = 0
+        
+        val calendar = java.util.Calendar.getInstance()
+        calendar.set(java.util.Calendar.HOUR_OF_DAY, hour)
+        calendar.set(java.util.Calendar.MINUTE, minute)
+        calendar.add(java.util.Calendar.MINUTE, minutesToAdd)
+        
+        val newHour24 = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+        val newMinute = calendar.get(java.util.Calendar.MINUTE)
+        
+        val newAmPm = if (newHour24 >= 12) "PM" else "AM"
+        var newHour12 = newHour24 % 12
+        if (newHour12 == 0) newHour12 = 12
+        
+        val timeFormatted = String.format(java.util.Locale.US, "%d:%02d %s", newHour12, newMinute, newAmPm)
+        return if (!tz.isNullOrEmpty()) "$timeFormatted $tz" else timeFormatted
+    }
+    return timeStr
+}
+
+fun getRoundStartTime(eventTime: String, rounds: List<com.cosmos.app.data.model.EventRound>, roundIndex: Int): String {
+    var offset = 15 // 15 mins for welcome session
+    for (i in 0 until roundIndex) {
+        offset += rounds.getOrNull(i)?.duration ?: 15
+    }
+    return addMinutesToTimeString(eventTime, offset)
+}
+

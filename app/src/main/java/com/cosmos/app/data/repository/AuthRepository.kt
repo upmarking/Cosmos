@@ -10,13 +10,20 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.storage.FirebaseStorage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import com.google.firebase.auth.FirebaseUser
 
 interface AuthRepository {
     val currentUser: Flow<Member?>
@@ -38,120 +45,209 @@ class FirebaseAuthRepository(
 ) : AuthRepository {
 
     override val currentUserId: String?
-        get() = if (ServiceLocator.forceMockMode) {
-            ServiceLocator.mockAuthRepository.currentUserId
-        } else {
-            auth.currentUser?.uid
-        }
+        get() = auth.currentUser?.uid
 
-    private val firebaseCurrentUser: Flow<Member?> = callbackFlow {
-        val authListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
-            val firebaseUser = firebaseAuth.currentUser
-            if (firebaseUser == null) {
-                trySend(null)
-            } else {
-                // Fetch user data from Firestore
-                val docRef = firestore.collection("users").document(firebaseUser.uid)
-                val registration = docRef.addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        trySend(null)
-                        return@addSnapshotListener
-                    }
-                    if (snapshot != null && snapshot.exists()) {
-                        val member = mapDocumentToMember(snapshot.id, snapshot.data ?: emptyMap())
-                        trySend(member)
-                    } else {
-                        // Document does not exist yet (onboarding incomplete)
-                        trySend(
-                            Member(
-                                id = firebaseUser.uid,
-                                name = firebaseUser.displayName ?: "",
-                                headline = "",
-                                role = "",
-                                company = "",
-                                avatarUrl = "",
-                                email = firebaseUser.email ?: "",
-                                membershipTier = MembershipTier.EXPLORER
-                            )
-                        )
-                    }
-                }
-                // Close firestore snapshot listener when auth state changes or flow cancelled
-                invokeOnClose {
-                    registration.remove()
-                }
-            }
+    // A dedicated scope for the repository-level hot flows.
+    // SupervisorJob ensures one child failure doesn't cancel the whole scope.
+    private val repoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // ── Step 1: Auth state as a hot shared flow ───────────────────────────────
+    // shareIn(Eagerly) starts collecting immediately and replays the last
+    // value to every new subscriber — no cold-start lag.
+    private val firebaseUserFlow: Flow<FirebaseUser?> = callbackFlow {
+        // Emit the current user synchronously so the first subscriber
+        // gets a value without waiting for the listener to fire.
+        trySend(auth.currentUser)
+        val authListener = FirebaseAuth.AuthStateListener { fa ->
+            trySend(fa.currentUser)
         }
         auth.addAuthStateListener(authListener)
-        awaitClose {
-            auth.removeAuthStateListener(authListener)
-        }
+        awaitClose { auth.removeAuthStateListener(authListener) }
     }
+        .distinctUntilChanged()
+        .shareIn(
+            scope = repoScope,
+            started = SharingStarted.Eagerly,
+            replay = 1          // new subscribers immediately get the last auth state
+        )
 
-    override val currentUser: Flow<Member?> = callbackFlow {
-        var currentJob: kotlinx.coroutines.Job? = null
-        
-        val monitorJob = launch {
-            var lastMode: Boolean? = null
-            while (isActive) {
-                val mode = ServiceLocator.forceMockMode
-                if (mode != lastMode) {
-                    lastMode = mode
-                    currentJob?.cancel()
-                    currentJob = launch {
-                        if (mode) {
-                            ServiceLocator.mockAuthRepository.currentUser.collect {
-                                send(it)
+    // ── Step 2: User document as a hot shared flow ────────────────────────────
+    // flatMapLatest switches to a new Firestore listener whenever auth changes.
+    // shareIn(Eagerly, replay=1) means:
+    //   • only ONE Firestore listener is ever active (no matter how many subscribers)
+    //   • any new subscriber immediately gets the last emitted Member (no spinner)
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    override val currentUser: Flow<Member?> = firebaseUserFlow
+        .flatMapLatest { firebaseUser ->
+            if (firebaseUser == null) return@flatMapLatest flowOf(null)
+
+            callbackFlow<Member?> {
+                var skillsJob: kotlinx.coroutines.Job? = null
+
+                val firestoreListener = firestore
+                    .collection("users")
+                    .document(firebaseUser.uid)
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            // Log the error but DO NOT emit null — keep showing the last
+                            // known good value so the UI doesn't blank out on a transient error.
+                            android.util.Log.e("CosmosAuth", "Firestore snapshot listener error", error)
+                            error.printStackTrace()
+                            return@addSnapshotListener
+                        }
+
+                        if (snapshot != null && snapshot.exists()) {
+                            // Cancel any in-flight skills fetch from a previous snapshot
+                            skillsJob?.cancel()
+                            skillsJob = launch {
+                                val member = mapDocumentToMember(
+                                    snapshot.id,
+                                    snapshot.data ?: emptyMap()
+                                ).copy(isFromCache = snapshot.metadata.isFromCache)
+
+                                // If the existing profile is blank/incomplete, check if we can populate it from a seed user
+                                if (member.name.isBlank()) {
+                                    try {
+                                        val email = firebaseUser.email
+                                        if (!email.isNullOrBlank()) {
+                                            val seedQuery = firestore.collection("users")
+                                                .whereEqualTo("email", email.trim().lowercase())
+                                                .get()
+                                                .await()
+                                            val seedDoc = seedQuery.documents.firstOrNull { it.id != firebaseUser.uid }
+                                            if (seedDoc != null && seedDoc.exists()) {
+                                                val data = seedDoc.data?.toMutableMap() ?: mutableMapOf<String, Any>()
+                                                data["id"] = firebaseUser.uid
+                                                
+                                                // Write user document
+                                                firestore.collection("users")
+                                                    .document(firebaseUser.uid)
+                                                    .set(data)
+                                                    .await()
+                                                
+                                                // Copy skills subcollection
+                                                val skillsQuery = seedDoc.reference.collection("skills").get().await()
+                                                for (skillDoc in skillsQuery.documents) {
+                                                    firestore.collection("users")
+                                                        .document(firebaseUser.uid)
+                                                        .collection("skills")
+                                                        .document(skillDoc.id)
+                                                        .set(skillDoc.data ?: emptyMap<String, Any>())
+                                                        .await()
+                                                }
+                                                return@launch
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("CosmosAuth", "Error cloning seed profile inside exists", e)
+                                    }
+                                }
+
+                                // 1. Emit basic member data IMMEDIATELY so the UI unblocks
+                                trySend(member)
+
+                                // 2. Fetch skills in the background and emit again
+                                val skills = runCatching {
+                                    firestore.collection("users")
+                                        .document(snapshot.id)
+                                        .collection("skills")
+                                        .get()
+                                        .await()
+                                        .documents
+                                        .map { doc ->
+                                            com.cosmos.app.data.model.EndorsedSkill(
+                                                name = doc.getString("name") ?: "",
+                                                count = doc.getLong("count")?.toInt() ?: 0,
+                                                endorsers = (doc.get("endorsers") as? List<*>)
+                                                    ?.filterIsInstance<String>() ?: emptyList()
+                                            )
+                                        }
+                                }.getOrDefault(emptyList())
+
+                                trySend(member.copy(endorsedSkills = skills))
                             }
                         } else {
-                            firebaseCurrentUser.collect {
-                                send(it)
+                            // Document does not exist (new user / just deleted / cache miss).
+                            // Check if there is a seeded profile with this email that needs to be cloned to the new UID.
+                            launch {
+                                try {
+                                    val email = firebaseUser.email
+                                    if (!email.isNullOrBlank()) {
+                                        val seedQuery = firestore.collection("users")
+                                            .whereEqualTo("email", email.trim().lowercase())
+                                            .get()
+                                            .await()
+                                        val seedDoc = seedQuery.documents.firstOrNull { it.id != firebaseUser.uid }
+                                        if (seedDoc != null && seedDoc.exists()) {
+                                            val data = seedDoc.data?.toMutableMap() ?: mutableMapOf<String, Any>()
+                                            data["id"] = firebaseUser.uid
+                                            
+                                            // Write user document
+                                            firestore.collection("users")
+                                                .document(firebaseUser.uid)
+                                                .set(data)
+                                                .await()
+                                            
+                                            // Copy skills subcollection
+                                            val skillsQuery = seedDoc.reference.collection("skills").get().await()
+                                            for (skillDoc in skillsQuery.documents) {
+                                                firestore.collection("users")
+                                                    .document(firebaseUser.uid)
+                                                    .collection("skills")
+                                                    .document(skillDoc.id)
+                                                    .set(skillDoc.data ?: emptyMap<String, Any>())
+                                                    .await()
+                                            }
+                                            // The addSnapshotListener will trigger automatically upon creation.
+                                            return@launch
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("CosmosAuth", "Error cloning seed profile", e)
+                                }
+
+                                val defaultMember = Member(
+                                    id = firebaseUser.uid,
+                                    name = firebaseUser.displayName ?: "",
+                                    headline = "",
+                                    role = "",
+                                    company = "",
+                                    avatarUrl = "",
+                                    email = firebaseUser.email ?: "",
+                                    membershipTier = MembershipTier.EXPLORER,
+                                    primaryUserType = "",
+                                    isProfileComplete = false,
+                                    isFromCache = snapshot?.metadata?.isFromCache ?: false
+                                )
+                                trySend(defaultMember)
                             }
                         }
                     }
-                }
-                kotlinx.coroutines.delay(200)
+
+                awaitClose { firestoreListener.remove() }
             }
         }
-        
-        awaitClose {
-            monitorJob.cancel()
-            currentJob?.cancel()
-        }
-    }
+        .distinctUntilChanged()
+        .shareIn(
+            scope = repoScope,
+            started = SharingStarted.Eagerly,
+            replay = 1          // replay the last Member to any new collector
+        )
 
     override suspend fun signIn(email: String, password: String): Result<Unit> {
-        // Validate inputs
         val emailValidation = ValidationUtils.validateEmail(email)
         if (!emailValidation.isValid) return Result.failure(Exception(emailValidation.errorMessage))
         if (password.isBlank()) return Result.failure(Exception("Password is required"))
 
-        if (ServiceLocator.forceMockMode) {
-            return ServiceLocator.mockAuthRepository.signIn(email, password)
-        }
         return try {
-            val result = auth.signInWithEmailAndPassword(email.trim(), password).await()
-            val firebaseUser = result.user ?: throw IllegalStateException("Firebase user is null")
-            
-            // Sync credentials to mock store so we keep them aligned in mixed mode
-            val normalizedEmail = email.trim().lowercase()
-            LocalStore.userPasswords[normalizedEmail] = password
-            LocalStore.userEmailsToIds[normalizedEmail] = firebaseUser.uid
-            LocalStore.save()
-            
+            auth.signInWithEmailAndPassword(email.trim(), password).await()
             Result.success(Unit)
         } catch (e: Exception) {
-            if (e.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
-                ServiceLocator.forceMockMode = true
-                ServiceLocator.mockAuthRepository.signIn(email, password)
-            } else {
-                Result.failure(e)
-            }
+            Result.failure(e)
         }
     }
 
     override suspend fun signUp(email: String, password: String, name: String, primaryType: String): Result<Unit> {
-        // Validate inputs
         val emailValidation = ValidationUtils.validateEmail(email)
         if (!emailValidation.isValid) return Result.failure(Exception(emailValidation.errorMessage))
         val passwordValidation = ValidationUtils.validatePassword(password)
@@ -159,14 +255,10 @@ class FirebaseAuthRepository(
         val nameValidation = ValidationUtils.validateName(name)
         if (!nameValidation.isValid) return Result.failure(Exception(nameValidation.errorMessage))
 
-        if (ServiceLocator.forceMockMode) {
-            return ServiceLocator.mockAuthRepository.signUp(email, password, name, primaryType)
-        }
         return try {
             val result = auth.createUserWithEmailAndPassword(email.trim(), password).await()
             val uid = result.user?.uid ?: throw IllegalStateException("UID not found after signup")
 
-            // Initialize basic document in Firestore
             val basicUserMap = mapOf(
                 "id" to uid,
                 "name" to name.trim(),
@@ -190,52 +282,31 @@ class FirebaseAuthRepository(
                 "connectionsCount" to 0,
                 "eventsAttended" to 0,
                 "followUpsCompleted" to 0,
+                "joinedCircles" to emptyList<String>(),
+                "pendingCircles" to emptyList<String>(),
                 "createdAt" to FieldValue.serverTimestamp(),
                 "updatedAt" to FieldValue.serverTimestamp()
             )
             firestore.collection("users").document(uid).set(basicUserMap).await()
 
-            // Sync to mock store
-            val normalizedEmail = email.trim().lowercase()
-            val newUser = Member(
-                id = uid, name = name.trim(), email = normalizedEmail,
-                headline = "$primaryType at Cosmos", role = primaryType, company = "Cosmos",
-                avatarUrl = "", location = "",
-                membershipTier = MembershipTier.EXPLORER, primaryUserType = primaryType,
-                userRole = UserRole.ORGANIZER
-            )
-            LocalStore.users[uid] = newUser
-            LocalStore.userPasswords[normalizedEmail] = password
-            LocalStore.userEmailsToIds[normalizedEmail] = uid
-            LocalStore.save()
-
             Result.success(Unit)
         } catch (e: FirebaseAuthUserCollisionException) {
             Result.failure(Exception("An account already exists with this email. Please sign in instead."))
         } catch (e: Exception) {
-            if (e.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
-                ServiceLocator.forceMockMode = true
-                ServiceLocator.mockAuthRepository.signUp(email, password, name, primaryType)
-            } else {
-                Result.failure(e)
-            }
+            Result.failure(e)
         }
     }
 
     override suspend fun signOut(): Result<Unit> {
-        val mockResult = ServiceLocator.mockAuthRepository.signOut()
         return try {
             auth.signOut()
-            mockResult
+            Result.success(Unit)
         } catch (e: Exception) {
-            mockResult
+            Result.failure(e)
         }
     }
 
     override suspend fun saveOnboardingData(member: Member): Result<Unit> {
-        if (ServiceLocator.forceMockMode) {
-            return ServiceLocator.mockAuthRepository.saveOnboardingData(member)
-        }
         return runCatching {
             val uid = auth.currentUser?.uid ?: throw IllegalStateException("User not logged in")
             val dataMap = mapOf(
@@ -253,7 +324,7 @@ class FirebaseAuthRepository(
                 "lookingFor" to member.lookingFor,
                 "availabilityPreferences" to member.availabilityPreferences,
                 "isLinkedInConnected" to member.isLinkedInConnected,
-                "isProfileComplete" to true,
+                "isProfileComplete" to member.isProfileComplete,
                 "membershipTier" to member.membershipTier.name,
                 "primaryUserType" to member.primaryUserType,
                 "isRestricted" to member.isRestricted,
@@ -276,23 +347,17 @@ class FirebaseAuthRepository(
                 "blockedUsers" to member.blockedUsers,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
-            // Use set() with merge=true so it works even if the document doesn't exist yet
             firestore.collection("users").document(uid).set(dataMap, SetOptions.merge()).await()
         }
     }
 
     override suspend fun uploadProfileImage(uid: String, bytes: ByteArray): Result<String> {
-        if (ServiceLocator.forceMockMode) {
-            return ServiceLocator.mockAuthRepository.uploadProfileImage(uid, bytes)
-        }
         return try {
             val storageRef = FirebaseStorage.getInstance().reference.child("avatars/$uid.jpg")
             storageRef.putBytes(bytes).await()
             val downloadUrl = storageRef.downloadUrl.await()
             Result.success(downloadUrl.toString())
         } catch (e: Exception) {
-            // Profile photo upload is optional. If Firebase Storage is not configured
-            // we silently skip the photo and let onboarding continue normally.
             e.printStackTrace()
             Result.success("") // always succeed so onboarding is never blocked
         }
@@ -302,48 +367,23 @@ class FirebaseAuthRepository(
         val emailValidation = ValidationUtils.validateEmail(email)
         if (!emailValidation.isValid) return Result.failure(Exception(emailValidation.errorMessage))
 
-        // Always try Firebase Auth first regardless of mock mode,
-        // because password reset emails can ONLY be sent by Firebase Auth.
         return try {
             auth.sendPasswordResetEmail(email.trim()).await()
             Result.success(Unit)
         } catch (e: Exception) {
             e.printStackTrace()
-            // Return the actual exception so we can see the exact Firebase error (e.g. invalid user or configuration error)
             Result.failure(e)
         }
     }
 
     override suspend fun deleteAccount(): Result<Unit> {
-        val mockResult = ServiceLocator.mockAuthRepository.deleteAccount()
-        if (ServiceLocator.forceMockMode) {
-            return mockResult
-        }
         return try {
             val uid = auth.currentUser?.uid ?: throw IllegalStateException("Not logged in")
-            val email = auth.currentUser?.email ?: ""
-            // Delete Firestore user document
             firestore.collection("users").document(uid).delete().await()
-            // Delete auth account
             auth.currentUser?.delete()?.await()
-
-            // Sync to mock store
-            LocalStore.users.remove(uid)
-            val emailNorm = email.trim().lowercase()
-            if (emailNorm.isNotBlank()) {
-                LocalStore.userPasswords.remove(emailNorm)
-                LocalStore.userEmailsToIds.remove(emailNorm)
-            }
-            LocalStore.save()
-
             Result.success(Unit)
         } catch (e: Exception) {
-            if (e.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
-                ServiceLocator.forceMockMode = true
-                mockResult
-            } else {
-                Result.failure(e)
-            }
+            Result.failure(e)
         }
     }
 
@@ -351,35 +391,11 @@ class FirebaseAuthRepository(
         val emailValidation = ValidationUtils.validateEmail(newEmail)
         if (!emailValidation.isValid) return Result.failure(Exception(emailValidation.errorMessage))
 
-        val mockResult = ServiceLocator.mockAuthRepository.updateEmail(newEmail)
-        if (ServiceLocator.forceMockMode) {
-            return mockResult
-        }
         return try {
-            val user = auth.currentUser ?: throw IllegalStateException("User not logged in")
-            val oldEmail = user.email ?: throw IllegalStateException("User email not found")
             auth.currentUser?.verifyBeforeUpdateEmail(newEmail.trim())?.await()
-
-            // Sync to mock store on successful Firebase update
-            val oldEmailNorm = oldEmail.trim().lowercase()
-            val newEmailNorm = newEmail.trim().lowercase()
-            if (oldEmailNorm.isNotBlank()) {
-                val pwd = LocalStore.userPasswords[oldEmailNorm]
-                LocalStore.userPasswords.remove(oldEmailNorm)
-                LocalStore.userEmailsToIds.remove(oldEmailNorm)
-                if (pwd != null) LocalStore.userPasswords[newEmailNorm] = pwd
-            }
-            LocalStore.userEmailsToIds[newEmailNorm] = user.uid
-            LocalStore.save()
-
             Result.success(Unit)
         } catch (e: Exception) {
-            if (e.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
-                ServiceLocator.forceMockMode = true
-                mockResult
-            } else {
-                Result.failure(e)
-            }
+            Result.failure(e)
         }
     }
 
@@ -388,29 +404,15 @@ class FirebaseAuthRepository(
         val passwordValidation = ValidationUtils.validatePassword(newPassword)
         if (!passwordValidation.isValid) return Result.failure(Exception(passwordValidation.errorMessage))
 
-        val mockResult = ServiceLocator.mockAuthRepository.updatePassword(currentPassword, newPassword)
-        if (ServiceLocator.forceMockMode) {
-            return mockResult
-        }
         return try {
             val user = auth.currentUser ?: throw IllegalStateException("User not logged in")
             val email = user.email ?: throw IllegalStateException("User email not found")
             val credential = com.google.firebase.auth.EmailAuthProvider.getCredential(email, currentPassword)
             user.reauthenticate(credential).await()
             user.updatePassword(newPassword).await()
-
-            // Sync to mock store on successful Firebase update
-            LocalStore.userPasswords[email.trim().lowercase()] = newPassword
-            LocalStore.save()
-
             Result.success(Unit)
         } catch (e: Exception) {
-            if (e.message?.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) == true) {
-                ServiceLocator.forceMockMode = true
-                mockResult
-            } else {
-                Result.failure(e)
-            }
+            Result.failure(e)
         }
     }
 

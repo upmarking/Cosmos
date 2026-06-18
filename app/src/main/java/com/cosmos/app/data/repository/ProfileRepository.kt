@@ -7,9 +7,11 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.FieldValue
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 
 interface ProfileRepository {
-    suspend fun getProfile(userId: String): Result<Member>
+    suspend fun getProfile(userId: String, fetchSkills: Boolean = true): Result<Member>
     suspend fun getAllProfiles(): Result<List<Member>>
     suspend fun getDiscoveryDeck(currentUserId: String): Result<List<Member>>
     suspend fun endorseSkill(userId: String, endorserName: String, skillName: String): Result<Unit>
@@ -23,29 +25,41 @@ class FirestoreProfileRepository(
     private val firestore: FirebaseFirestore
 ) : ProfileRepository {
 
-    override suspend fun getProfile(userId: String): Result<Member> = runCatching {
-        val snapshot = firestore.collection("users").document(userId).get().await()
-        if (!snapshot.exists()) {
-            throw IllegalArgumentException("User profile $userId not found")
+    override suspend fun getProfile(userId: String, fetchSkills: Boolean): Result<Member> = runCatching {
+        if (fetchSkills) {
+            kotlinx.coroutines.coroutineScope {
+                val docDeferred = async { firestore.collection("users").document(userId).get().await() }
+                val skillsDeferred = async { getEndorsedSkills(userId).getOrDefault(emptyList()) }
+                
+                val snapshot = docDeferred.await()
+                if (!snapshot.exists()) {
+                    throw IllegalArgumentException("User profile $userId not found")
+                }
+                val member = FirebaseAuthRepository.mapDocumentToMember(snapshot.id, snapshot.data ?: emptyMap())
+                val skills = skillsDeferred.await()
+                member.copy(endorsedSkills = skills)
+            }
+        } else {
+            val snapshot = firestore.collection("users").document(userId).get().await()
+            if (!snapshot.exists()) {
+                throw IllegalArgumentException("User profile $userId not found")
+            }
+            FirebaseAuthRepository.mapDocumentToMember(snapshot.id, snapshot.data ?: emptyMap())
         }
-        val member = FirebaseAuthRepository.mapDocumentToMember(snapshot.id, snapshot.data ?: emptyMap())
-        // Load endorsed skills
-        val skills = getEndorsedSkills(userId).getOrDefault(emptyList())
-        member.copy(endorsedSkills = skills)
     }
 
     override suspend fun getAllProfiles(): Result<List<Member>> = runCatching {
         val snapshot = firestore.collection("users").get().await()
-        snapshot.documents.map { doc ->
-            val member = FirebaseAuthRepository.mapDocumentToMember(doc.id, doc.data ?: emptyMap())
-            val skills = getEndorsedSkills(doc.id).getOrDefault(emptyList())
-            member.copy(endorsedSkills = skills)
-        }
+        snapshot.documents
+            .filter { doc -> !doc.id.startsWith("mock_user_") }
+            .map { doc ->
+                FirebaseAuthRepository.mapDocumentToMember(doc.id, doc.data ?: emptyMap())
+            }
     }
 
     override suspend fun getDiscoveryDeck(currentUserId: String): Result<List<Member>> = runCatching {
-        // 1. Fetch current user profile
-        val currentUser = getProfile(currentUserId).getOrThrow()
+        // 1. Fetch current user profile (skills are not needed for discovery scoring)
+        val currentUser = getProfile(currentUserId, fetchSkills = false).getOrThrow()
         
         // 2. Fetch all swiped UIDs to exclude them
         val swipedSnapshot = firestore.collection("swipes")
@@ -59,12 +73,11 @@ class FirestoreProfileRepository(
             .filter { doc ->
                 doc.id != currentUserId &&
                 !swipedUserIds.contains(doc.id) &&
-                doc.getBoolean("isRestricted") != true
+                doc.getBoolean("isRestricted") != true &&
+                !doc.id.startsWith("mock_user_")
             }
             .map { doc ->
-                val member = FirebaseAuthRepository.mapDocumentToMember(doc.id, doc.data ?: emptyMap())
-                val skills = getEndorsedSkills(doc.id).getOrDefault(emptyList())
-                member.copy(endorsedSkills = skills)
+                FirebaseAuthRepository.mapDocumentToMember(doc.id, doc.data ?: emptyMap())
             }
 
         // 4. Rank candidates based on matching rules
@@ -195,10 +208,10 @@ class FirestoreProfileRepository(
         }
 
         val snapshot = query.get().await()
-        snapshot.documents.map { doc ->
-            val member = FirebaseAuthRepository.mapDocumentToMember(doc.id, doc.data ?: emptyMap())
-            val skills = getEndorsedSkills(doc.id).getOrDefault(emptyList())
-            member.copy(endorsedSkills = skills)
-        }
+        snapshot.documents
+            .filter { doc -> !doc.id.startsWith("mock_user_") }
+            .map { doc ->
+                FirebaseAuthRepository.mapDocumentToMember(doc.id, doc.data ?: emptyMap())
+            }
     }
 }

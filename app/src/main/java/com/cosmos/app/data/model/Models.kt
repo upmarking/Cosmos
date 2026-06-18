@@ -59,7 +59,8 @@ data class Member(
     val privacyDataAnalytics: Boolean = true,
     val monthlyConnectionLimit: Int = 10,
     val matchingPreferences: List<String> = emptyList(),
-    val blockedUsers: List<String> = emptyList()
+    val blockedUsers: List<String> = emptyList(),
+    val isFromCache: Boolean = false
 ) {
     /** Computed: whether core profile fields have been filled */
     val profileCompletionPercent: Int
@@ -225,6 +226,31 @@ data class CirclePost(
     val likesCount: Int = 0,
     val repliesCount: Int = 0
 )
+
+data class SocialPost(
+    val id: String = "",
+    val authorId: String,
+    val authorName: String,
+    val authorAvatarUrl: String,
+    val authorHeadline: String,
+    val content: String,
+    val timeString: String,
+    val imageUrl: String? = null,
+    val likesCount: Int = 0,
+    val repliesCount: Int = 0,
+    val likes: List<String> = emptyList()
+)
+
+data class SocialPostReply(
+    val id: String = "",
+    val authorId: String,
+    val authorName: String,
+    val authorAvatarUrl: String,
+    val authorHeadline: String,
+    val content: String,
+    val timeString: String
+)
+
 
 data class Notification(
     val id: String,

@@ -10,6 +10,8 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 interface IntroRepository {
     suspend fun requestWarmIntro(requesterId: String, targetId: String, connectorId: String, message: String): Result<Unit>
@@ -65,9 +67,16 @@ class FirestoreIntroRepository(
         val statusStr = data["status"] as? String ?: IntroStatus.PENDING.name
         val status = runCatching { IntroStatus.valueOf(statusStr) }.getOrDefault(IntroStatus.PENDING)
 
-        val requester = profileRepository.getProfile(requesterId).getOrThrow()
-        val target = profileRepository.getProfile(targetId).getOrThrow()
-        val connector = profileRepository.getProfile(connectorId).getOrThrow()
+        val (requester, target, connector) = coroutineScope {
+            val requesterDef = async { profileRepository.getProfile(requesterId) }
+            val targetDef = async { profileRepository.getProfile(targetId) }
+            val connectorDef = async { profileRepository.getProfile(connectorId) }
+            Triple(
+                requesterDef.await().getOrThrow(),
+                targetDef.await().getOrThrow(),
+                connectorDef.await().getOrThrow()
+            )
+        }
 
         IntroRequest(
             id = doc.id,
@@ -138,7 +147,8 @@ class FirestoreIntroRepository(
             .whereEqualTo("connectorId", userId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    android.util.Log.e("IntroRepository", "Error fetching intro requests: ${error.message}", error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 if (snapshot == null) {

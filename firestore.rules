@@ -24,14 +24,22 @@ service cloud.firestore {
     // 1. Users collection rules
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow write: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId)
+                    || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['connectionsCount']))
+                    || (isSignedIn() && userId.matches('mock_user_.*'));
+
+      match /skills/{skillId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn();
+      }
     }
 
     // 2. Swipes collection rules
     match /swipes/{swipeId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && resource.data.likerId == request.auth.uid;
       allow create, update: if isSignedIn() && request.auth.uid == request.resource.data.likerId;
-      allow delete: if false;
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.likerId;
     }
 
     // 3. Connections collection rules
@@ -41,7 +49,7 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.auth.uid in request.resource.data.members;
       // Allow updates to labels, goal, status if user is member
       allow update: if isSignedIn() && request.auth.uid in resource.data.members;
-      allow delete: if false;
+      allow delete: if isSignedIn() && request.auth.uid in resource.data.members;
 
       match /messages/{messageId} {
         allow read, write: if isConnectionMember(connectionId);
@@ -51,11 +59,19 @@ service cloud.firestore {
     // 4. Events collection rules
     match /events/{eventId} {
       allow read: if isSignedIn();
-      allow write: if false; // Admins create events
+      allow write: if isSignedIn(); // Or check request.auth.uid for admin roles
 
       match /registrants/{userId} {
         allow read: if isSignedIn();
         allow write: if isOwner(userId);
+      }
+
+      match /rounds/{roundId} {
+        allow read, write: if isSignedIn();
+
+        match /feedback/{feedbackId} {
+          allow read, write: if isSignedIn();
+        }
       }
     }
 
@@ -69,7 +85,7 @@ service cloud.firestore {
 
       match /members/{userId} {
         allow read: if isSignedIn();
-        allow write: if isOwner(userId);
+        allow write: if isOwner(userId) || (isSignedIn() && userId.matches('mock_user_.*'));
       }
 
       match /posts/{postId} {
@@ -79,9 +95,25 @@ service cloud.firestore {
       }
     }
 
+    // 10. Social Posts collection rules
+    match /social_posts/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'likesCount', 'repliesCount']));
+
+      match /replies/{replyId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+      }
+    }
+
     // 6. Connection Requests collection rules
     match /connection_requests/{requestId} {
-      allow read: if isSignedIn() && (
+      // Allow reading individual request if user is sender or receiver
+      // We allow 'get' freely to support checking for existence before creating
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && (
         resource.data.senderId == request.auth.uid ||
         resource.data.receiverId == request.auth.uid
       );
@@ -96,7 +128,8 @@ service cloud.firestore {
     // 7. Notifications collection rules
     match /notifications/{notificationId} {
       allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      // Let clients create notifications (e.g., when warm intro is requested) or mark as read
+      // Allow creation if signed in. Ideally, sensitive notifications should be
+      // created via Cloud Functions, but this allows client-side notification triggers.
       allow create: if isSignedIn();
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid && 
                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
@@ -105,8 +138,21 @@ service cloud.firestore {
 
     // 8. Support tickets rules
     match /support_tickets/{ticketId} {
-      allow create: if isSignedIn();
+      // Ensure the ticket is associated with the authenticated user
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow read, update, delete: if false; // Only admin/backend processes tickets
+    }
+
+    // 9. Intro Requests collection rules
+    match /intro_requests/{requestId} {
+      allow read: if isSignedIn() && (
+        resource.data.requesterId == request.auth.uid ||
+        resource.data.targetId == request.auth.uid ||
+        resource.data.connectorId == request.auth.uid
+      );
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.requesterId;
+      allow update: if isSignedIn() && request.auth.uid == resource.data.connectorId;
+      allow delete: if false;
     }
   }
 }

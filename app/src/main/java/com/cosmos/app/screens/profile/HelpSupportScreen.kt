@@ -79,12 +79,12 @@ fun HelpSupportScreen(
             ),
             FaqItem(
                 "How do I pause my account visibility?",
-                "Go to Profile -> Settings & Privacy -> Privacy, and toggle 'Profile Visibility' off. This stops you from appearing in matchmaking decks while keeping your existing chats and events active.",
+                "Go to Settings -> Control Center -> Privacy, and toggle 'Profile Visibility' off. This stops you from appearing in matchmaking decks while keeping your existing chats and events active.",
                 "Account & Security"
             ),
             FaqItem(
                 "How can I block or report someone?",
-                "Go to the profile of the person you want to block or report, tap the three dots at the top right, and select 'Block' or 'Report'. You can also review your list of blocked users under Settings & Privacy.",
+                "Go to the profile of the person you want to block or report, tap the three dots at the top right, and select 'Block' or 'Report'. You can also review your list of blocked users under Control Center.",
                 "Account & Security"
             )
         )
@@ -278,10 +278,26 @@ fun HelpSupportScreen(
                                         }
                                         isSubmitting = true
                                         coroutineScope.launch {
-                                            val userId = ServiceLocator.authRepository.currentUserId ?: "unknown_user"
-                                            if (ServiceLocator.forceMockMode) {
-                                                // Local mock simulation
-                                                kotlinx.coroutines.delay(1000)
+                                            val userId = ServiceLocator.authRepository.currentUserId
+                                            if (userId == null) {
+                                                Toast.makeText(context, "You must be signed in to submit a request.", Toast.LENGTH_SHORT).show()
+                                                isSubmitting = false
+                                                return@launch
+                                            }
+                                            
+                                            try {
+                                                val ticketData = mapOf(
+                                                    "userId" to userId,
+                                                    "category" to selectedCategory,
+                                                    "description" to descriptionText,
+                                                    "status" to "OPEN",
+                                                    "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                                                )
+                                                com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                                    .collection("support_tickets")
+                                                    .add(ticketData)
+                                                    .await()
+
                                                 ServiceLocator.notificationRepository.createNotification(
                                                     userId = userId,
                                                     type = NotificationType.COMMUNITY_ANNOUNCEMENT,
@@ -289,42 +305,13 @@ fun HelpSupportScreen(
                                                     body = "We received your request about '$selectedCategory'. A representative will review it soon.",
                                                     actionId = "support_${System.currentTimeMillis()}"
                                                 )
-                                            } else {
-                                                // Real database write
-                                                try {
-                                                    val ticketData = mapOf(
-                                                        "userId" to userId,
-                                                        "category" to selectedCategory,
-                                                        "description" to descriptionText,
-                                                        "status" to "OPEN",
-                                                        "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
-                                                    )
-                                                    com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                                                        .collection("support_tickets")
-                                                        .add(ticketData)
-                                                        .await()
-
-                                                    ServiceLocator.notificationRepository.createNotification(
-                                                        userId = userId,
-                                                        type = NotificationType.COMMUNITY_ANNOUNCEMENT,
-                                                        title = "Support Request Received 📥",
-                                                        body = "We received your request about '$selectedCategory'. A representative will review it soon.",
-                                                        actionId = "support_${System.currentTimeMillis()}"
-                                                    )
-                                                } catch (e: Exception) {
-                                                    // In case of Firestore issues, fallback to mock simulation
-                                                    ServiceLocator.notificationRepository.createNotification(
-                                                        userId = userId,
-                                                        type = NotificationType.COMMUNITY_ANNOUNCEMENT,
-                                                        title = "Support Request Received 📥",
-                                                        body = "We received your request about '$selectedCategory'. A representative will review it soon.",
-                                                        actionId = "support_${System.currentTimeMillis()}"
-                                                    )
-                                                }
+                                            } catch (e: Exception) {
+                                                // Log the error for debugging
+                                                android.util.Log.e("HelpSupport", "Error submitting ticket", e)
+                                                Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                                             }
                                             isSubmitting = false
                                             isSubmitted = true
-                                            Toast.makeText(context, "Request submitted successfully!", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 )
