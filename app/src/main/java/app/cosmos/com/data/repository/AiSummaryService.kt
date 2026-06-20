@@ -23,7 +23,7 @@ class GeminiAiSummaryService : AiSummaryService {
             }
 
             val model = GenerativeModel(
-                modelName = "gemini-2.0-flash",
+                modelName = "gemini-2.5-flash-lite",
                 apiKey = key
             )
 
@@ -62,7 +62,7 @@ class GeminiAiSummaryService : AiSummaryService {
             val chatHistory = messages.joinToString("\n") { "${if (it.isOwn) "Me" else "Them"}: ${it.text}" }
 
             val model = GenerativeModel(
-                modelName = "gemini-2.0-flash",
+                modelName = "gemini-2.5-flash-lite",
                 apiKey = key
             )
 
@@ -97,7 +97,7 @@ class GeminiAiSummaryService : AiSummaryService {
             }
 
             val model = GenerativeModel(
-                modelName = "gemini-2.0-flash",
+                modelName = "gemini-2.5-flash-lite",
                 apiKey = key
             )
 
