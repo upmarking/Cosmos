@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.cosmos.app"
+    namespace = "app.cosmos.com"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.cosmos.app"
+        applicationId = "app.cosmos.com"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

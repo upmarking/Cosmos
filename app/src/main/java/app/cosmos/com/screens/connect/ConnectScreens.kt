@@ -1,0 +1,511 @@
+package app.cosmos.com.screens.connect
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import app.cosmos.com.data.model.EndorsedSkill
+import app.cosmos.com.data.model.Member
+import app.cosmos.com.navigation.Screen
+import app.cosmos.com.ui.components.*
+import app.cosmos.com.ui.theme.*
+import androidx.compose.runtime.collectAsState
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun FoundersOrbitFeedScreen(
+    onProfileTap: (String) -> Unit,
+    onBack: () -> Unit,
+    onNavigate: (String) -> Unit,
+    communityViewModel: app.cosmos.com.ui.viewmodel.CommunityViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+) {
+    val circles by communityViewModel.circles.collectAsState()
+    val members by communityViewModel.circleMembers.collectAsState()
+
+    LaunchedEffect(Unit) {
+        communityViewModel.loadCircles()
+    }
+
+    LaunchedEffect(circles) {
+        val foundersCircle = circles.find { it.name.contains("Founder", ignoreCase = true) }
+        if (foundersCircle != null) {
+            communityViewModel.loadCircleMembers(foundersCircle.id)
+        }
+    }
+
+    CosmosAmbientBackground {
+        Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+            CosmosTopBar(title = "Founders Orbit", onBack = onBack)
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (members.isEmpty()) {
+                    item {
+                        CosmosGlassCard {
+                            Text("No members in this orbit yet.", color = CosmosOnSurfaceVariant)
+                        }
+                    }
+                } else {
+                    items(members) { member ->
+                        FounderFeedCard(member = member, onTap = { onProfileTap(member.id) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun FounderFeedCard(member: Member, onTap: () -> Unit) {
+    CosmosGlassCard(
+        modifier = Modifier.clickable(onClick = onTap)
+    ) {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            CosmosAvatar(
+                avatarUrl = member.avatarUrl,
+                name = member.name,
+                size = 56.dp,
+                isLinkedInConnected = member.isLinkedInConnected
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(member.name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground, fontWeight = FontWeight.SemiBold)
+                Text(member.headline, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, maxLines = 2)
+                Spacer(Modifier.height(8.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    member.tags.take(3).forEach { CosmosTagChip(text = "#$it") }
+                }
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text("${member.mutualConnectionsCount}", style = MaterialTheme.typography.titleMedium, color = CosmosPrimary, fontWeight = FontWeight.Bold)
+                Text("mutual", style = MaterialTheme.typography.labelSmall, color = CosmosOnSurfaceVariant)
+            }
+        }
+        if (member.goalStatement.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Text(member.goalStatement, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, maxLines = 2)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun MemberProfileScreen(
+    memberId: String,
+    onBack: () -> Unit,
+    onEndorse: () -> Unit,
+    onWarmIntro: () -> Unit,
+    onStartChat: () -> Unit,
+    onNavigate: (String) -> Unit,
+    profileViewModel: app.cosmos.com.ui.viewmodel.ProfileViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+) {
+    LaunchedEffect(memberId) {
+        profileViewModel.loadProfile(memberId)
+        profileViewModel.checkConnectionStatus(memberId)
+    }
+
+    val memberState by profileViewModel.selectedMember.collectAsState()
+    val connectionStatus by profileViewModel.connectionProfileStatus.collectAsState()
+    val isOwnProfile = memberId == profileViewModel.currentUserId
+    var showConnectDialog by remember { mutableStateOf(false) }
+    var connectMessage by remember { mutableStateOf("") }
+
+    if (memberState == null) {
+        CosmosAmbientBackground {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = CosmosPrimary)
+            }
+        }
+        return
+    }
+    val member = memberState!!
+
+    CosmosAmbientBackground {
+        Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+            CosmosTopBar(
+                title = "",
+                onBack = onBack,
+                actions = {
+                    IconButton(onClick = {}) {
+                        Icon(Icons.Default.Share, "Share", tint = CosmosOnBackground)
+                    }
+                    IconButton(onClick = {}) {
+                        Icon(Icons.Default.MoreVert, "More", tint = CosmosOnBackground)
+                    }
+                }
+            )
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 100.dp)
+            ) {
+                // Hero section
+                item {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CosmosAvatar(
+                            avatarUrl = member.avatarUrl,
+                            name = member.name,
+                            size = 96.dp,
+                            isLinkedInConnected = member.isLinkedInConnected,
+                            membershipTierColor = CosmosPrimary
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(member.name, style = MaterialTheme.typography.headlineMedium, color = CosmosOnBackground, fontWeight = FontWeight.Bold)
+                        Text(member.headline, style = MaterialTheme.typography.bodyLarge, color = CosmosOnSurfaceVariant)
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Icon(Icons.Default.LocationOn, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(14.dp))
+                                Text(member.location, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Icon(Icons.Default.People, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(14.dp))
+                                Text("${member.mutualConnectionsCount} mutual", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        // Membership badge
+                        Box(
+                            modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(CosmosPrimary.copy(alpha = 0.15f)).padding(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text("✦ ${member.membershipTier.label}", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary)
+                        }
+
+                        // Action row — Edit Profile button for own profile, 4-state connection button for others
+                        Spacer(Modifier.height(20.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (isOwnProfile) {
+                                CosmosOutlinedButton(
+                                    text = "Edit Profile",
+                                    onClick = { onNavigate(Screen.EditProfile.route) },
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Default.Edit
+                                )
+                            } else {
+                                when (connectionStatus) {
+                                    app.cosmos.com.data.model.ConnectionProfileStatus.NONE -> {
+                                        CosmosButton(
+                                            text = "Connect",
+                                            onClick = { showConnectDialog = true },
+                                            modifier = Modifier.weight(1f),
+                                            icon = Icons.Default.PersonAdd
+                                        )
+                                    }
+                                    app.cosmos.com.data.model.ConnectionProfileStatus.PENDING_SENT -> {
+                                        CosmosOutlinedButton(
+                                            text = "Request Sent ✓",
+                                            onClick = { profileViewModel.withdrawConnectionRequest(member.id) },
+                                            modifier = Modifier.weight(1f),
+                                            icon = Icons.Default.Check
+                                        )
+                                    }
+                                    app.cosmos.com.data.model.ConnectionProfileStatus.PENDING_RECEIVED -> {
+                                        CosmosButton(
+                                            text = "Accept",
+                                            onClick = { profileViewModel.acceptConnectionFromProfile(member.id) },
+                                            modifier = Modifier.weight(1f),
+                                            icon = Icons.Default.Check
+                                        )
+                                        CosmosOutlinedButton(
+                                            text = "Decline",
+                                            onClick = { profileViewModel.declineConnectionFromProfile(member.id) },
+                                            modifier = Modifier.wrapContentWidth(),
+                                            icon = Icons.Default.Close
+                                        )
+                                    }
+                                    app.cosmos.com.data.model.ConnectionProfileStatus.CONNECTED -> {
+                                        CosmosOutlinedButton(
+                                            text = "Message",
+                                            onClick = onStartChat,
+                                            modifier = Modifier.weight(1f),
+                                            icon = Icons.Default.Chat
+                                        )
+                                    }
+                                }
+                                CosmosOutlinedButton(
+                                    text = "Intro",
+                                    onClick = onWarmIntro,
+                                    modifier = Modifier.wrapContentWidth(),
+                                    icon = Icons.Default.Link
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // About section
+                if (member.bio.isNotBlank()) {
+                    item {
+                        Spacer(Modifier.height(24.dp))
+                        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                            CosmosSectionHeader("About")
+                            Spacer(Modifier.height(8.dp))
+                            CosmosGlassCard(showTopGradientBorder = false) {
+                                Text(member.bio, style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant)
+                            }
+                        }
+                    }
+                } else if (isOwnProfile) {
+                    item {
+                        Spacer(Modifier.height(24.dp))
+                        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                            CosmosSectionHeader("About")
+                            Spacer(Modifier.height(8.dp))
+                            CosmosGlassCard(showTopGradientBorder = false) {
+                                Text("No bio added yet. Tap 'Edit Profile' to write a bio about yourself.", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant.copy(alpha = 0.6f))
+                            }
+                        }
+                    }
+                }
+
+                // Goal statement
+                if (member.goalStatement.isNotBlank()) {
+                    item {
+                        Spacer(Modifier.height(16.dp))
+                        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                            CosmosSectionHeader("Looking for")
+                            Spacer(Modifier.height(8.dp))
+                            CosmosGlassCard(showTopGradientBorder = false) {
+                                Text(member.goalStatement, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground)
+                            }
+                        }
+                    }
+                } else if (isOwnProfile) {
+                    item {
+                        Spacer(Modifier.height(16.dp))
+                        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                            CosmosSectionHeader("Looking for")
+                            Spacer(Modifier.height(8.dp))
+                            CosmosGlassCard(showTopGradientBorder = false) {
+                                Text("No details provided. Tap 'Edit Profile' to share what you're looking for.", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant.copy(alpha = 0.6f))
+                            }
+                        }
+                    }
+                }
+
+                // Tags
+                if (member.tags.isNotEmpty()) {
+                    item {
+                        Spacer(Modifier.height(16.dp))
+                        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                            CosmosSectionHeader("Interests")
+                            Spacer(Modifier.height(8.dp))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+                            ) {
+                                member.tags.forEach { CosmosTagChip(text = "#$it") }
+                            }
+                        }
+                    }
+                } else if (isOwnProfile) {
+                    item {
+                        Spacer(Modifier.height(16.dp))
+                        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                            CosmosSectionHeader("Interests")
+                            Spacer(Modifier.height(8.dp))
+                            CosmosGlassCard(showTopGradientBorder = false) {
+                                Text("No interests selected. Tap 'Edit Profile' to add your interests.", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant.copy(alpha = 0.6f))
+                            }
+                        }
+                    }
+                }
+
+                // Endorsed skills
+                item {
+                    Spacer(Modifier.height(20.dp))
+                    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                        CosmosSectionHeader(
+                            title = "Endorsed Skills",
+                            actionText = if (isOwnProfile) null else "Endorse",
+                            onAction = if (isOwnProfile) null else onEndorse
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        if (member.endorsedSkills.isEmpty()) {
+                            CosmosGlassCard(showTopGradientBorder = false) {
+                                Text(
+                                    text = if (isOwnProfile) "No skills endorsed yet." else "No skills endorsed yet. Tap 'Endorse' to endorse skills.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = CosmosOnSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            }
+                        } else {
+                            member.endorsedSkills.forEach { skill ->
+                                EndorsedSkillRow(skill = skill)
+                                Spacer(Modifier.height(8.dp))
+                            }
+                        }
+                    }
+                }
+
+                // Activity stats
+                item {
+                    Spacer(Modifier.height(20.dp))
+                    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                        CosmosSectionHeader("Activity")
+                        Spacer(Modifier.height(8.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            CosmosStatCard("Connections", "${member.connectionsCount}", modifier = Modifier.weight(1f))
+                            CosmosStatCard("Events", "${member.eventsAttended}", modifier = Modifier.weight(1f), accent = CosmosSecondary)
+                            CosmosStatCard("Follow-ups", "${member.followUpsCompleted}", modifier = Modifier.weight(1f), accent = CosmosTertiary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Connection Request Dialog
+    if (showConnectDialog) {
+        AlertDialog(
+            onDismissRequest = { showConnectDialog = false; connectMessage = "" },
+            title = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, size = 56.dp, isLinkedInConnected = member.isLinkedInConnected)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Connect with ${member.name}", style = MaterialTheme.typography.titleMedium, color = CosmosOnBackground)
+                }
+            },
+            text = {
+                Column {
+                    Text(member.headline, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = connectMessage,
+                        onValueChange = { connectMessage = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Add a note (optional)...", color = CosmosOnSurfaceVariant.copy(alpha = 0.5f)) },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CosmosPrimary, unfocusedBorderColor = CosmosOutlineVariant,
+                            focusedTextColor = CosmosOnBackground, unfocusedTextColor = CosmosOnBackground,
+                            cursorColor = CosmosPrimary, focusedContainerColor = CosmosSurfaceContainerLow,
+                            unfocusedContainerColor = CosmosSurfaceContainerLow
+                        ),
+                        maxLines = 3,
+                        minLines = 2
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    profileViewModel.connectWithMember(member.id, connectMessage) { _ -> }
+                    showConnectDialog = false
+                    connectMessage = ""
+                }) {
+                    Text("Send Request", color = CosmosPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConnectDialog = false; connectMessage = "" }) {
+                    Text("Cancel", color = CosmosOnSurfaceVariant)
+                }
+            },
+            containerColor = CosmosSurfaceContainerLow
+        )
+    }
+}
+
+@Composable
+fun EndorsedSkillRow(skill: EndorsedSkill) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(skill.name, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground, modifier = Modifier.weight(1f))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            val starCount = if (skill.count > 0) (skill.count / 5).coerceIn(1, 5) else 1
+            repeat(starCount) {
+                Icon(Icons.Default.Star, null, tint = CosmosPrimary, modifier = Modifier.size(14.dp))
+            }
+            Text("${skill.count}", style = MaterialTheme.typography.labelMedium, color = CosmosOnSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun EndorseExpertiseScreen(
+    memberId: String,
+    onBack: () -> Unit,
+    onDone: () -> Unit,
+    profileViewModel: app.cosmos.com.ui.viewmodel.ProfileViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+) {
+    LaunchedEffect(memberId) {
+        profileViewModel.loadProfile(memberId)
+    }
+
+    val memberState by profileViewModel.selectedMember.collectAsState()
+    val member = memberState ?: return
+    val allSkills = listOf("Communication", "Product Thinking", "Fundraising", "Design", "Sales", "Leadership", "Hiring", "Strategy", "Operations", "Technical Ability", "Marketing", "Finance", "Legal", "Public Speaking", "Negotiation")
+    val endorsed = remember { mutableStateListOf<String>() }
+
+    CosmosAmbientBackground {
+        Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+            CosmosTopBar(title = "Endorse Expertise", onBack = onBack)
+
+            Column(
+                modifier = Modifier.weight(1f).padding(horizontal = 20.dp)
+            ) {
+                Spacer(Modifier.height(24.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, modifier = Modifier, size = 56.dp, isLinkedInConnected = member.isLinkedInConnected)
+                    Column {
+                        Text(member.name, style = MaterialTheme.typography.titleMedium, color = CosmosOnBackground)
+                        Text("Tap a skill to endorse it", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+                Text("Skills to Endorse", style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground, modifier = Modifier.padding(bottom = 12.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    allSkills.forEach { skill ->
+                        val isEndorsed = endorsed.contains(skill)
+                        CosmosTagChip(
+                            text = if (isEndorsed) "✓ $skill" else skill,
+                            backgroundColor = if (isEndorsed) CosmosPrimary.copy(alpha = 0.2f) else CosmosSurfaceContainerHigh,
+                            textColor = if (isEndorsed) CosmosPrimary else CosmosOnSurfaceVariant,
+                            onClick = {
+                                if (isEndorsed) endorsed.remove(skill) else endorsed.add(skill)
+                            }
+                        )
+                    }
+                }
+            }
+
+            Box(modifier = Modifier.fillMaxWidth().background(CosmosBackground).navigationBarsPadding().padding(20.dp)) {
+                CosmosButton(
+                    text = if (endorsed.isEmpty()) "Select skills to endorse" else "Endorse ${endorsed.size} Skill${if (endorsed.size != 1) "s" else ""}",
+                    onClick = {
+                        endorsed.forEach { skill ->
+                            profileViewModel.endorseSkill(memberId, skill)
+                        }
+                        onDone()
+                    },
+                    enabled = endorsed.isNotEmpty()
+                )
+            }
+        }
+    }
+}

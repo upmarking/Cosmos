@@ -7,7 +7,26 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:622320322399:android:d67e63673b7aa5a9fe98ea",
+        "mobilesdk_app_id": "1:622320322399:android:72e3f46125893573fe98ea",
+        "android_client_info": {
+          "package_name": "app.cosmos.com"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDumpo71fxTPAw84DhTVwpzhSbcW9YhWv8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:622320322399:android:bc8a971e4aeca93efe98ea",
         "android_client_info": {
           "package_name": "com.cosmos.app"
         }
@@ -15,7 +34,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyC_J2hfRrhZPhauPZW-qeIErn9MBEqerRY"
+          "current_key": "AIzaSyDumpo71fxTPAw84DhTVwpzhSbcW9YhWv8"
         }
       ],
       "services": {
