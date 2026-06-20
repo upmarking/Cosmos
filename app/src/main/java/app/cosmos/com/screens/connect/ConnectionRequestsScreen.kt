@@ -13,6 +13,9 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -21,8 +24,10 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +71,7 @@ fun ConnectionRequestsScreen(
     val outgoing by connectionViewModel.outgoingRequests.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
+    var matchedMember by remember { mutableStateOf<app.cosmos.com.data.model.Member?>(null) }
     val tabs = listOf("Received (${incoming.size})", "Sent (${outgoing.size})")
 
     CosmosAmbientBackground {
@@ -110,7 +116,9 @@ fun ConnectionRequestsScreen(
                     requests = incoming,
                     onProfileTap = onProfileTap,
                     onAccept = { requestId ->
-                        connectionViewModel.acceptRequest(requestId)
+                        connectionViewModel.acceptRequest(requestId) { sender ->
+                            matchedMember = sender
+                        }
                     },
                     onDecline = { requestId ->
                         connectionViewModel.declineRequest(requestId)
@@ -124,6 +132,17 @@ fun ConnectionRequestsScreen(
                         connectionViewModel.withdrawRequest(requestId)
                     },
                     onNavigate = onNavigate
+                )
+            }
+
+            matchedMember?.let { member ->
+                ConnectionEstablishedOverlay(
+                    matchedMember = member,
+                    onSendMessage = { connectionId ->
+                        matchedMember = null
+                        onChatTap(connectionId)
+                    },
+                    onDismiss = { matchedMember = null }
                 )
             }
         }
@@ -359,6 +378,93 @@ private fun OutgoingRequestCard(
                 modifier = Modifier.fillMaxWidth(),
                 icon = Icons.AutoMirrored.Filled.Undo
             )
+        }
+    }
+}
+
+@Composable
+fun ConnectionEstablishedOverlay(
+    matchedMember: app.cosmos.com.data.model.Member,
+    onSendMessage: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(app.cosmos.com.ui.theme.CosmosBackground.copy(alpha = 0.95f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(CosmosPrimary.copy(alpha = 0.15f), Color.Transparent),
+                        radius = 1200f
+                    )
+                )
+        )
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = Color(0xFF4CAF6F),
+                modifier = Modifier.size(64.dp)
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                text = "Connection Established! 🎉",
+                style = MaterialTheme.typography.headlineMedium,
+                color = CosmosPrimary,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            CosmosAvatar(
+                avatarUrl = matchedMember.avatarUrl,
+                name = matchedMember.name,
+                size = 80.dp,
+                isLinkedInConnected = matchedMember.isLinkedInConnected
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            Text(
+                text = "You are now connected with ${matchedMember.name}. Start a conversation now!",
+                style = MaterialTheme.typography.bodyMedium,
+                color = CosmosOnSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+
+            Spacer(Modifier.height(32.dp))
+
+            CosmosButton(
+                text = "Say Hello",
+                onClick = {
+                    val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
+                    val otherUid = matchedMember.id
+                    val connectionId = if (currentUid < otherUid) "${currentUid}_${otherUid}" else "${otherUid}_${currentUid}"
+                    onSendMessage(connectionId)
+                },
+                icon = Icons.Default.Chat,
+                modifier = Modifier.fillMaxWidth().height(50.dp)
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            TextButton(onClick = onDismiss) {
+                Text("Dismiss", color = CosmosOnSurfaceVariant)
+            }
         }
     }
 }

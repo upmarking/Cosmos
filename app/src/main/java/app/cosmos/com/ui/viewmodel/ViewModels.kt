@@ -883,7 +883,7 @@ class ProfileViewModel(
     fun connectWithMember(memberId: String, message: String = "", onResult: (Boolean) -> Unit) {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch {
-            val currentUser = authRepo.currentUser.firstOrNull()
+            val currentUser = profileRepo.getProfile(uid, fetchSkills = false).getOrNull()
             val targetUser = profileRepo.getProfile(memberId, fetchSkills = false).getOrNull()
             ServiceLocator.connectionRequestRepository.sendConnectionRequest(
                 senderId = uid,
@@ -895,9 +895,13 @@ class ProfileViewModel(
                 receiverHeadline = targetUser?.headline ?: "",
                 receiverAvatarUrl = targetUser?.avatarUrl ?: "",
                 message = message
-            ).onSuccess {
-                _connectionProfileStatus.value = ConnectionProfileStatus.PENDING_SENT
-                onResult(true)
+            ).onSuccess { isMatch ->
+                if (isMatch) {
+                    _connectionProfileStatus.value = ConnectionProfileStatus.CONNECTED
+                } else {
+                    _connectionProfileStatus.value = ConnectionProfileStatus.PENDING_SENT
+                }
+                onResult(isMatch)
             }.onFailure {
                 onResult(false)
             }
@@ -1082,10 +1086,13 @@ class ConnectionViewModel(
         }
     }
 
-    fun sendRequest(receiverId: String, message: String = "", onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
+    private val _matchEvent = MutableSharedFlow<Member>()
+    val matchEvent: SharedFlow<Member> = _matchEvent.asSharedFlow()
+
+    fun sendRequest(receiverId: String, message: String = "", onSuccess: (Boolean) -> Unit = {}, onError: (String) -> Unit = {}) {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch {
-            val currentUser = authRepo.currentUser.firstOrNull()
+            val currentUser = profileRepo.getProfile(uid, fetchSkills = false).getOrNull()
             val targetUser = profileRepo.getProfile(receiverId, fetchSkills = false).getOrNull()
             connectionRequestRepo.sendConnectionRequest(
                 senderId = uid,
@@ -1097,18 +1104,33 @@ class ConnectionViewModel(
                 receiverHeadline = targetUser?.headline ?: "",
                 receiverAvatarUrl = targetUser?.avatarUrl ?: "",
                 message = message
-            ).onSuccess {
-                onSuccess()
+            ).onSuccess { isMatch ->
+                if (isMatch && targetUser != null) {
+                    _matchEvent.emit(targetUser)
+                }
+                onSuccess(isMatch)
             }.onFailure { error ->
                 onError(error.message ?: "Failed to send request")
             }
         }
     }
 
-    fun acceptRequest(requestId: String, onSuccess: () -> Unit = {}) {
+    fun acceptRequest(requestId: String, onSuccess: (Member?) -> Unit = {}) {
         viewModelScope.launch {
-            connectionRequestRepo.acceptConnectionRequest(requestId).onSuccess {
-                onSuccess()
+            try {
+                val request = connectionRequestRepo.getConnectionRequest(requestId).getOrNull()
+                val senderId = request?.senderId ?: ""
+                val senderMember = if (senderId.isNotEmpty()) {
+                    profileRepo.getProfile(senderId, fetchSkills = false).getOrNull()
+                } else null
+                
+                connectionRequestRepo.acceptConnectionRequest(requestId).onSuccess {
+                    onSuccess(senderMember)
+                }
+            } catch (e: Exception) {
+                connectionRequestRepo.acceptConnectionRequest(requestId).onSuccess {
+                    onSuccess(null)
+                }
             }
         }
     }

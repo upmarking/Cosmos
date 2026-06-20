@@ -23,7 +23,7 @@ interface ConnectionRequestRepository {
         receiverHeadline: String,
         receiverAvatarUrl: String,
         message: String
-    ): Result<Unit>
+    ): Result<Boolean>
 
     suspend fun acceptConnectionRequest(requestId: String): Result<Unit>
     suspend fun declineConnectionRequest(requestId: String): Result<Unit>
@@ -36,11 +36,18 @@ interface ConnectionRequestRepository {
     fun getConnectionStatusFlow(currentUserId: String, otherUserId: String): Flow<ConnectionProfileStatus>
 
     fun getIncomingRequestCount(userId: String): Flow<Int>
+    suspend fun getConnectionRequest(requestId: String): Result<ConnectionRequest>
 }
 
 class FirestoreConnectionRequestRepository(
     private val firestore: FirebaseFirestore
 ) : ConnectionRequestRepository {
+
+    override suspend fun getConnectionRequest(requestId: String): Result<ConnectionRequest> = runCatching {
+        val doc = firestore.collection("connection_requests").document(requestId).get().await()
+        if (!doc.exists()) throw IllegalArgumentException("Request not found")
+        mapDocToRequest(doc.id, doc.data ?: emptyMap())
+    }
 
     override suspend fun sendConnectionRequest(
         senderId: String,
@@ -52,7 +59,7 @@ class FirestoreConnectionRequestRepository(
         receiverHeadline: String,
         receiverAvatarUrl: String,
         message: String
-    ): Result<Unit> = runCatching {
+    ): Result<Boolean> = runCatching {
         if (senderId == receiverId) {
             throw IllegalArgumentException("Cannot send a connection request to yourself")
         }
@@ -70,7 +77,7 @@ class FirestoreConnectionRequestRepository(
         if (existingReverse.exists() && existingReverse.getString("status") == "PENDING") {
             // The other user already sent us a request — auto-accept it
             acceptConnectionRequest("req_${receiverId}_${senderId}").getOrThrow()
-            return@runCatching
+            return@runCatching true
         }
 
         // Check if already connected
@@ -80,16 +87,41 @@ class FirestoreConnectionRequestRepository(
             throw IllegalStateException("Already connected")
         }
 
+        // Fallback profile fetching if any details are blank
+        var sName = senderName
+        var sHeadline = senderHeadline
+        var sAvatar = senderAvatarUrl
+        if (sName.isBlank()) {
+            val senderDoc = firestore.collection("users").document(senderId).get().await()
+            if (senderDoc.exists()) {
+                sName = senderDoc.getString("name") ?: ""
+                sHeadline = senderDoc.getString("headline") ?: ""
+                sAvatar = senderDoc.getString("avatarUrl") ?: ""
+            }
+        }
+
+        var rName = receiverName
+        var rHeadline = receiverHeadline
+        var rAvatar = receiverAvatarUrl
+        if (rName.isBlank()) {
+            val receiverDoc = firestore.collection("users").document(receiverId).get().await()
+            if (receiverDoc.exists()) {
+                rName = receiverDoc.getString("name") ?: ""
+                rHeadline = receiverDoc.getString("headline") ?: ""
+                rAvatar = receiverDoc.getString("avatarUrl") ?: ""
+            }
+        }
+
         // Create the request
         val requestData = mapOf(
             "senderId" to senderId,
             "receiverId" to receiverId,
-            "senderName" to senderName,
-            "senderHeadline" to senderHeadline,
-            "senderAvatarUrl" to senderAvatarUrl,
-            "receiverName" to receiverName,
-            "receiverHeadline" to receiverHeadline,
-            "receiverAvatarUrl" to receiverAvatarUrl,
+            "senderName" to sName,
+            "senderHeadline" to sHeadline,
+            "senderAvatarUrl" to sAvatar,
+            "receiverName" to rName,
+            "receiverHeadline" to rHeadline,
+            "receiverAvatarUrl" to rAvatar,
             "message" to message,
             "status" to ConnectionRequestStatus.PENDING.name,
             "createdAt" to FieldValue.serverTimestamp()
@@ -101,12 +133,13 @@ class FirestoreConnectionRequestRepository(
             "userId" to receiverId,
             "type" to "CONNECTION_REQUEST",
             "title" to "New Connection Request",
-            "body" to "$senderName wants to connect with you${if (message.isNotBlank()) ": \"$message\"" else ""}",
+            "body" to "$sName wants to connect with you${if (message.isNotBlank()) ": \"$message\"" else ""}",
             "timestamp" to FieldValue.serverTimestamp(),
             "isRead" to false,
             "actionId" to senderId
         )
         firestore.collection("notifications").add(notifData).await()
+        false
     }
 
     override suspend fun acceptConnectionRequest(requestId: String): Result<Unit> = runCatching {
@@ -180,7 +213,6 @@ class FirestoreConnectionRequestRepository(
         val registration = firestore.collection("connection_requests")
             .whereEqualTo("receiverId", userId)
             .whereEqualTo("status", ConnectionRequestStatus.PENDING.name)
-            .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     trySend(emptyList())
@@ -188,7 +220,8 @@ class FirestoreConnectionRequestRepository(
                 }
                 val requests = snapshot?.documents
                     ?.map { doc -> mapDocToRequest(doc.id, doc.data ?: emptyMap()) }
-                    ?.filter { it.senderId != it.receiverId } ?: emptyList()
+                    ?.filter { it.senderId != it.receiverId }
+                    ?.sortedByDescending { it.createdAt } ?: emptyList()
                 trySend(requests)
             }
         awaitClose { registration.remove() }
@@ -198,7 +231,6 @@ class FirestoreConnectionRequestRepository(
         val registration = firestore.collection("connection_requests")
             .whereEqualTo("senderId", userId)
             .whereEqualTo("status", ConnectionRequestStatus.PENDING.name)
-            .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     trySend(emptyList())
@@ -206,7 +238,8 @@ class FirestoreConnectionRequestRepository(
                 }
                 val requests = snapshot?.documents
                     ?.map { doc -> mapDocToRequest(doc.id, doc.data ?: emptyMap()) }
-                    ?.filter { it.senderId != it.receiverId } ?: emptyList()
+                    ?.filter { it.senderId != it.receiverId }
+                    ?.sortedByDescending { it.createdAt } ?: emptyList()
                 trySend(requests)
             }
         awaitClose { registration.remove() }
