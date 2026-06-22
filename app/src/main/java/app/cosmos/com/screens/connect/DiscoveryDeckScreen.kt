@@ -33,8 +33,6 @@ import app.cosmos.com.ui.theme.*
 
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,11 +72,19 @@ fun DiscoveryDeckScreen(
     var swipeOffset by remember { mutableStateOf(0f) }
     var requestSent by remember { mutableStateOf(false) }
     var requestedMember by remember { mutableStateOf<Member?>(null) }
-    var showMatchOverlay by remember { mutableStateOf(false) }
-    var matchedMember by remember { mutableStateOf<Member?>(null) }
     var showLimitExceededDialog by remember { mutableStateOf(false) }
     var showSearchBar by remember { mutableStateOf(false) }
-    val context = LocalContext.current
+    var isSendingRequest by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val connectionStatuses by searchViewModel.connectionStatuses.collectAsState()
+
+    // Collect search connect errors and show toast
+    LaunchedEffect(Unit) {
+        searchViewModel.connectError.collect { error ->
+            android.widget.Toast.makeText(context, error, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LaunchedEffect(filteredMembers) {
         currentIndex = 0
@@ -212,33 +218,38 @@ fun DiscoveryDeckScreen(
                             MemberSwipeCard(
                                 member = filteredMembers[currentIndex],
                                 onTap = { onProfileTap(filteredMembers[currentIndex].id) },
-                                modifier = Modifier.fillMaxWidth().pointerInput(Unit) {
+                                modifier = Modifier.fillMaxWidth().pointerInput(currentIndex) {
                                     detectHorizontalDragGestures(
                                         onDragEnd = {
+                                            if (isSendingRequest) {
+                                                swipeOffset = 0f
+                                                return@detectHorizontalDragGestures
+                                            }
                                             val currentMember = filteredMembers[currentIndex]
                                             if (swipeOffset > 150) {
                                                 if (connectionsLimitCount >= monthlyLimit) {
                                                     showLimitExceededDialog = true
                                                     swipeOffset = 0f
                                                 } else {
+                                                    isSendingRequest = true
                                                     connectionViewModel.sendRequest(
                                                         receiverId = currentMember.id,
-                                                        onSuccess = { isMatch ->
-                                                            if (isMatch) {
-                                                                matchedMember = currentMember
-                                                                showMatchOverlay = true
-                                                            } else {
-                                                                requestedMember = currentMember
-                                                                requestSent = true
-                                                            }
+                                                        receiverName = currentMember.name,
+                                                        receiverHeadline = currentMember.headline,
+                                                        receiverAvatarUrl = currentMember.avatarUrl,
+                                                        onSuccess = {
+                                                            requestedMember = currentMember
+                                                            requestSent = true
+                                                            discoveryViewModel.swipeRight(currentMember.id) { _ -> }
+                                                            currentIndex++
+                                                            isSendingRequest = false
+                                                            android.widget.Toast.makeText(context, "Request sent successfully", android.widget.Toast.LENGTH_SHORT).show()
                                                         },
                                                         onError = { error ->
+                                                            isSendingRequest = false
                                                             android.widget.Toast.makeText(context, error, android.widget.Toast.LENGTH_SHORT).show()
                                                         }
                                                     )
-                                                    // Also record swipe so they don't appear again in deck
-                                                    discoveryViewModel.swipeRight(currentMember.id) { _ -> }
-                                                    currentIndex++
                                                 }
                                             } else if (swipeOffset < -150) {
                                                 discoveryViewModel.swipeLeft(currentMember.id)
@@ -304,32 +315,38 @@ fun DiscoveryDeckScreen(
                                     .background(Brush.linearGradient(listOf(CosmosGradientStart, CosmosGradientEnd))),
                                 contentAlignment = Alignment.Center
                             ) {
-                                IconButton(onClick = {
-                                    if (currentIndex < filteredMembers.size) {
-                                        val currentMember = filteredMembers[currentIndex]
-                                        if (connectionsLimitCount >= monthlyLimit) {
-                                            showLimitExceededDialog = true
-                                        } else {
-                                            connectionViewModel.sendRequest(
-                                                receiverId = currentMember.id,
-                                                onSuccess = { isMatch ->
-                                                    if (isMatch) {
-                                                        matchedMember = currentMember
-                                                        showMatchOverlay = true
-                                                    } else {
+                                IconButton(
+                                    onClick = {
+                                        if (isSendingRequest) return@IconButton
+                                        if (currentIndex < filteredMembers.size) {
+                                            val currentMember = filteredMembers[currentIndex]
+                                            if (connectionsLimitCount >= monthlyLimit) {
+                                                showLimitExceededDialog = true
+                                            } else {
+                                                isSendingRequest = true
+                                                connectionViewModel.sendRequest(
+                                                    receiverId = currentMember.id,
+                                                    receiverName = currentMember.name,
+                                                    receiverHeadline = currentMember.headline,
+                                                    receiverAvatarUrl = currentMember.avatarUrl,
+                                                    onSuccess = {
                                                         requestedMember = currentMember
                                                         requestSent = true
+                                                        discoveryViewModel.swipeRight(currentMember.id) { _ -> }
+                                                        currentIndex++
+                                                        isSendingRequest = false
+                                                        android.widget.Toast.makeText(context, "Request sent successfully", android.widget.Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    onError = { error ->
+                                                        isSendingRequest = false
+                                                        android.widget.Toast.makeText(context, error, android.widget.Toast.LENGTH_SHORT).show()
                                                     }
-                                                },
-                                                onError = { error ->
-                                                    android.widget.Toast.makeText(context, error, android.widget.Toast.LENGTH_SHORT).show()
-                                                }
-                                            )
-                                            discoveryViewModel.swipeRight(currentMember.id) { _ -> }
-                                            currentIndex++
+                                                )
+                                            }
                                         }
-                                    }
-                                }) {
+                                    },
+                                    enabled = !isSendingRequest
+                                ) {
                                     Icon(Icons.Default.PersonAdd, "Connect", tint = Color.White, modifier = Modifier.size(28.dp))
                                 }
                             }
@@ -363,7 +380,12 @@ fun DiscoveryDeckScreen(
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 items(searchResults) { member ->
-                                    SearchResultCard(member = member, onTap = { onProfileTap(member.id) })
+                                    SearchResultCard(
+                                        member = member,
+                                        connectionStatus = connectionStatuses[member.id] ?: app.cosmos.com.data.model.ConnectionProfileStatus.NONE,
+                                        onTap = { onProfileTap(member.id) },
+                                        onConnect = { searchViewModel.sendConnectionRequest(member) }
+                                    )
                                 }
                             }
                         } else {
@@ -400,18 +422,6 @@ fun DiscoveryDeckScreen(
                 onNavigate(Screen.ConnectionRequests.route)
             },
             onContinueDiscovering = { requestSent = false }
-        )
-    }
-
-    if (showMatchOverlay && matchedMember != null) {
-        ItsAMatchOverlay(
-            currentUser = currentUser,
-            matchedMember = matchedMember!!,
-            onSendMessage = { connectionId ->
-                showMatchOverlay = false
-                onNavigate(Screen.CrmChat.createRoute(connectionId))
-            },
-            onContinue = { showMatchOverlay = false }
         )
     }
 
@@ -639,124 +649,4 @@ private fun Member.isOperator(): Boolean {
            headlineLower.contains("vp") || 
            tagsLower.any { it.contains("operator") || it.contains("product") || it.contains("growth") || it.contains("engineer") } ||
            (!isFounder() && !isInvestor() && (role.isNotEmpty() || tags.isNotEmpty() || headline.isNotEmpty()))
-}
-
-@Composable
-fun ItsAMatchOverlay(
-    currentUser: Member?,
-    matchedMember: Member,
-    onSendMessage: (String) -> Unit,
-    onContinue: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(CosmosBackground.copy(alpha = 0.96f)),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(CosmosPrimary.copy(alpha = 0.15f), Color.Transparent),
-                        radius = 1200f
-                    )
-                )
-        )
-
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(32.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Favorite,
-                contentDescription = null,
-                tint = CosmosPrimary,
-                modifier = Modifier.size(56.dp)
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            Text(
-                text = "It's a Match! 🎉",
-                style = MaterialTheme.typography.headlineLarge,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = "You and ${matchedMember.name} are now connected on Cosmos. Start a conversation!",
-                style = MaterialTheme.typography.bodyMedium,
-                color = CosmosOnSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-
-            Spacer(Modifier.height(32.dp))
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy((-24).dp)
-            ) {
-                if (currentUser != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(100.dp)
-                            .clip(RoundedCornerShape(50.dp))
-                            .border(3.dp, CosmosGradientStart, RoundedCornerShape(50.dp))
-                    ) {
-                        CosmosAvatar(
-                            avatarUrl = currentUser.avatarUrl,
-                            name = currentUser.name,
-                            size = 100.dp,
-                            isLinkedInConnected = currentUser.isLinkedInConnected
-                        )
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .clip(RoundedCornerShape(50.dp))
-                        .border(3.dp, CosmosGradientEnd, RoundedCornerShape(50.dp))
-                ) {
-                    CosmosAvatar(
-                        avatarUrl = matchedMember.avatarUrl,
-                        name = matchedMember.name,
-                        size = 100.dp,
-                        isLinkedInConnected = matchedMember.isLinkedInConnected
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(48.dp))
-
-            CosmosButton(
-                text = "Say Hello",
-                onClick = {
-                    val currentUid = currentUser?.id ?: ""
-                    val otherUid = matchedMember.id
-                    val connectionId = if (currentUid < otherUid) "${currentUid}_${otherUid}" else "${otherUid}_${currentUid}"
-                    onSendMessage(connectionId)
-                },
-                icon = Icons.Default.Chat,
-                modifier = Modifier.fillMaxWidth().height(50.dp)
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            TextButton(onClick = onContinue) {
-                Text(
-                    "Keep Discovering",
-                    color = CosmosOnSurfaceVariant,
-                    style = MaterialTheme.typography.labelLarge
-                )
-            }
-        }
-    }
 }

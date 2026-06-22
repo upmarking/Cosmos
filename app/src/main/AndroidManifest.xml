@@ -30,6 +30,31 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Deep link for Firebase Auth password reset -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="cosmos-app-42ed2.firebaseapp.com"
+                    android:pathPrefix="/__/auth/action" />
+                <data
+                    android:scheme="https"
+                    android:host="cosmos-app-42ed2.web.app"
+                    android:pathPrefix="/__/auth/action" />
+            </intent-filter>
+
+            <!-- Custom URI Scheme for fallback reset links -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="cosmos"
+                    android:host="reset-password" />
+            </intent-filter>
         </activity>
 
     </application>

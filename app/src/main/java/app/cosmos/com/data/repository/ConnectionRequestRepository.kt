@@ -23,7 +23,7 @@ interface ConnectionRequestRepository {
         receiverHeadline: String,
         receiverAvatarUrl: String,
         message: String
-    ): Result<Boolean>
+    ): Result<Unit>
 
     suspend fun acceptConnectionRequest(requestId: String): Result<Unit>
     suspend fun declineConnectionRequest(requestId: String): Result<Unit>
@@ -36,18 +36,11 @@ interface ConnectionRequestRepository {
     fun getConnectionStatusFlow(currentUserId: String, otherUserId: String): Flow<ConnectionProfileStatus>
 
     fun getIncomingRequestCount(userId: String): Flow<Int>
-    suspend fun getConnectionRequest(requestId: String): Result<ConnectionRequest>
 }
 
 class FirestoreConnectionRequestRepository(
     private val firestore: FirebaseFirestore
 ) : ConnectionRequestRepository {
-
-    override suspend fun getConnectionRequest(requestId: String): Result<ConnectionRequest> = runCatching {
-        val doc = firestore.collection("connection_requests").document(requestId).get().await()
-        if (!doc.exists()) throw IllegalArgumentException("Request not found")
-        mapDocToRequest(doc.id, doc.data ?: emptyMap())
-    }
 
     override suspend fun sendConnectionRequest(
         senderId: String,
@@ -59,87 +52,91 @@ class FirestoreConnectionRequestRepository(
         receiverHeadline: String,
         receiverAvatarUrl: String,
         message: String
-    ): Result<Boolean> = runCatching {
+    ): Result<Unit> = runCatching {
         if (senderId == receiverId) {
             throw IllegalArgumentException("Cannot send a connection request to yourself")
         }
         val requestId = "req_${senderId}_${receiverId}"
+        android.util.Log.d("CosmosConnection", "sendConnectionRequest: senderId=$senderId, receiverId=$receiverId, requestId=$requestId")
 
-        // Check if there's already a pending request in either direction
-        val existingForward = firestore.collection("connection_requests")
-            .document(requestId).get().await()
+        // Step 1: Check if there's already a pending forward request
+        val existingForward = try {
+            firestore.collection("connection_requests")
+                .document(requestId).get().await()
+        } catch (e: Exception) {
+            android.util.Log.e("CosmosConnection", "STEP 1 FAILED: get forward request $requestId", e)
+            throw Exception("Step 1 (check forward request): ${e.message}", e)
+        }
         if (existingForward.exists() && existingForward.getString("status") == "PENDING") {
             throw IllegalStateException("Connection request already pending")
         }
 
-        val existingReverse = firestore.collection("connection_requests")
-            .document("req_${receiverId}_${senderId}").get().await()
+        // Step 2: Check if there's already a pending reverse request
+        val reverseId = "req_${receiverId}_${senderId}"
+        val existingReverse = try {
+            firestore.collection("connection_requests")
+                .document(reverseId).get().await()
+        } catch (e: Exception) {
+            android.util.Log.e("CosmosConnection", "STEP 2 FAILED: get reverse request $reverseId", e)
+            throw Exception("Step 2 (check reverse request): ${e.message}", e)
+        }
         if (existingReverse.exists() && existingReverse.getString("status") == "PENDING") {
             // The other user already sent us a request — auto-accept it
-            acceptConnectionRequest("req_${receiverId}_${senderId}").getOrThrow()
-            return@runCatching true
+            acceptConnectionRequest(reverseId).getOrThrow()
+            return@runCatching
         }
 
-        // Check if already connected
+        // Step 3: Check if already connected
         val connectionId = if (senderId < receiverId) "${senderId}_${receiverId}" else "${receiverId}_${senderId}"
-        val existingConnection = firestore.collection("connections").document(connectionId).get().await()
+        val existingConnection = try {
+            firestore.collection("connections").document(connectionId).get().await()
+        } catch (e: Exception) {
+            android.util.Log.e("CosmosConnection", "STEP 3 FAILED: get connection $connectionId", e)
+            throw Exception("Step 3 (check connection): ${e.message}", e)
+        }
         if (existingConnection.exists()) {
             throw IllegalStateException("Already connected")
         }
 
-        // Fallback profile fetching if any details are blank
-        var sName = senderName
-        var sHeadline = senderHeadline
-        var sAvatar = senderAvatarUrl
-        if (sName.isBlank()) {
-            val senderDoc = firestore.collection("users").document(senderId).get().await()
-            if (senderDoc.exists()) {
-                sName = senderDoc.getString("name") ?: ""
-                sHeadline = senderDoc.getString("headline") ?: ""
-                sAvatar = senderDoc.getString("avatarUrl") ?: ""
-            }
-        }
-
-        var rName = receiverName
-        var rHeadline = receiverHeadline
-        var rAvatar = receiverAvatarUrl
-        if (rName.isBlank()) {
-            val receiverDoc = firestore.collection("users").document(receiverId).get().await()
-            if (receiverDoc.exists()) {
-                rName = receiverDoc.getString("name") ?: ""
-                rHeadline = receiverDoc.getString("headline") ?: ""
-                rAvatar = receiverDoc.getString("avatarUrl") ?: ""
-            }
-        }
-
-        // Create the request
+        // Step 4: Create the connection request
         val requestData = mapOf(
             "senderId" to senderId,
             "receiverId" to receiverId,
-            "senderName" to sName,
-            "senderHeadline" to sHeadline,
-            "senderAvatarUrl" to sAvatar,
-            "receiverName" to rName,
-            "receiverHeadline" to rHeadline,
-            "receiverAvatarUrl" to rAvatar,
+            "senderName" to senderName,
+            "senderHeadline" to senderHeadline,
+            "senderAvatarUrl" to senderAvatarUrl,
+            "receiverName" to receiverName,
+            "receiverHeadline" to receiverHeadline,
+            "receiverAvatarUrl" to receiverAvatarUrl,
             "message" to message,
             "status" to ConnectionRequestStatus.PENDING.name,
             "createdAt" to FieldValue.serverTimestamp()
         )
-        firestore.collection("connection_requests").document(requestId).set(requestData).await()
+        try {
+            firestore.collection("connection_requests").document(requestId).set(requestData).await()
+            android.util.Log.d("CosmosConnection", "STEP 4 SUCCESS: created request $requestId")
+        } catch (e: Exception) {
+            android.util.Log.e("CosmosConnection", "STEP 4 FAILED: set request $requestId", e)
+            throw Exception("Step 4 (create request): ${e.message}", e)
+        }
 
-        // Create notification for receiver
+        // Step 5: Create notification for receiver
         val notifData = mapOf(
             "userId" to receiverId,
             "type" to "CONNECTION_REQUEST",
             "title" to "New Connection Request",
-            "body" to "$sName wants to connect with you${if (message.isNotBlank()) ": \"$message\"" else ""}",
+            "body" to "$senderName wants to connect with you${if (message.isNotBlank()) ": \"$message\"" else ""}",
             "timestamp" to FieldValue.serverTimestamp(),
             "isRead" to false,
             "actionId" to senderId
         )
-        firestore.collection("notifications").add(notifData).await()
-        false
+        try {
+            firestore.collection("notifications").add(notifData).await()
+            android.util.Log.d("CosmosConnection", "STEP 5 SUCCESS: created notification for $receiverId")
+        } catch (e: Exception) {
+            android.util.Log.e("CosmosConnection", "STEP 5 FAILED: create notification", e)
+            throw Exception("Step 5 (create notification): ${e.message}", e)
+        }
     }
 
     override suspend fun acceptConnectionRequest(requestId: String): Result<Unit> = runCatching {
@@ -170,9 +167,17 @@ class FirestoreConnectionRequestRepository(
         )
         firestore.collection("connections").document(connectionId).set(connectionData).await()
 
-        // Update connectionsCount for both users in users collection
-        firestore.collection("users").document(senderId).update("connectionsCount", FieldValue.increment(1)).await()
-        firestore.collection("users").document(receiverId).update("connectionsCount", FieldValue.increment(1)).await()
+        // Update connectionsCount, followersCount, followingCount for both users in users collection
+        firestore.collection("users").document(senderId).update(
+            "connectionsCount", FieldValue.increment(1),
+            "followersCount", FieldValue.increment(1),
+            "followingCount", FieldValue.increment(1)
+        ).await()
+        firestore.collection("users").document(receiverId).update(
+            "connectionsCount", FieldValue.increment(1),
+            "followersCount", FieldValue.increment(1),
+            "followingCount", FieldValue.increment(1)
+        ).await()
 
         // 3. Notification to sender that their request was accepted
         val notifData = mapOf(
@@ -215,6 +220,7 @@ class FirestoreConnectionRequestRepository(
             .whereEqualTo("status", ConnectionRequestStatus.PENDING.name)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
+                    android.util.Log.e("CosmosConnection", "Error fetching incoming requests for $userId", error)
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -233,6 +239,7 @@ class FirestoreConnectionRequestRepository(
             .whereEqualTo("status", ConnectionRequestStatus.PENDING.name)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
+                    android.util.Log.e("CosmosConnection", "Error fetching outgoing requests for $userId", error)
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -275,55 +282,53 @@ class FirestoreConnectionRequestRepository(
         currentUserId: String,
         otherUserId: String
     ): Flow<ConnectionProfileStatus> = callbackFlow {
-        // Listen to connection doc
         val connectionId = if (currentUserId < otherUserId) "${currentUserId}_${otherUserId}" else "${otherUserId}_${currentUserId}"
+        val sentId = "req_${currentUserId}_${otherUserId}"
+        val receivedId = "req_${otherUserId}_${currentUserId}"
 
-        var lastStatus = ConnectionProfileStatus.NONE
+        var connExists = false
+        var sentStatus: String? = null
+        var receivedStatus: String? = null
+
+        fun emitCombinedStatus() {
+            val status = when {
+                connExists -> ConnectionProfileStatus.CONNECTED
+                sentStatus == ConnectionRequestStatus.PENDING.name -> ConnectionProfileStatus.PENDING_SENT
+                receivedStatus == ConnectionRequestStatus.PENDING.name -> ConnectionProfileStatus.PENDING_RECEIVED
+                else -> ConnectionProfileStatus.NONE
+            }
+            trySend(status)
+        }
 
         val connRegistration = firestore.collection("connections").document(connectionId)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
-                if (snapshot != null && snapshot.exists()) {
-                    lastStatus = ConnectionProfileStatus.CONNECTED
-                    trySend(lastStatus)
+                if (error != null) {
+                    android.util.Log.e("CosmosConnection", "Error listening to connection $connectionId", error)
+                    return@addSnapshotListener
                 }
+                connExists = snapshot != null && snapshot.exists()
+                emitCombinedStatus()
             }
 
-        // Listen to sent request
-        val sentId = "req_${currentUserId}_${otherUserId}"
         val sentRegistration = firestore.collection("connection_requests").document(sentId)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
-                if (lastStatus == ConnectionProfileStatus.CONNECTED) return@addSnapshotListener
-                if (snapshot != null && snapshot.exists() && snapshot.getString("status") == ConnectionRequestStatus.PENDING.name) {
-                    lastStatus = ConnectionProfileStatus.PENDING_SENT
-                    trySend(lastStatus)
-                } else if (lastStatus == ConnectionProfileStatus.PENDING_SENT) {
-                    // Request was withdrawn or status changed
-                    lastStatus = ConnectionProfileStatus.NONE
-                    trySend(lastStatus)
+                if (error != null) {
+                    android.util.Log.e("CosmosConnection", "Error listening to sent request $sentId", error)
+                    return@addSnapshotListener
                 }
+                sentStatus = if (snapshot != null && snapshot.exists()) snapshot.getString("status") else null
+                emitCombinedStatus()
             }
 
-        // Listen to received request
-        val receivedId = "req_${otherUserId}_${currentUserId}"
         val receivedRegistration = firestore.collection("connection_requests").document(receivedId)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
-                if (lastStatus == ConnectionProfileStatus.CONNECTED) return@addSnapshotListener
-                if (snapshot != null && snapshot.exists() && snapshot.getString("status") == ConnectionRequestStatus.PENDING.name) {
-                    lastStatus = ConnectionProfileStatus.PENDING_RECEIVED
-                    trySend(lastStatus)
-                } else if (lastStatus == ConnectionProfileStatus.PENDING_RECEIVED) {
-                    lastStatus = ConnectionProfileStatus.NONE
-                    trySend(lastStatus)
+                if (error != null) {
+                    android.util.Log.e("CosmosConnection", "Error listening to received request $receivedId", error)
+                    return@addSnapshotListener
                 }
+                receivedStatus = if (snapshot != null && snapshot.exists()) snapshot.getString("status") else null
+                emitCombinedStatus()
             }
-
-        // Initial check
-        val status = getConnectionStatus(currentUserId, otherUserId).getOrDefault(ConnectionProfileStatus.NONE)
-        lastStatus = status
-        trySend(status)
 
         awaitClose {
             connRegistration.remove()
@@ -338,6 +343,7 @@ class FirestoreConnectionRequestRepository(
             .whereEqualTo("status", ConnectionRequestStatus.PENDING.name)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
+                    android.util.Log.e("CosmosConnection", "Error fetching incoming request count for $userId", error)
                     trySend(0)
                     return@addSnapshotListener
                 }

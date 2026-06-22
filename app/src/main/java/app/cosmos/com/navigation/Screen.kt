@@ -13,6 +13,9 @@ sealed class Screen(val route: String) {
     object DefineIntent : Screen("define_intent")
     object YourVision : Screen("your_vision")
     object AiMatchingRefinement : Screen("ai_matching_refinement")
+    object ResetPassword : Screen("reset_password?oobCode={oobCode}") {
+        fun createRoute(oobCode: String) = "reset_password?oobCode=$oobCode"
+    }
 
     // ── Main App Tabs ────────────────────────────────────────────────────────
     object Connect : Screen("connect")

@@ -16,8 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.pager.VerticalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Favorite
@@ -43,8 +41,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import app.cosmos.com.data.model.SocialPost
@@ -77,8 +73,6 @@ fun SocialFeedScreen(
     var postText by remember { mutableStateOf("") }
     var isComposerFocused by remember { mutableStateOf(false) }
     var showDeleteDialogId by remember { mutableStateOf<String?>(null) }
-    var is3DMode by remember { mutableStateOf(true) } // default to the gorgeous 3D view
-    var showComposerDialog by remember { mutableStateOf(false) }
 
     var selectedImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
     val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -97,148 +91,12 @@ fun SocialFeedScreen(
                     onRequestsClick = { onNavigate("connection_requests") }
                 )
 
-                // View Mode Toggle (Segmented control)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                        .height(38.dp)
-                        .clip(RoundedCornerShape(19.dp))
-                        .background(Color.White.copy(alpha = 0.05f))
-                        .border(0.5.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(19.dp)),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(19.dp))
-                            .background(if (!is3DMode) CosmosPrimary.copy(alpha = 0.85f) else Color.Transparent)
-                            .clickable { is3DMode = false },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Classic Feed",
-                            color = if (!is3DMode) Color.White else CosmosOnSurfaceVariant,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(19.dp))
-                            .background(if (is3DMode) CosmosPrimary.copy(alpha = 0.85f) else Color.Transparent)
-                            .clickable { is3DMode = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "3D Deck View ✦",
-                            color = if (is3DMode) Color.White else CosmosOnSurfaceVariant,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
                 PullToRefreshBox(
                     isRefreshing = isRefreshing,
                     onRefresh = { socialViewModel.refreshSocialPosts() },
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    if (is3DMode) {
-                        if (isLoading && posts.isEmpty()) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(color = CosmosPrimary)
-                            }
-                        } else if (posts.isEmpty()) {
-                            CosmosEmptyState(
-                                icon = Icons.Outlined.ChatBubbleOutline,
-                                title = "No posts yet",
-                                subtitle = "Be the first to share your thoughts with the community!",
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            val pagerState = rememberPagerState(pageCount = { posts.size })
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                VerticalPager(
-                                    state = pagerState,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentPadding = PaddingValues(top = 16.dp, bottom = 120.dp) // space for floating bottom nav and top bar
-                                ) { page ->
-                                    val post = posts[page]
-                                    val isLiked = likedPostIds.contains(post.id)
-                                    val isOwner = post.authorId == currentUser?.id
-
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(horizontal = 16.dp, vertical = 6.dp)
-                                            .graphicsLayer {
-                                                // Calculate offset relative to current page
-                                                val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction)
-                                                val absOffset = abs(pageOffset)
-                                                
-                                                // 3D rotation around the X-axis (cylindrical rolling effect)
-                                                rotationX = pageOffset * -30f
-                                                
-                                                // Perspective distance (larger makes rotation subtler, smaller makes it extreme)
-                                                cameraDistance = 8f * density
-                                                
-                                                // Card scaling
-                                                val scale = 0.88f + (1f - absOffset.coerceIn(0f, 1f)) * 0.12f
-                                                scaleX = scale
-                                                scaleY = scale
-                                                
-                                                // Opacity fade
-                                                alpha = 0.4f + (1f - absOffset.coerceIn(0f, 1f)) * 0.6f
-                                            },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        SocialPostCard(
-                                            post = post,
-                                            isLiked = isLiked,
-                                            isOwner = isOwner,
-                                            onLikeTap = {
-                                                if (isLiked) socialViewModel.unlikePost(post.id)
-                                                else socialViewModel.likePost(post.id)
-                                            },
-                                            onCommentsTap = { onPostTap(post.id) },
-                                            onProfileTap = {
-                                                if (post.authorId.isNotEmpty()) {
-                                                    onProfileTap(post.authorId)
-                                                }
-                                            },
-                                            onDeleteTap = { showDeleteDialogId = post.id }
-                                        )
-                                    }
-                                }
-
-                                // Page indicator pill
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopCenter)
-                                        .padding(top = 12.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(Color.Black.copy(alpha = 0.4f))
-                                        .border(0.5.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
-                                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                                ) {
-                                    Text(
-                                        text = "Post ${pagerState.currentPage + 1} of ${posts.size}",
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        LazyColumn(
+                    LazyColumn(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -444,29 +302,7 @@ fun SocialFeedScreen(
                                 Spacer(Modifier.height(120.dp))
                             }
                         }
-                    }
                 }
-            }
-        }
-
-        // Floating Action Button for 3D Mode
-        if (is3DMode && posts.isNotEmpty()) {
-            FloatingActionButton(
-                onClick = { showComposerDialog = true },
-                containerColor = CosmosPrimary,
-                contentColor = Color.White,
-                shape = CircleShape,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 20.dp, bottom = 110.dp) // clear bottom nav
-                    .size(56.dp)
-                    .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = "Create Post",
-                    tint = Color.White
-                )
             }
         }
 
@@ -545,221 +381,6 @@ fun SocialFeedScreen(
         )
     }
 
-    // Overlay Composer Dialog for 3D Pager Mode
-    if (showComposerDialog) {
-        var dialogText by remember { mutableStateOf("") }
-        Dialog(
-            onDismissRequest = { 
-                showComposerDialog = false
-                selectedImageUri = null
-            },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .clickable { 
-                        showComposerDialog = false
-                        selectedImageUri = null
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                CosmosGlassCard(
-                    modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .padding(16.dp)
-                        .clickable(enabled = false) {}, // prevent click-through dismiss
-                    showTopGradientBorder = true
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "New Insight ✦",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = CosmosOnBackground,
-                                fontWeight = FontWeight.Bold
-                            )
-                            IconButton(
-                                onClick = { 
-                                    showComposerDialog = false
-                                    selectedImageUri = null
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Close",
-                                    tint = CosmosOnSurfaceVariant
-                                )
-                            }
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            CosmosAvatar(
-                                avatarUrl = currentUser?.avatarUrl ?: "",
-                                name = currentUser?.name ?: "User",
-                                size = 40.dp,
-                                isLinkedInConnected = currentUser?.isLinkedInConnected ?: false
-                            )
-                            Column {
-                                Text(
-                                    text = currentUser?.name ?: "User",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = CosmosOnBackground,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = currentUser?.headline ?: "Sharing to Cosmos",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = CosmosOnSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.width(180.dp)
-                                )
-                            }
-                        }
-
-                        OutlinedTextField(
-                            value = dialogText,
-                            onValueChange = { if (it.length <= 500) dialogText = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 120.dp),
-                            placeholder = {
-                                Text(
-                                    "Share an insight, milestone, or request...",
-                                    color = CosmosOnSurfaceVariant.copy(alpha = 0.5f)
-                                )
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = CosmosPrimary,
-                                unfocusedBorderColor = CosmosOutlineVariant.copy(alpha = 0.3f),
-                                focusedTextColor = CosmosOnBackground,
-                                unfocusedTextColor = CosmosOnBackground,
-                                cursorColor = CosmosPrimary,
-                                focusedContainerColor = CosmosSurfaceContainerLow,
-                                unfocusedContainerColor = Color.Transparent
-                            )
-                        )
-
-                        if (selectedImageUri != null) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(160.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(CosmosSurfaceContainerHigh)
-                                    .border(1.dp, CosmosGlassBorder, RoundedCornerShape(12.dp))
-                            ) {
-                                AsyncImage(
-                                    model = selectedImageUri,
-                                    contentDescription = "Selected image preview",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                                IconButton(
-                                    onClick = { selectedImageUri = null },
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(8.dp)
-                                        .size(24.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.6f))
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Remove image",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    photoPickerLauncher.launch(
-                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                    )
-                                },
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.05f))
-                                    .border(0.5.dp, Color.White.copy(alpha = 0.12f), CircleShape)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Image,
-                                    contentDescription = "Attach image",
-                                    tint = CosmosPrimary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Text(
-                                    text = "${dialogText.length}/500",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (dialogText.length >= 480) CosmosError else CosmosOnSurfaceVariant
-                                )
-                                Button(
-                                    onClick = {
-                                        val imageBytes = selectedImageUri?.let { uri ->
-                                            try {
-                                                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                                            } catch (e: Exception) {
-                                                e.printStackTrace()
-                                                null
-                                            }
-                                        }
-                                        socialViewModel.createPost(dialogText.trim(), imageBytes) {
-                                            dialogText = ""
-                                            selectedImageUri = null
-                                            showComposerDialog = false
-                                        }
-                                    },
-                                    enabled = dialogText.isNotBlank() || selectedImageUri != null,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = CosmosPrimary,
-                                        contentColor = CosmosOnPrimary,
-                                        disabledContainerColor = CosmosOutlineVariant.copy(alpha = 0.2f),
-                                        disabledContentColor = CosmosOnSurfaceVariant.copy(alpha = 0.5f)
-                                    ),
-                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                                    modifier = Modifier.height(36.dp)
-                                ) {
-                                    Text(
-                                        text = "Post",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable

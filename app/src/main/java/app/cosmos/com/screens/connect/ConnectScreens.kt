@@ -124,6 +124,7 @@ fun MemberProfileScreen(
     val memberState by profileViewModel.selectedMember.collectAsState()
     val connectionStatus by profileViewModel.connectionProfileStatus.collectAsState()
     val isOwnProfile = memberId == profileViewModel.currentUserId
+    val context = androidx.compose.ui.platform.LocalContext.current
     var showConnectDialog by remember { mutableStateOf(false) }
     var connectMessage by remember { mutableStateOf("") }
 
@@ -366,9 +367,9 @@ fun MemberProfileScreen(
                         CosmosSectionHeader("Activity")
                         Spacer(Modifier.height(8.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            CosmosStatCard("Connections", "${member.connectionsCount}", modifier = Modifier.weight(1f))
-                            CosmosStatCard("Events", "${member.eventsAttended}", modifier = Modifier.weight(1f), accent = CosmosSecondary)
-                            CosmosStatCard("Follow-ups", "${member.followUpsCompleted}", modifier = Modifier.weight(1f), accent = CosmosTertiary)
+                            CosmosStatCard("Followers", "${member.followersCount}", modifier = Modifier.weight(1f))
+                            CosmosStatCard("Following", "${member.followingCount}", modifier = Modifier.weight(1f), accent = CosmosSecondary)
+                            CosmosStatCard("Connections", "${member.connectionsCount}", modifier = Modifier.weight(1f), accent = CosmosTertiary)
                         }
                     }
                 }
@@ -410,7 +411,13 @@ fun MemberProfileScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    profileViewModel.connectWithMember(member.id, connectMessage) { _ -> }
+                    profileViewModel.connectWithMember(member.id, connectMessage) { error ->
+                        if (error == null) {
+                            android.widget.Toast.makeText(context, "Request sent successfully", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            android.widget.Toast.makeText(context, "Failed to send request: $error", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
                     showConnectDialog = false
                     connectMessage = ""
                 }) {

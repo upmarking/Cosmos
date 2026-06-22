@@ -31,6 +31,8 @@ data class Member(
     val memberSince: String = "",
     val membershipTier: MembershipTier = MembershipTier.EXPLORER,
     val connectionsCount: Int = 0,
+    val followersCount: Int = 0,
+    val followingCount: Int = 0,
     val eventsAttended: Int = 0,
     val followUpsCompleted: Int = 0,
     val introsMade: Int = 0,

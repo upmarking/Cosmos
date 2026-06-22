@@ -239,6 +239,40 @@ class AuthViewModel(
                 }
         }
     }
+
+    private val _resetEmail = MutableStateFlow<String?>(null)
+    val resetEmail: StateFlow<String?> = _resetEmail.asStateFlow()
+
+    fun verifyResetCode(oobCode: String, onSuccess: (String) -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            authRepo.verifyPasswordResetCode(oobCode)
+                .onSuccess { email ->
+                    _isLoading.value = false
+                    _resetEmail.value = email
+                    onSuccess(email)
+                }
+                .onFailure { error ->
+                    _isLoading.value = false
+                    onError(error.message ?: "Invalid or expired reset link")
+                }
+        }
+    }
+
+    fun confirmPasswordReset(oobCode: String, newPassword: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            authRepo.confirmPasswordReset(oobCode, newPassword)
+                .onSuccess {
+                    _isLoading.value = false
+                    onSuccess()
+                }
+                .onFailure { error ->
+                    _isLoading.value = false
+                    onError(error.message ?: "Failed to reset password")
+                }
+        }
+    }
 }
 
 // ── DiscoveryViewModel ────────────────────────────────────────────────────────
@@ -880,10 +914,10 @@ class ProfileViewModel(
         }
     }
 
-    fun connectWithMember(memberId: String, message: String = "", onResult: (Boolean) -> Unit) {
+    fun connectWithMember(memberId: String, message: String = "", onResult: (String?) -> Unit) {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch {
-            val currentUser = profileRepo.getProfile(uid, fetchSkills = false).getOrNull()
+            val currentUser = authRepo.currentUser.firstOrNull()
             val targetUser = profileRepo.getProfile(memberId, fetchSkills = false).getOrNull()
             ServiceLocator.connectionRequestRepository.sendConnectionRequest(
                 senderId = uid,
@@ -895,15 +929,12 @@ class ProfileViewModel(
                 receiverHeadline = targetUser?.headline ?: "",
                 receiverAvatarUrl = targetUser?.avatarUrl ?: "",
                 message = message
-            ).onSuccess { isMatch ->
-                if (isMatch) {
-                    _connectionProfileStatus.value = ConnectionProfileStatus.CONNECTED
-                } else {
-                    _connectionProfileStatus.value = ConnectionProfileStatus.PENDING_SENT
-                }
-                onResult(isMatch)
-            }.onFailure {
-                onResult(false)
+            ).onSuccess {
+                _connectionProfileStatus.value = ConnectionProfileStatus.PENDING_SENT
+                onResult(null)
+            }.onFailure { error ->
+                android.util.Log.e("CosmosConnection", "Failed to connect with member $memberId", error)
+                onResult(error.localizedMessage ?: error.message ?: "Unknown error")
             }
         }
     }
@@ -1086,75 +1117,80 @@ class ConnectionViewModel(
         }
     }
 
-    private val _matchEvent = MutableSharedFlow<Member>()
-    val matchEvent: SharedFlow<Member> = _matchEvent.asSharedFlow()
-
-    fun sendRequest(receiverId: String, message: String = "", onSuccess: (Boolean) -> Unit = {}, onError: (String) -> Unit = {}) {
+    fun sendRequest(
+        receiverId: String,
+        message: String = "",
+        receiverName: String? = null,
+        receiverHeadline: String? = null,
+        receiverAvatarUrl: String? = null,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch {
-            val currentUser = profileRepo.getProfile(uid, fetchSkills = false).getOrNull()
-            val targetUser = profileRepo.getProfile(receiverId, fetchSkills = false).getOrNull()
+            val currentUser = authRepo.currentUser.firstOrNull()
+            // Use pre-fetched receiver data if provided, otherwise fetch from Firestore
+            val finalReceiverName: String
+            val finalReceiverHeadline: String
+            val finalReceiverAvatarUrl: String
+            if (receiverName != null) {
+                finalReceiverName = receiverName
+                finalReceiverHeadline = receiverHeadline ?: ""
+                finalReceiverAvatarUrl = receiverAvatarUrl ?: ""
+            } else {
+                val targetUser = profileRepo.getProfile(receiverId, fetchSkills = false).getOrNull()
+                finalReceiverName = targetUser?.name ?: ""
+                finalReceiverHeadline = targetUser?.headline ?: ""
+                finalReceiverAvatarUrl = targetUser?.avatarUrl ?: ""
+            }
             connectionRequestRepo.sendConnectionRequest(
                 senderId = uid,
                 receiverId = receiverId,
                 senderName = currentUser?.name ?: "",
                 senderHeadline = currentUser?.headline ?: "",
                 senderAvatarUrl = currentUser?.avatarUrl ?: "",
-                receiverName = targetUser?.name ?: "",
-                receiverHeadline = targetUser?.headline ?: "",
-                receiverAvatarUrl = targetUser?.avatarUrl ?: "",
+                receiverName = finalReceiverName,
+                receiverHeadline = finalReceiverHeadline,
+                receiverAvatarUrl = finalReceiverAvatarUrl,
                 message = message
-            ).onSuccess { isMatch ->
-                if (isMatch && targetUser != null) {
-                    _matchEvent.emit(targetUser)
-                }
-                onSuccess(isMatch)
+            ).onSuccess {
+                onSuccess()
             }.onFailure { error ->
                 onError(error.message ?: "Failed to send request")
             }
         }
     }
 
-    fun acceptRequest(requestId: String, onSuccess: (Member?) -> Unit = {}) {
+    fun acceptRequest(requestId: String, onResult: (String?) -> Unit) {
         viewModelScope.launch {
-            try {
-                val request = connectionRequestRepo.getConnectionRequest(requestId).getOrNull()
-                val senderId = request?.senderId ?: ""
-                val senderMember = if (senderId.isNotEmpty()) {
-                    profileRepo.getProfile(senderId, fetchSkills = false).getOrNull()
-                } else null
-                
-                connectionRequestRepo.acceptConnectionRequest(requestId).onSuccess {
-                    onSuccess(senderMember)
-                }
-            } catch (e: Exception) {
-                connectionRequestRepo.acceptConnectionRequest(requestId).onSuccess {
-                    onSuccess(null)
-                }
-            }
+            connectionRequestRepo.acceptConnectionRequest(requestId)
+                .onSuccess { onResult(null) }
+                .onFailure { error -> onResult(error.localizedMessage ?: error.message ?: "Unknown error") }
         }
     }
 
-    fun declineRequest(requestId: String, onSuccess: () -> Unit = {}) {
+    fun declineRequest(requestId: String, onResult: (String?) -> Unit) {
         viewModelScope.launch {
-            connectionRequestRepo.declineConnectionRequest(requestId).onSuccess {
-                onSuccess()
-            }
+            connectionRequestRepo.declineConnectionRequest(requestId)
+                .onSuccess { onResult(null) }
+                .onFailure { error -> onResult(error.localizedMessage ?: error.message ?: "Unknown error") }
         }
     }
 
-    fun withdrawRequest(requestId: String, onSuccess: () -> Unit = {}) {
+    fun withdrawRequest(requestId: String, onResult: (String?) -> Unit) {
         viewModelScope.launch {
-            connectionRequestRepo.withdrawConnectionRequest(requestId).onSuccess {
-                onSuccess()
-            }
+            connectionRequestRepo.withdrawConnectionRequest(requestId)
+                .onSuccess { onResult(null) }
+                .onFailure { error -> onResult(error.localizedMessage ?: error.message ?: "Unknown error") }
         }
     }
 }
 
 // ── SearchViewModel ────────────────────────────────────────────────────────────
 class SearchViewModel(
-    private val profileRepo: ProfileRepository = ServiceLocator.profileRepository
+    private val profileRepo: ProfileRepository = ServiceLocator.profileRepository,
+    private val authRepo: AuthRepository = ServiceLocator.authRepository,
+    private val connectionRequestRepo: ConnectionRequestRepository = ServiceLocator.connectionRequestRepository
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -1166,12 +1202,21 @@ class SearchViewModel(
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
 
+    /** Per-member connection status map: memberId -> ConnectionProfileStatus */
+    private val _connectionStatuses = MutableStateFlow<Map<String, ConnectionProfileStatus>>(emptyMap())
+    val connectionStatuses: StateFlow<Map<String, ConnectionProfileStatus>> = _connectionStatuses.asStateFlow()
+
+    /** Error messages emitted when a connect attempt fails */
+    private val _connectError = MutableSharedFlow<String>()
+    val connectError: SharedFlow<String> = _connectError.asSharedFlow()
+
     fun updateQuery(query: String) {
         _searchQuery.value = query
         if (query.trim().length >= 2) {
             executeSearch(query)
         } else {
             _searchResults.value = emptyList()
+            _connectionStatuses.value = emptyMap()
         }
     }
 
@@ -1180,14 +1225,61 @@ class SearchViewModel(
             _isSearching.value = true
             profileRepo.searchProfiles(query).onSuccess { list ->
                 _searchResults.value = list
+                // Batch-fetch connection statuses for all results
+                fetchConnectionStatuses(list)
             }
             _isSearching.value = false
         }
     }
-    
+
+    private fun fetchConnectionStatuses(members: List<Member>) {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            val statusMap = mutableMapOf<String, ConnectionProfileStatus>()
+            members.forEach { member ->
+                if (member.id != uid) {
+                    connectionRequestRepo.getConnectionStatus(uid, member.id)
+                        .onSuccess { status -> statusMap[member.id] = status }
+                        .onFailure { statusMap[member.id] = ConnectionProfileStatus.NONE }
+                }
+            }
+            _connectionStatuses.value = statusMap
+        }
+    }
+
+    /** Optimistic connect: immediately update UI, fire API, rollback on failure */
+    fun sendConnectionRequest(member: Member) {
+        val uid = authRepo.currentUserId ?: return
+        if (member.id == uid) return
+
+        // Optimistic update
+        val previousStatuses = _connectionStatuses.value
+        _connectionStatuses.value = previousStatuses + (member.id to ConnectionProfileStatus.PENDING_SENT)
+
+        viewModelScope.launch {
+            val currentUser = authRepo.currentUser.firstOrNull()
+            connectionRequestRepo.sendConnectionRequest(
+                senderId = uid,
+                receiverId = member.id,
+                senderName = currentUser?.name ?: "",
+                senderHeadline = currentUser?.headline ?: "",
+                senderAvatarUrl = currentUser?.avatarUrl ?: "",
+                receiverName = member.name,
+                receiverHeadline = member.headline,
+                receiverAvatarUrl = member.avatarUrl,
+                message = ""
+            ).onFailure { error ->
+                // Rollback optimistic update
+                _connectionStatuses.value = previousStatuses
+                _connectError.emit(error.message ?: "Failed to send connection request")
+            }
+        }
+    }
+
     fun clearSearch() {
         _searchQuery.value = ""
         _searchResults.value = emptyList()
+        _connectionStatuses.value = emptyMap()
     }
 }
 

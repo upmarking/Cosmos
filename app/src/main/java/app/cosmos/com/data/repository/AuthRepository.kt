@@ -34,6 +34,8 @@ interface AuthRepository {
     suspend fun saveOnboardingData(member: Member): Result<Unit>
     suspend fun uploadProfileImage(uid: String, bytes: ByteArray): Result<String>
     suspend fun resetPassword(email: String): Result<Unit>
+    suspend fun verifyPasswordResetCode(code: String): Result<String>
+    suspend fun confirmPasswordReset(code: String, newPassword: String): Result<Unit>
     suspend fun deleteAccount(): Result<Unit>
     suspend fun updateEmail(newEmail: String): Result<Unit>
     suspend fun updatePassword(currentPassword: String, newPassword: String): Result<Unit>
@@ -280,6 +282,8 @@ class FirebaseAuthRepository(
                 "isRestricted" to false,
                 "membershipTier" to MembershipTier.EXPLORER.name,
                 "connectionsCount" to 0,
+                "followersCount" to 0,
+                "followingCount" to 0,
                 "eventsAttended" to 0,
                 "followUpsCompleted" to 0,
                 "joinedCircles" to emptyList<String>(),
@@ -367,11 +371,50 @@ class FirebaseAuthRepository(
         val emailValidation = ValidationUtils.validateEmail(email)
         if (!emailValidation.isValid) return Result.failure(Exception(emailValidation.errorMessage))
 
+        val trimmedEmail = email.trim().lowercase()
+
         return try {
-            auth.sendPasswordResetEmail(email.trim()).await()
+            // Trigger Firebase Auth password reset email directly (non-blocking).
+            // Firebase Auth does the backend validation and email triggering securely.
+            auth.sendPasswordResetEmail(trimmedEmail).await()
+            Result.success(Unit)
+        } catch (e: com.google.firebase.auth.FirebaseAuthInvalidUserException) {
+            // Silence user not found to prevent user enumeration
+            android.util.Log.i("CosmosAuth", "Silenced user not found for reset: $trimmedEmail")
             Result.success(Unit)
         } catch (e: Exception) {
-            e.printStackTrace()
+            val msg = e.message ?: ""
+            if (msg.contains("user-not-found", ignoreCase = true) || msg.contains("USER_NOT_FOUND", ignoreCase = true)) {
+                android.util.Log.i("CosmosAuth", "Silenced user not found (by message) for reset: $trimmedEmail")
+                Result.success(Unit)
+            } else {
+                android.util.Log.e("CosmosAuth", "Error sending password reset email for $trimmedEmail", e)
+                Result.success(Unit)
+            }
+        }
+    }
+
+    override suspend fun verifyPasswordResetCode(code: String): Result<String> {
+        if (code.isBlank()) return Result.failure(Exception("Reset code is blank"))
+        return try {
+            val email = auth.verifyPasswordResetCode(code).await()
+            Result.success(email)
+        } catch (e: Exception) {
+            android.util.Log.e("CosmosAuth", "Error verifying password reset code", e)
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun confirmPasswordReset(code: String, newPassword: String): Result<Unit> {
+        if (code.isBlank()) return Result.failure(Exception("Reset code is blank"))
+        val passwordValidation = ValidationUtils.validatePassword(newPassword)
+        if (!passwordValidation.isValid) return Result.failure(Exception(passwordValidation.errorMessage))
+
+        return try {
+            auth.confirmPasswordReset(code, newPassword).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            android.util.Log.e("CosmosAuth", "Error confirming password reset", e)
             Result.failure(e)
         }
     }
@@ -441,6 +484,8 @@ class FirebaseAuthRepository(
                 mutualConnectionsCount = (data["mutualConnectionsCount"] as? Number)?.toInt() ?: 0,
                 membershipTier = membershipTier,
                 connectionsCount = (data["connectionsCount"] as? Number)?.toInt() ?: 0,
+                followersCount = (data["followersCount"] as? Number)?.toInt() ?: 0,
+                followingCount = (data["followingCount"] as? Number)?.toInt() ?: 0,
                 eventsAttended = (data["eventsAttended"] as? Number)?.toInt() ?: 0,
                 followUpsCompleted = (data["followUpsCompleted"] as? Number)?.toInt() ?: 0,
                 primaryUserType = data["primaryUserType"] as? String ?: "",

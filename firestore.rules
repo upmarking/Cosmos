@@ -26,7 +26,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isOwner(userId);
       allow update: if isOwner(userId)
-                    || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['connectionsCount']))
+                    || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['connectionsCount', 'followersCount', 'followingCount']))
                     || (isSignedIn() && userId.matches('mock_user_.*'));
 
       match /skills/{skillId} {
@@ -44,7 +44,11 @@ service cloud.firestore {
 
     // 3. Connections collection rules
     match /connections/{connectionId} {
-      allow read: if isSignedIn() && request.auth.uid in resource.data.members;
+      allow read: if isSignedIn() && (
+        resource == null ||
+        request.auth.uid in resource.data.members ||
+        connectionId.matches('.*' + request.auth.uid + '.*')
+      );
       // Allow creation of connection if user is one of the members
       allow create: if isSignedIn() && request.auth.uid in request.resource.data.members;
       // Allow updates to labels, goal, status if user is member
@@ -110,30 +114,35 @@ service cloud.firestore {
 
     // 6. Connection Requests collection rules
     match /connection_requests/{requestId} {
-      // Allow reading individual request if user is sender or receiver
-      // We allow 'get' freely to support checking for existence before creating
-      allow get: if isSignedIn();
-      allow list: if isSignedIn() && (
+      // Allow reading request if user is sender or receiver, or if document does not exist (for check before creation)
+      allow read: if isSignedIn() && (
+        resource == null ||
         resource.data.senderId == request.auth.uid ||
         resource.data.receiverId == request.auth.uid
       );
-      allow create: if isSignedIn() && request.auth.uid == request.resource.data.senderId;
+      // Allow creating a request if the sender matches the authenticated user
+      allow create: if isSignedIn() && (
+        request.auth.uid == request.resource.data.senderId
+      );
+      // Allow updating request status/details if user is sender or receiver
       allow update: if isSignedIn() && (
         request.auth.uid == resource.data.receiverId ||
-        request.auth.uid == resource.data.senderId
+        request.auth.uid == resource.data.senderId ||
+        request.auth.uid == request.resource.data.senderId ||
+        request.auth.uid == request.resource.data.receiverId
       );
       allow delete: if false;
     }
 
     // 7. Notifications collection rules
     match /notifications/{notificationId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
       // Allow creation if signed in. Ideally, sensitive notifications should be
       // created via Cloud Functions, but this allows client-side notification triggers.
       allow create: if isSignedIn();
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && 
-                   request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && (resource == null || (resource.data.userId == request.auth.uid && 
+                   request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead'])));
+      allow delete: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
     }
 
     // 8. Support tickets rules

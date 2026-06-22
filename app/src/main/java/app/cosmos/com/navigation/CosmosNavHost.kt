@@ -12,6 +12,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
 import app.cosmos.com.screens.communities.OrbitMembersScreen
 import app.cosmos.com.screens.communities.CommunityHubScreen
 import app.cosmos.com.screens.communities.ExploreOrbitsScreen
@@ -33,6 +34,7 @@ import app.cosmos.com.screens.introductions.ThreeWayIntroductionScreen
 import app.cosmos.com.screens.onboarding.AiMatchingRefinementScreen
 import app.cosmos.com.screens.onboarding.CompleteIdentityScreen
 import app.cosmos.com.screens.onboarding.DefineIntentScreen
+import app.cosmos.com.screens.onboarding.ResetPasswordScreen
 import app.cosmos.com.screens.onboarding.SplashScreen
 import app.cosmos.com.screens.onboarding.WelcomeScreen
 import app.cosmos.com.screens.onboarding.YourVisionScreen
@@ -124,6 +126,42 @@ fun CosmosNavHost(
                 onGetStarted = { navController.navigate(Screen.CompleteIdentity.route) },
                 onSignIn = { navController.navigate(Screen.Connect.route) { popUpTo(0) } },
                 initialShowSignIn = true
+            )
+        }
+        composable(
+            route = Screen.ResetPassword.route,
+            deepLinks = listOf(
+                navDeepLink {
+                    uriPattern = "https://cosmos-app-42ed2.firebaseapp.com/__/auth/action?mode=resetPassword&oobCode={oobCode}"
+                },
+                navDeepLink {
+                    uriPattern = "https://cosmos-app-42ed2.web.app/__/auth/action?mode=resetPassword&oobCode={oobCode}"
+                },
+                navDeepLink {
+                    uriPattern = "cosmos://reset-password?oobCode={oobCode}"
+                }
+            ),
+            arguments = listOf(
+                navArgument("oobCode") {
+                    type = NavType.StringType
+                    nullable = true
+                }
+            )
+        ) { backStackEntry ->
+            val oobCode = backStackEntry.arguments?.getString("oobCode")
+            ResetPasswordScreen(
+                oobCode = oobCode,
+                onResetSuccess = {
+                    navController.navigate(Screen.WelcomeSignIn.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                onBackToLogin = {
+                    navController.navigate(Screen.WelcomeSignIn.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                authViewModel = authViewModel
             )
         }
         composable(Screen.CompleteIdentity.route) {

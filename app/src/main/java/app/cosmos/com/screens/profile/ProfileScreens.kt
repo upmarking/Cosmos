@@ -161,14 +161,14 @@ fun NetworkingDashboardScreen(
                         CosmosSectionHeader("Networking Stats")
                         Spacer(Modifier.height(8.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            CosmosStatCard("Connections", "${me.connectionsCount}", modifier = Modifier.weight(1f))
-                            CosmosStatCard("Events", "${me.eventsAttended}", modifier = Modifier.weight(1f), accent = CosmosSecondary)
-                            CosmosStatCard("Follow-ups", "${me.followUpsCompleted}", modifier = Modifier.weight(1f), accent = CosmosTertiary)
+                            CosmosStatCard("Followers", "${me.followersCount}", modifier = Modifier.weight(1f))
+                            CosmosStatCard("Following", "${me.followingCount}", modifier = Modifier.weight(1f), accent = CosmosSecondary)
+                            CosmosStatCard("Connections", "${me.connectionsCount}", modifier = Modifier.weight(1f), accent = CosmosTertiary)
                         }
                         Spacer(Modifier.height(10.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            CosmosStatCard(label = "Intros Made", value = "${me.introsMade}", modifier = Modifier.weight(1f), accent = CosmosGradientStart)
-                            CosmosStatCard(label = "Goals Hit", value = "${me.goalsHit}", modifier = Modifier.weight(1f), accent = CosmosSuccess)
+                            CosmosStatCard(label = "Events", value = "${me.eventsAttended}", modifier = Modifier.weight(1f), accent = CosmosGradientStart)
+                            CosmosStatCard(label = "Follow-ups", value = "${me.followUpsCompleted}", modifier = Modifier.weight(1f), accent = CosmosSuccess)
                             CosmosStatCard(label = "Orbits", value = "$joinedCirclesCount", modifier = Modifier.weight(1f), accent = CosmosSecondary)
                         }
                     }

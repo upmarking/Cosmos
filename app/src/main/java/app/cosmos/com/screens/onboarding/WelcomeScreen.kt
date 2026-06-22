@@ -215,11 +215,15 @@ fun WelcomeScreen(
                                     CosmosButton(
                                         text = "Send Reset Link",
                                         onClick = {
-                                            if (email.isNotBlank()) {
+                                            localError = ""
+                                            val emailVal = ValidationUtils.validateEmail(email)
+                                            if (!emailVal.isValid) {
+                                                localError = emailVal.errorMessage ?: "Invalid email"
+                                            } else {
                                                 authViewModel.resetPassword(
                                                     email = email,
                                                     onSuccess = {
-                                                        android.widget.Toast.makeText(context, "Password reset link sent to $email. Please check your inbox.", android.widget.Toast.LENGTH_LONG).show()
+                                                        android.widget.Toast.makeText(context, "If this email exists, a password reset link has been sent to your inbox.", android.widget.Toast.LENGTH_LONG).show()
                                                         forgotPasswordMode = false
                                                         localError = ""
                                                     },
@@ -227,8 +231,6 @@ fun WelcomeScreen(
                                                         localError = err
                                                     }
                                                 )
-                                            } else {
-                                                localError = "Please enter your email address"
                                             }
                                         }
                                     )
