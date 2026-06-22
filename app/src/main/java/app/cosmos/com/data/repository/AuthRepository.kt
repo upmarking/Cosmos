@@ -244,8 +244,17 @@ class FirebaseAuthRepository(
         return try {
             auth.signInWithEmailAndPassword(email.trim(), password).await()
             Result.success(Unit)
+        } catch (e: com.google.firebase.auth.FirebaseAuthInvalidUserException) {
+            Result.failure(Exception("ACCOUNT_NOT_FOUND"))
         } catch (e: Exception) {
-            Result.failure(e)
+            val msg = e.message ?: ""
+            if (msg.contains("no user record", ignoreCase = true) || msg.contains("user not found", ignoreCase = true) || msg.contains("invalid login credential", ignoreCase = true)) {
+                // If enumeration protection is on, invalid login credentials might mean account not found. 
+                // We map this to ACCOUNT_NOT_FOUND to prompt the user to sign up, as per user requirement.
+                Result.failure(Exception("ACCOUNT_NOT_FOUND"))
+            } else {
+                Result.failure(e)
+            }
         }
     }
 

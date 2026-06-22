@@ -97,6 +97,7 @@ fun WelcomeScreen(
     var localError by remember { mutableStateOf("") }
     var forgotPasswordMode by remember { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
+    var showAccountNotFoundDialog by remember { mutableStateOf(false) }
     
     LaunchedEffect(showSignIn, forgotPasswordMode) {
         passwordVisible = false
@@ -125,7 +126,12 @@ fun WelcomeScreen(
 
     LaunchedEffect(Unit) {
         authViewModel.authError.collect { error ->
-            localError = error
+            if (error == "ACCOUNT_NOT_FOUND") {
+                showAccountNotFoundDialog = true
+                localError = ""
+            } else {
+                localError = error
+            }
         }
     }
 
@@ -513,6 +519,35 @@ fun WelcomeScreen(
             } else {
                 Spacer(Modifier.height(1.dp))
             }
+        }
+        
+        if (showAccountNotFoundDialog) {
+            AlertDialog(
+                onDismissRequest = { showAccountNotFoundDialog = false },
+                title = {
+                    Text("Account Not Found", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = CosmosOnBackground)
+                },
+                text = {
+                    Text("It looks like you don't have an account with us yet. Please sign up first to get started!", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant)
+                },
+                confirmButton = {
+                    CosmosButton(
+                        text = "Create an Account",
+                        onClick = {
+                            showAccountNotFoundDialog = false
+                            onGetStarted()
+                        }
+                    )
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAccountNotFoundDialog = false }) {
+                        Text("Cancel", color = CosmosOnSurfaceVariant)
+                    }
+                },
+                containerColor = CosmosGlass,
+                titleContentColor = CosmosOnBackground,
+                textContentColor = CosmosOnSurfaceVariant
+            )
         }
     }
 }
