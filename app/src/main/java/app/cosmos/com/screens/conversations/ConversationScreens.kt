@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -25,6 +26,13 @@ import app.cosmos.com.ui.components.*
 import app.cosmos.com.ui.theme.*
 import androidx.compose.runtime.collectAsState
 import app.cosmos.com.navigation.Screen
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.platform.LocalConfiguration
+import app.cosmos.com.data.repository.ServiceLocator
 
 @Composable
 fun ConversationsListScreen(
@@ -33,6 +41,37 @@ fun ConversationsListScreen(
     chatViewModel: app.cosmos.com.ui.viewmodel.ChatViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val connections by chatViewModel.connections.collectAsState()
+    val currentUserState by ServiceLocator.authRepository.currentUser.collectAsState(initial = null)
+
+    var showNewChatPanel by remember { mutableStateOf(false) }
+    var panelSearchQuery by remember { mutableStateOf("") }
+    var membersList by remember { mutableStateOf<List<Member>>(emptyList()) }
+    var isLoadingMembers by remember { mutableStateOf(false) }
+
+    val isQueryUnintelligible = panelSearchQuery.trim().let { q ->
+        q.length > 2 && (
+            q.none { it.isLetter() } || 
+            (q.all { it.isLetter() } && !q.any { it.lowercaseChar() in listOf('a', 'e', 'i', 'o', 'u', 'y') } && q.length > 4)
+        )
+    }
+
+    LaunchedEffect(showNewChatPanel) {
+        if (showNewChatPanel) {
+            isLoadingMembers = true
+            try {
+                val currentUid = currentUserState?.id ?: ""
+                kotlinx.coroutines.withTimeoutOrNull(3000) {
+                    ServiceLocator.profileRepository.getAllProfiles().onSuccess { list ->
+                        membersList = list.filter { it.id != currentUid }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                isLoadingMembers = false
+            }
+        }
+    }
 
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
@@ -42,7 +81,7 @@ fun ConversationsListScreen(
                     GlassIconButton(
                         icon = Icons.Default.Edit,
                         contentDescription = "New Message",
-                        onClick = {}
+                        onClick = { showNewChatPanel = true }
                     )
                 }
             )
@@ -138,6 +177,378 @@ fun ConversationsListScreen(
                     items(filtered) { connection ->
                         ConversationListItem(connection = connection, onTap = { onChatTap(connection.id) })
                         Divider(modifier = Modifier.padding(horizontal = 16.dp), color = CosmosOutlineVariant.copy(alpha = 0.2f), thickness = 0.5.dp)
+                    }
+                }
+            }
+        }
+
+        // Sliding Right-Sidebar Panel
+        AnimatedVisibility(
+            visible = showNewChatPanel,
+            enter = slideInHorizontally(
+                initialOffsetX = { it },
+                animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing)
+            ) + fadeIn(animationSpec = tween(350)),
+            exit = slideOutHorizontally(
+                targetOffsetX = { it },
+                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+            ) + fadeOut(animationSpec = tween(300))
+        ) {
+            val screenWidth = LocalConfiguration.current.screenWidthDp
+            val sidebarWidthFraction = if (screenWidth > 600) 0.45f else 0.9f
+
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Dim backdrop scrim
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            showNewChatPanel = false
+                            panelSearchQuery = ""
+                        }
+                )
+
+                // Sidebar container
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(sidebarWidthFraction)
+                        .align(Alignment.CenterEnd)
+                        .background(CosmosBackground.copy(alpha = 0.97f))
+                        .border(
+                            width = 1.dp,
+                            color = CosmosGlassBorder,
+                            shape = RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp)
+                        )
+                        .clip(RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp))
+                        .padding(20.dp)
+                ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Top row with title and close action
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "New Message",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = CosmosOnBackground
+                            )
+                            IconButton(
+                                onClick = {
+                                    showNewChatPanel = false
+                                    panelSearchQuery = ""
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close",
+                                    tint = CosmosOnSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // Search Bar
+                        val focusRequester = remember { FocusRequester() }
+                        OutlinedTextField(
+                            value = panelSearchQuery,
+                            onValueChange = { panelSearchQuery = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusRequester),
+                            placeholder = {
+                                Text(
+                                    "Search members...",
+                                    color = CosmosOnSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = CosmosOnSurfaceVariant
+                                )
+                            },
+                            trailingIcon = {
+                                if (panelSearchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { panelSearchQuery = "" }) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Clear",
+                                            tint = CosmosOnSurfaceVariant
+                                        )
+                                    }
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = CosmosPrimary,
+                                unfocusedBorderColor = CosmosOutlineVariant,
+                                focusedTextColor = CosmosOnBackground,
+                                unfocusedTextColor = CosmosOnBackground,
+                                cursorColor = CosmosPrimary,
+                                focusedContainerColor = CosmosSurfaceContainerLow,
+                                unfocusedContainerColor = CosmosSurfaceContainerLow
+                            ),
+                            singleLine = true
+                        )
+
+                        Spacer(Modifier.height(20.dp))
+
+                        // State Check Context Options
+                        if (panelSearchQuery.isEmpty()) {
+                            if (connections.isNotEmpty()) {
+                                Text(
+                                    text = "Recent Conversations",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = CosmosPrimary,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                )
+
+                                LazyColumn(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    items(connections) { connection ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(14.dp))
+                                                .background(Color.White.copy(alpha = 0.04f))
+                                                .border(
+                                                    width = 0.5.dp,
+                                                    color = Color.White.copy(alpha = 0.08f),
+                                                    shape = RoundedCornerShape(14.dp)
+                                                )
+                                                .clickable {
+                                                    showNewChatPanel = false
+                                                    panelSearchQuery = ""
+                                                    onChatTap(connection.id)
+                                                }
+                                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            CosmosAvatar(
+                                                avatarUrl = connection.member.avatarUrl,
+                                                name = connection.member.name,
+                                                size = 40.dp,
+                                                isLinkedInConnected = connection.member.isLinkedInConnected
+                                            )
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = connection.member.name,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = CosmosOnBackground
+                                                )
+                                                Text(
+                                                    text = connection.lastMessage,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = CosmosOnSurfaceVariant,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.ChatBubbleOutline,
+                                            contentDescription = null,
+                                            tint = CosmosPrimary,
+                                            modifier = Modifier.size(48.dp)
+                                        )
+                                        Spacer(Modifier.height(12.dp))
+                                        Text(
+                                            text = "No active conversations",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = CosmosOnBackground
+                                        )
+                                        Spacer(Modifier.height(16.dp))
+                                        CosmosButton(
+                                            text = "Start a New Chat",
+                                            onClick = {
+                                                focusRequester.requestFocus()
+                                            },
+                                            modifier = Modifier.width(180.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        } else if (isQueryUnintelligible) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.padding(16.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = CosmosPrimary,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(
+                                        text = "Clarification Required",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = CosmosOnBackground
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        text = "We couldn't resolve your search query. Please try typing a member's name, headline, company, or a valid professional interest tag.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = CosmosOnSurfaceVariant,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                    Spacer(Modifier.height(20.dp))
+                                    CosmosButton(
+                                        text = "Reset Search",
+                                        onClick = { panelSearchQuery = "" },
+                                        modifier = Modifier.width(160.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            if (isLoadingMembers) {
+                                Box(
+                                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(color = CosmosPrimary)
+                                }
+                            } else {
+                                val filteredMembers = membersList.filter {
+                                    it.name.contains(panelSearchQuery, ignoreCase = true) ||
+                                            it.headline.contains(panelSearchQuery, ignoreCase = true) ||
+                                            it.company.contains(panelSearchQuery, ignoreCase = true) ||
+                                            it.tags.any { tag -> tag.contains(panelSearchQuery, ignoreCase = true) }
+                                }
+
+                                if (filteredMembers.isNotEmpty()) {
+                                    LazyColumn(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        items(filteredMembers) { member ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(14.dp))
+                                                    .background(Color.White.copy(alpha = 0.04f))
+                                                    .border(
+                                                        width = 0.5.dp,
+                                                        color = Color.White.copy(alpha = 0.08f),
+                                                        shape = RoundedCornerShape(14.dp)
+                                                    )
+                                                    .clickable {
+                                                        showNewChatPanel = false
+                                                        panelSearchQuery = ""
+                                                        onChatTap(member.id)
+                                                    }
+                                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                CosmosAvatar(
+                                                    avatarUrl = member.avatarUrl,
+                                                    name = member.name,
+                                                    size = 40.dp,
+                                                    isLinkedInConnected = member.isLinkedInConnected
+                                                )
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = member.name,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = CosmosOnBackground
+                                                    )
+                                                    Text(
+                                                        text = member.headline,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = CosmosOnSurfaceVariant,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxWidth(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center,
+                                            modifier = Modifier.padding(20.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Search,
+                                                contentDescription = null,
+                                                tint = CosmosPrimary,
+                                                modifier = Modifier.size(56.dp)
+                                            )
+                                            Spacer(Modifier.height(14.dp))
+                                            Text(
+                                                text = "No Matches Found",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = CosmosOnBackground
+                                            )
+                                            Spacer(Modifier.height(8.dp))
+                                            Text(
+                                                text = "We couldn't find any members matching \"$panelSearchQuery\". Try searching for tags like 'AI', 'Product', 'SaaS', or check your spelling.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = CosmosOnSurfaceVariant,
+                                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                            )
+                                            Spacer(Modifier.height(24.dp))
+                                            CosmosButton(
+                                                text = "Explore Connect Deck",
+                                                onClick = {
+                                                    showNewChatPanel = false
+                                                    panelSearchQuery = ""
+                                                    onNavigate(Screen.Connect.route)
+                                                },
+                                                modifier = Modifier.width(200.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

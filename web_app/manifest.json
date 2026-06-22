@@ -1,0 +1,40 @@
+{
+  "name": "Cosmos — Professional Networking",
+  "short_name": "Cosmos",
+  "description": "Premium professional networking for founders, operators, investors, and builders. Quality over quantity.",
+  "start_url": "/web_app/index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#060811",
+  "background_color": "#060811",
+  "categories": ["business", "social"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Connect",
+      "short_name": "Connect",
+      "url": "/web_app/index.html#/connect",
+      "icons": []
+    },
+    {
+      "name": "Events",
+      "short_name": "Events",
+      "url": "/web_app/index.html#/events",
+      "icons": []
+    }
+  ]
+}

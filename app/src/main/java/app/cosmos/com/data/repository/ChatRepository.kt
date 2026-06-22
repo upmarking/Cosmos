@@ -203,12 +203,58 @@ class FirestoreChatRepository(
         }
     }
 
+    private suspend fun ensureConnectionExists(connectionId: String, currentUserId: String) {
+        val docRef = firestore.collection("connections").document(connectionId)
+        val doc = docRef.get().await()
+        if (!doc.exists()) {
+            val members = if (connectionId.startsWith("intro_")) {
+                emptyList()
+            } else {
+                connectionId.split("_")
+            }
+            val otherMemberId = members.firstOrNull { it != currentUserId } ?: ""
+            val connectionData = mapOf(
+                "id" to connectionId,
+                "members" to members,
+                "lastMessage" to "",
+                "lastMessageTime" to FieldValue.serverTimestamp(),
+                "unreadCountMap" to mapOf(
+                    currentUserId to 0,
+                    otherMemberId to 0
+                ),
+                "labels" to mapOf(
+                    currentUserId to emptyList<String>(),
+                    otherMemberId to emptyList<String>()
+                ),
+                "privateGoals" to mapOf(
+                    currentUserId to "",
+                    otherMemberId to ""
+                ),
+                "status" to ConnectionStatus.ACTIVE.name,
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+            docRef.set(connectionData).await()
+            
+            // Increment connectionsCount
+            for (memberId in members) {
+                if (memberId.isNotBlank()) {
+                    runCatching {
+                        firestore.collection("users").document(memberId)
+                            .update("connectionsCount", FieldValue.increment(1)).await()
+                    }
+                }
+            }
+        }
+    }
+
     override suspend fun sendMessage(
         connectionId: String,
         senderId: String,
         text: String,
         type: MessageType
     ): Result<Unit> = runCatching {
+        ensureConnectionExists(connectionId, senderId)
+        
         val messageDoc = mapOf(
             "senderId" to senderId,
             "text" to text,
@@ -244,6 +290,7 @@ class FirestoreChatRepository(
         userId: String,
         labels: List<String>
     ): Result<Unit> = runCatching {
+        ensureConnectionExists(connectionId, userId)
         val path = "labels.$userId"
         firestore.collection("connections").document(connectionId)
             .update(path, labels).await()
@@ -254,6 +301,7 @@ class FirestoreChatRepository(
         userId: String,
         goal: String
     ): Result<Unit> = runCatching {
+        ensureConnectionExists(connectionId, userId)
         val path = "privateGoals.$userId"
         firestore.collection("connections").document(connectionId)
             .update(path, goal).await()
@@ -264,8 +312,11 @@ class FirestoreChatRepository(
     }
 
     override suspend fun markMessagesAsRead(connectionId: String, userId: String): Result<Unit> = runCatching {
-        firestore.collection("connections").document(connectionId)
-            .update("unreadCountMap.$userId", 0).await()
+        val doc = firestore.collection("connections").document(connectionId).get().await()
+        if (doc.exists()) {
+            firestore.collection("connections").document(connectionId)
+                .update("unreadCountMap.$userId", 0).await()
+        }
     }
 
     override suspend fun deleteMessage(connectionId: String, messageId: String): Result<Unit> = runCatching {

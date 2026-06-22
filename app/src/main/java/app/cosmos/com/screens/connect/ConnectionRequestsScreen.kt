@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,6 +45,7 @@ import app.cosmos.com.ui.components.CosmosButton
 import app.cosmos.com.ui.components.CosmosGlassCard
 import app.cosmos.com.ui.components.CosmosOutlinedButton
 import app.cosmos.com.ui.components.CosmosTopBar
+import app.cosmos.com.ui.components.RealtimeConnectionProgressDialog
 import app.cosmos.com.ui.theme.CosmosBackground
 import app.cosmos.com.ui.theme.CosmosGradientEnd
 import app.cosmos.com.ui.theme.CosmosGradientStart
@@ -67,6 +69,8 @@ fun ConnectionRequestsScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
 
     var selectedTab by remember { mutableIntStateOf(0) }
+    var activeAcceptRequestId by remember { mutableStateOf("") }
+    val setupPayload by connectionViewModel.connectionSetupPayload.collectAsState()
     val tabs = listOf("Received (${incoming.size})", "Sent (${outgoing.size})")
 
     CosmosAmbientBackground {
@@ -111,11 +115,10 @@ fun ConnectionRequestsScreen(
                     requests = incoming,
                     onProfileTap = onProfileTap,
                     onAccept = { requestId ->
-                        connectionViewModel.acceptRequest(requestId) { error ->
+                        activeAcceptRequestId = requestId
+                        connectionViewModel.acceptRequestWithLifecycle(requestId) { error ->
                             if (error == null) {
                                 android.widget.Toast.makeText(context, "Connection request accepted", android.widget.Toast.LENGTH_SHORT).show()
-                            } else {
-                                android.widget.Toast.makeText(context, "Failed to accept request: $error", android.widget.Toast.LENGTH_LONG).show()
                             }
                         }
                     },
@@ -145,6 +148,22 @@ fun ConnectionRequestsScreen(
                     onNavigate = onNavigate
                 )
             }
+        }
+
+        setupPayload?.let { payload ->
+            RealtimeConnectionProgressDialog(
+                payload = payload,
+                onDismiss = { connectionViewModel.resetConnectionSetupPayload() },
+                onRetry = {
+                    if (activeAcceptRequestId.isNotEmpty()) {
+                        connectionViewModel.acceptRequestWithLifecycle(activeAcceptRequestId) { error ->
+                            if (error == null) {
+                                android.widget.Toast.makeText(context, "Connection request accepted", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+            )
         }
     }
 }

@@ -123,6 +123,7 @@ fun MemberProfileScreen(
 
     val memberState by profileViewModel.selectedMember.collectAsState()
     val connectionStatus by profileViewModel.connectionProfileStatus.collectAsState()
+    val setupPayload by profileViewModel.connectionSetupPayload.collectAsState()
     val isOwnProfile = memberId == profileViewModel.currentUserId
     val context = androidx.compose.ui.platform.LocalContext.current
     var showConnectDialog by remember { mutableStateOf(false) }
@@ -223,7 +224,7 @@ fun MemberProfileScreen(
                                     app.cosmos.com.data.model.ConnectionProfileStatus.PENDING_RECEIVED -> {
                                         CosmosButton(
                                             text = "Accept",
-                                            onClick = { profileViewModel.acceptConnectionFromProfile(member.id) },
+                                            onClick = { profileViewModel.acceptConnectionFromProfileWithLifecycle(member.id) },
                                             modifier = Modifier.weight(1f),
                                             icon = Icons.Default.Check
                                         )
@@ -430,6 +431,16 @@ fun MemberProfileScreen(
                 }
             },
             containerColor = CosmosSurfaceContainerLow
+        )
+    }
+
+    setupPayload?.let { payload ->
+        RealtimeConnectionProgressDialog(
+            payload = payload,
+            onDismiss = { profileViewModel.resetConnectionSetupPayload() },
+            onRetry = {
+                profileViewModel.acceptConnectionFromProfileWithLifecycle(member.id)
+            }
         )
     }
 }

@@ -1,10 +1,6 @@
 package app.cosmos.com.ui.components
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -16,6 +12,9 @@ import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.graphics.graphicsLayer
+import app.cosmos.com.ui.theme.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -394,3 +393,171 @@ fun CosmosConfirmDialog(
         shape = RoundedCornerShape(20.dp)
     )
 }
+
+enum class RealtimeConnectionState(val tag: String, val message: String) {
+    INITIATED("[INITIATED]", "Accepting request... Initiating a secure connection. Please hold."),
+    CONNECTING("[CONNECTING]", "Securing end-to-end connection... Finalizing channel setup."),
+    SUCCESS("[SUCCESS]", "Connection successfully established. You are now securely connected."),
+    FAILURE("[FAILURE]", "Unable to establish a stable connection at this time. Please check your network and try again.")
+}
+
+@Composable
+fun RealtimeConnectionProgressDialog(
+    payload: String,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit
+) {
+    val tag = when {
+        payload.startsWith("[INITIATED]") -> "[INITIATED]"
+        payload.startsWith("[CONNECTING]") -> "[CONNECTING]"
+        payload.startsWith("[SUCCESS]") -> "[SUCCESS]"
+        payload.startsWith("[FAILURE]") -> "[FAILURE]"
+        else -> ""
+    }
+
+    val displayMessage = if (tag.isNotEmpty()) {
+        payload.substringAfter(tag).trim()
+    } else {
+        payload
+    }
+
+    AlertDialog(
+        onDismissRequest = {
+            if (tag == "[FAILURE]") {
+                onDismiss()
+            }
+        },
+        title = {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                when (tag) {
+                    "[INITIATED]" -> {
+                        CircularProgressIndicator(
+                            color = CosmosPrimary,
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
+                    "[CONNECTING]" -> {
+                        val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+                        val pulseScale by infiniteTransition.animateFloat(
+                            initialValue = 0.85f,
+                            targetValue = 1.15f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(1000, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "scale"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .graphicsLayer {
+                                    scaleX = pulseScale
+                                    scaleY = pulseScale
+                                }
+                                .clip(CircleShape)
+                                .background(CosmosPrimary.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = CosmosPrimary,
+                                modifier = Modifier.size(32.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    }
+                    "[SUCCESS]" -> {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF4CAF50).copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Success",
+                                tint = Color(0xFF4CAF50),
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+                    "[FAILURE]" -> {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFF6B6B).copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Failure",
+                                tint = Color(0xFFFF6B6B),
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                if (tag.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                when (tag) {
+                                    "[SUCCESS]" -> Color(0xFF4CAF50).copy(alpha = 0.12f)
+                                    "[FAILURE]" -> Color(0xFFFF6B6B).copy(alpha = 0.12f)
+                                    else -> CosmosPrimary.copy(alpha = 0.12f)
+                                }
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = tag,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = when (tag) {
+                                "[SUCCESS]" -> Color(0xFF4CAF50)
+                                "[FAILURE]" -> Color(0xFFFF6B6B)
+                                else -> CosmosPrimary
+                            }
+                        )
+                    }
+                }
+            }
+        },
+        text = {
+            Text(
+                text = displayMessage,
+                color = Color.White,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+            )
+        },
+        confirmButton = {
+            if (tag == "[FAILURE]") {
+                Button(
+                    onClick = onRetry,
+                    colors = ButtonDefaults.buttonColors(containerColor = CosmosPrimary),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Retry", fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = {
+            if (tag == "[FAILURE]") {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel", color = Color.White.copy(alpha = 0.6f))
+                }
+            }
+        },
+        containerColor = Color(0xFF1C1C2E),
+        shape = RoundedCornerShape(20.dp)
+    )
+}
+

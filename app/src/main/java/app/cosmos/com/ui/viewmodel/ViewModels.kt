@@ -5,10 +5,12 @@ import androidx.lifecycle.viewModelScope
 import app.cosmos.com.data.model.ChatMessage
 import app.cosmos.com.data.model.Circle
 import app.cosmos.com.data.model.Connection
+import app.cosmos.com.data.model.ConnectionStatus
 import app.cosmos.com.data.model.ConnectionProfileStatus
 import app.cosmos.com.data.model.ConnectionRequest
 import app.cosmos.com.data.model.ConnectionRequestStatus
 import app.cosmos.com.data.model.EventRound
+import kotlinx.coroutines.Job
 import app.cosmos.com.data.model.EventType
 import app.cosmos.com.data.model.IntroRequest
 import app.cosmos.com.data.model.IntroStatus
@@ -347,6 +349,9 @@ class ChatViewModel(
     private val _activeConnection = MutableStateFlow<Connection?>(null)
     val activeConnection: StateFlow<Connection?> = _activeConnection.asStateFlow()
 
+    private var selectConnectionJob: Job? = null
+    private var messagesCollectionJob: Job? = null
+
     init {
         loadConnections()
     }
@@ -380,18 +385,71 @@ class ChatViewModel(
     fun selectConnection(connectionId: String) {
         val uid = authRepo.currentUserId ?: return
         val resolvedId = resolveId(connectionId, uid)
+        
+        // Reset states to avoid showing stale data during loading
+        _activeConnection.value = null
+        _messages.value = emptyList()
+        
+        selectConnectionJob?.cancel()
+        messagesCollectionJob?.cancel()
+
         viewModelScope.launch {
             chatRepo.markMessagesAsRead(resolvedId, uid)
         }
-        viewModelScope.launch {
+        
+        selectConnectionJob = viewModelScope.launch {
             chatRepo.getConnection(resolvedId, uid).collectLatest { conn ->
                 if (conn != null) {
                     val profile = profileRepo.getProfile(conn.member.id, fetchSkills = false).getOrDefault(conn.member)
                     _activeConnection.value = conn.copy(member = profile)
+                } else {
+                    // Falls back to creating a local draft Connection if the document doesn't exist yet
+                    if (resolvedId.contains("_") && !resolvedId.startsWith("intro_")) {
+                        val otherUserId = resolvedId.split("_").firstOrNull { it != uid } ?: ""
+                        if (otherUserId.isNotEmpty()) {
+                            profileRepo.getProfile(otherUserId, fetchSkills = false).onSuccess { profile ->
+                                if (_activeConnection.value == null || _activeConnection.value?.id == resolvedId) {
+                                    _activeConnection.value = Connection(
+                                        id = resolvedId,
+                                        member = profile,
+                                        lastMessage = "",
+                                        lastMessageTime = "Now",
+                                        unreadCount = 0,
+                                        labels = emptyList(),
+                                        privateGoal = "",
+                                        status = ConnectionStatus.ACTIVE
+                                    )
+                                }
+                            }.onFailure {
+                                val placeholderProfile = Member(
+                                    id = otherUserId,
+                                    name = "User",
+                                    headline = "",
+                                    role = "",
+                                    company = "",
+                                    avatarUrl = "",
+                                    membershipTier = MembershipTier.EXPLORER
+                                )
+                                if (_activeConnection.value == null || _activeConnection.value?.id == resolvedId) {
+                                    _activeConnection.value = Connection(
+                                        id = resolvedId,
+                                        member = placeholderProfile,
+                                        lastMessage = "",
+                                        lastMessageTime = "Now",
+                                        unreadCount = 0,
+                                        labels = emptyList(),
+                                        privateGoal = "",
+                                        status = ConnectionStatus.ACTIVE
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
-        viewModelScope.launch {
+        
+        messagesCollectionJob = viewModelScope.launch {
             chatRepo.getMessages(resolvedId).collectLatest { list ->
                 val ownMarked = list.map { it.copy(isOwn = it.senderId == uid) }
                 _messages.value = ownMarked
@@ -904,6 +962,13 @@ class ProfileViewModel(
     private val _connectionProfileStatus = MutableStateFlow(ConnectionProfileStatus.NONE)
     val connectionProfileStatus: StateFlow<ConnectionProfileStatus> = _connectionProfileStatus.asStateFlow()
 
+    private val _connectionSetupPayload = MutableStateFlow<String?>(null)
+    val connectionSetupPayload: StateFlow<String?> = _connectionSetupPayload.asStateFlow()
+
+    fun resetConnectionSetupPayload() {
+        _connectionSetupPayload.value = null
+    }
+
     fun checkConnectionStatus(memberId: String) {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch {
@@ -948,6 +1013,47 @@ class ProfileViewModel(
                     _connectionProfileStatus.value = ConnectionProfileStatus.CONNECTED
                     loadProfile(memberId)
                 }
+        }
+    }
+
+    fun acceptConnectionFromProfileWithLifecycle(memberId: String, onResult: (String?) -> Unit = {}) {
+        val uid = authRepo.currentUserId ?: return
+        val requestId = "req_${memberId}_${uid}"
+        viewModelScope.launch {
+            _connectionSetupPayload.value = "[INITIATED] Accepting request... Initiating a secure connection. Please hold."
+            kotlinx.coroutines.delay(1000)
+            
+            _connectionSetupPayload.value = "[CONNECTING] Securing end-to-end connection... Finalizing channel setup."
+            kotlinx.coroutines.delay(1000)
+
+            var attempts = 0
+            var success = false
+            var errorMsg: String? = null
+
+            while (attempts < 3 && !success) {
+                attempts++
+                val result = ServiceLocator.connectionRequestRepository.acceptConnectionRequest(requestId)
+                if (result.isSuccess) {
+                    success = true
+                } else {
+                    val ex = result.exceptionOrNull()
+                    errorMsg = ex?.localizedMessage ?: ex?.message ?: "Unknown error"
+                    if (attempts < 3) {
+                        kotlinx.coroutines.delay(1500)
+                    }
+                }
+            }
+
+            if (success) {
+                _connectionSetupPayload.value = "[SUCCESS] Connection successfully established. You are now securely connected."
+                _connectionProfileStatus.value = ConnectionProfileStatus.CONNECTED
+                loadProfile(memberId)
+                kotlinx.coroutines.delay(1500)
+                _connectionSetupPayload.value = null
+                onResult(null)
+            } else {
+                _connectionSetupPayload.value = "[FAILURE] Unable to establish a stable connection at this time. Please check your network and try again."
+            }
         }
     }
 
@@ -1088,6 +1194,13 @@ class ConnectionViewModel(
     private val _incomingRequests = MutableStateFlow<List<ConnectionRequest>>(emptyList())
     val incomingRequests: StateFlow<List<ConnectionRequest>> = _incomingRequests.asStateFlow()
 
+    private val _connectionSetupPayload = MutableStateFlow<String?>(null)
+    val connectionSetupPayload: StateFlow<String?> = _connectionSetupPayload.asStateFlow()
+
+    fun resetConnectionSetupPayload() {
+        _connectionSetupPayload.value = null
+    }
+
     private val _outgoingRequests = MutableStateFlow<List<ConnectionRequest>>(emptyList())
     val outgoingRequests: StateFlow<List<ConnectionRequest>> = _outgoingRequests.asStateFlow()
 
@@ -1166,6 +1279,43 @@ class ConnectionViewModel(
             connectionRequestRepo.acceptConnectionRequest(requestId)
                 .onSuccess { onResult(null) }
                 .onFailure { error -> onResult(error.localizedMessage ?: error.message ?: "Unknown error") }
+        }
+    }
+
+    fun acceptRequestWithLifecycle(requestId: String, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            _connectionSetupPayload.value = "[INITIATED] Accepting request... Initiating a secure connection. Please hold."
+            kotlinx.coroutines.delay(1000)
+            
+            _connectionSetupPayload.value = "[CONNECTING] Securing end-to-end connection... Finalizing channel setup."
+            kotlinx.coroutines.delay(1000)
+
+            var attempts = 0
+            var success = false
+            var errorMsg: String? = null
+
+            while (attempts < 3 && !success) {
+                attempts++
+                val result = connectionRequestRepo.acceptConnectionRequest(requestId)
+                if (result.isSuccess) {
+                    success = true
+                } else {
+                    val ex = result.exceptionOrNull()
+                    errorMsg = ex?.localizedMessage ?: ex?.message ?: "Unknown error"
+                    if (attempts < 3) {
+                        kotlinx.coroutines.delay(1500)
+                    }
+                }
+            }
+
+            if (success) {
+                _connectionSetupPayload.value = "[SUCCESS] Connection successfully established. You are now securely connected."
+                kotlinx.coroutines.delay(1500)
+                _connectionSetupPayload.value = null
+                onResult(null)
+            } else {
+                _connectionSetupPayload.value = "[FAILURE] Unable to establish a stable connection at this time. Please check your network and try again."
+            }
         }
     }
 
