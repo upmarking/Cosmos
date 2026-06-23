@@ -3,7 +3,7 @@
    Cache-first for static assets, network-first for API calls
    ============================================================ */
 
-const CACHE_NAME = 'cosmos-pwa-v1';
+const CACHE_NAME = 'cosmos-pwa-v5';
 const STATIC_ASSETS = [
   '/web_app/index.html',
   '/web_app/css/styles.css',
@@ -18,6 +18,8 @@ const STATIC_ASSETS = [
   '/web_app/js/pages/social.js',
   '/web_app/js/pages/profile.js',
   '/web_app/js/pages/notifications.js',
+  '/web_app/js/pages/settings.js',
+  '/web_app/js/pages/verify-email.js',
   '/web_app/manifest.json',
   '/web_app/icons/icon-192.png',
   '/web_app/icons/icon-512.png',

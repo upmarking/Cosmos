@@ -4,10 +4,11 @@
 
 import {
   auth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  signOut, sendPasswordResetEmail, googleProvider, signInWithPopup,
-  db, doc, getDoc, updateDoc, serverTimestamp, collection, addDoc
+  signOut, sendPasswordResetEmail, googleProvider, signInWithPopup, sendEmailVerification,
+  db, doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, addDoc
 } from '../firebase-config.js';
 import { showToast } from '../app.js';
+import router from '../router.js';
 
 let currentView = 'login'; // login | signup | forgot
 
@@ -145,7 +146,12 @@ function attachAuthListeners(outlet) {
       try {
         googleBtn.disabled = true;
         googleBtn.textContent = 'Signing in...';
-        await signInWithPopup(auth, googleProvider);
+        const cred = await signInWithPopup(auth, googleProvider);
+        if (!cred.user.emailVerified) {
+          showToast('Please verify your email address to continue.', 'info');
+          router.navigate('/verify-email');
+          return;
+        }
         showToast('Welcome to Cosmos!', 'success');
       } catch (err) {
         console.error('Google sign-in error:', err);
@@ -167,7 +173,12 @@ function attachAuthListeners(outlet) {
       try {
         btn.disabled = true;
         btn.textContent = 'Signing in...';
-        await signInWithEmailAndPassword(auth, email, password);
+        const cred = await signInWithEmailAndPassword(auth, email, password);
+        if (!cred.user.emailVerified) {
+          showToast('Please verify your email address to continue.', 'info');
+          router.navigate('/verify-email');
+          return;
+        }
         showToast('Welcome back!', 'success');
       } catch (err) {
         showToast(getAuthError(err.code), 'error');
@@ -190,19 +201,46 @@ function attachAuthListeners(outlet) {
         btn.disabled = true;
         btn.textContent = 'Creating account...';
         const cred = await createUserWithEmailAndPassword(auth, email, password);
-        // Create user profile document
+        
+        // Send verification email
+        await sendEmailVerification(cred.user);
+
+        // Create user profile document with document ID as uid
         try {
-          await addDoc(collection(db, 'users'), {
-            uid: cred.user.uid,
-            displayName: name,
-            email: email,
+          await setDoc(doc(db, 'users', cred.user.uid), {
+            id: cred.user.uid,
+            name: name,
+            email: email.toLowerCase(),
             createdAt: serverTimestamp(),
-            profileComplete: false,
+            updatedAt: serverTimestamp(),
+            isProfileComplete: false,
+            primaryUserType: '',
+            headline: '',
+            role: '',
+            company: '',
+            avatarUrl: '',
+            location: '',
+            bio: '',
+            tags: [],
+            goalStatement: '',
+            longTermVision: '',
+            lookingFor: [],
+            isLinkedInConnected: false,
+            membershipTier: 'EXPLORER',
+            connectionsCount: 0,
+            followersCount: 0,
+            followingCount: 0,
+            eventsAttended: 0,
+            followUpsCompleted: 0,
+            joinedCircles: [],
+            pendingCircles: []
           });
         } catch (dbErr) {
           console.warn('Profile creation failed:', dbErr);
         }
-        showToast('Account created! Welcome to Cosmos.', 'success');
+
+        showToast('Account created! A verification link has been sent. Please verify your email to continue.', 'success');
+        router.navigate('/verify-email');
       } catch (err) {
         showToast(getAuthError(err.code), 'error');
         btn.disabled = false;

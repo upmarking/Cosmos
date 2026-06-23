@@ -39,6 +39,8 @@ interface AuthRepository {
     suspend fun deleteAccount(): Result<Unit>
     suspend fun updateEmail(newEmail: String): Result<Unit>
     suspend fun updatePassword(currentPassword: String, newPassword: String): Result<Unit>
+    suspend fun reloadUser(): Result<Boolean>
+    suspend fun resendVerificationEmail(): Result<Unit>
 }
 
 class FirebaseAuthRepository(
@@ -268,7 +270,12 @@ class FirebaseAuthRepository(
 
         return try {
             val result = auth.createUserWithEmailAndPassword(email.trim(), password).await()
-            val uid = result.user?.uid ?: throw IllegalStateException("UID not found after signup")
+            val user = result.user ?: throw IllegalStateException("UID not found after signup")
+
+            // Send verification email
+            user.sendEmailVerification().await()
+
+            val uid = user.uid
 
             val basicUserMap = mapOf(
                 "id" to uid,
@@ -463,6 +470,34 @@ class FirebaseAuthRepository(
             user.reauthenticate(credential).await()
             user.updatePassword(newPassword).await()
             Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun reloadUser(): Result<Boolean> {
+        return try {
+            val user = auth.currentUser
+            if (user != null) {
+                user.reload().await()
+                Result.success(user.isEmailVerified)
+            } else {
+                Result.failure(Exception("No user logged in"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun resendVerificationEmail(): Result<Unit> {
+        return try {
+            val user = auth.currentUser
+            if (user != null) {
+                user.sendEmailVerification().await()
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("No user logged in"))
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }

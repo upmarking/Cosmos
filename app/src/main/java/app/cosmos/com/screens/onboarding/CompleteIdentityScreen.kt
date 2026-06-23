@@ -1061,7 +1061,6 @@ fun CompleteIdentityScreen(
                                         val isCurrentCredentialsSignedUp = alreadySignedUp &&
                                                 email == lastSignedUpEmail &&
                                                 password == lastSignedUpPassword
-
                                         if (isCurrentCredentialsSignedUp && currentUser != null) {
                                             proceedToSaveAndNavigate()
                                         } else {
@@ -1069,7 +1068,54 @@ fun CompleteIdentityScreen(
                                                 alreadySignedUp = true
                                                 lastSignedUpEmail = email
                                                 lastSignedUpPassword = password
-                                                proceedToSaveAndNavigate()
+                                                
+                                                val imageBytes = when {
+                                                    selectedImageUri != null -> {
+                                                        try {
+                                                            context.contentResolver.openInputStream(selectedImageUri!!)?.use { it.readBytes() }
+                                                        } catch (e: Exception) {
+                                                            null
+                                                        }
+                                                    }
+                                                    selectedImageBitmap != null -> {
+                                                        try {
+                                                            val stream = ByteArrayOutputStream()
+                                                            selectedImageBitmap!!.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+                                                            stream.toByteArray()
+                                                        } catch (e: Exception) {
+                                                            null
+                                                        }
+                                                    }
+                                                    else -> null
+                                                }
+
+                                                val memberData = Member(
+                                                    id = "",
+                                                    name = name,
+                                                    headline = headline.ifBlank { if (company.isBlank()) selectedUserType else "$selectedUserType at $company" },
+                                                    role = role,
+                                                    company = company,
+                                                    avatarUrl = "",
+                                                    location = location,
+                                                    email = email,
+                                                    isLinkedInConnected = isLinkedInConnected,
+                                                    membershipTier = MembershipTier.EXPLORER,
+                                                    primaryUserType = selectedUserType
+                                                )
+
+                                                authViewModel.saveOnboarding(
+                                                    member = memberData,
+                                                    onSuccess = {
+                                                        android.widget.Toast.makeText(
+                                                            context,
+                                                            "Verification email sent! Please check your inbox.",
+                                                            android.widget.Toast.LENGTH_LONG
+                                                        ).show()
+                                                        onNext()
+                                                    },
+                                                    imageBytes = imageBytes,
+                                                    optimisticNavigation = false
+                                                )
                                             }
                                         }
                                     }

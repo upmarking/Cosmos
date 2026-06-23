@@ -2,21 +2,23 @@
    Cosmos PWA — Events Page
    ============================================================ */
 
-import { db, collection, getDocs, query, orderBy, limit } from '../firebase-config.js';
+import { auth, db, collection, query, onSnapshot, doc, getDoc, setDoc, updateDoc, addDoc, increment, serverTimestamp } from '../firebase-config.js';
 import { showToast } from '../app.js';
-
-const demoEvents = [
-  { id: '1', title: 'Founders Speed Network', type: 'Speed Networking', icon: '🔥', date: 'Jun 24, 2026', time: '6:00 PM IST', spots: 18, totalSpots: 30, tags: ['Founders', 'B2B', 'AI'], attendees: ['SK', 'MR', 'AP'], description: 'Connect with 6 founders in structured 15-minute rounds. AI summaries generated after each meeting.' },
-  { id: '2', title: 'AI Builders Meetup', type: 'Curated Meetup', icon: '🤖', date: 'Jun 26, 2026', time: '7:30 PM IST', spots: 24, totalSpots: 40, tags: ['AI', 'ML', 'Engineering'], attendees: ['JO', 'EV', 'KT', 'SC'], description: 'Deep dive into the latest in AI infrastructure with fellow builders and engineers.' },
-  { id: '3', title: 'Investor-Founder Match', type: 'Invite Only', icon: '💰', date: 'Jun 28, 2026', time: '5:00 PM IST', spots: 8, totalSpots: 20, tags: ['Fundraising', 'Pre-Seed', 'Seed'], attendees: ['MR', 'AP'], description: 'Exclusive curated matching between active investors and fundable founders. Limited spots.' },
-  { id: '4', title: 'Product Leaders Circle', type: 'Industry Round', icon: '🎯', date: 'Jul 1, 2026', time: '6:30 PM IST', spots: 32, totalSpots: 50, tags: ['Product', 'Design', 'Growth'], attendees: ['KT', 'AP', 'EV'], description: 'Monthly gathering of product leaders sharing insights, challenges, and frameworks.' },
-  { id: '5', title: 'Women in Tech Network', type: 'Themed Session', icon: '💜', date: 'Jul 3, 2026', time: '7:00 PM IST', spots: 15, totalSpots: 25, tags: ['Women', 'Leadership', 'Tech'], attendees: ['SC', 'AP', 'EV'], description: 'Building connections and mentoring relationships among women leaders in technology.' },
-];
 
 const tabs = ['All Events', 'Speed Networking', 'Curated Meetup', 'Invite Only', 'Industry Round'];
 let activeTab = 'All Events';
+let unsubEvents = null;
+const registrationsMap = new Map();
 
 export async function renderEvents(outlet) {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  if (unsubEvents) {
+    unsubEvents();
+    unsubEvents = null;
+  }
+
   outlet.innerHTML = `
     <div class="events-page page">
       <div class="page-header">
@@ -29,7 +31,7 @@ export async function renderEvents(outlet) {
         `).join('')}
       </div>
       <div class="events-grid stagger" id="events-grid">
-        ${renderEventCards(getFilteredEvents())}
+        <div class="loading-spinner" style="margin:2rem auto; display:block; grid-column: 1/-1;"></div>
       </div>
     </div>
   `;
@@ -39,18 +41,86 @@ export async function renderEvents(outlet) {
     tab.addEventListener('click', () => {
       activeTab = tab.dataset.tab;
       outlet.querySelectorAll('.event-tab').forEach(t => t.classList.toggle('active', t === tab));
-      const grid = outlet.querySelector('#events-grid');
-      grid.innerHTML = renderEventCards(getFilteredEvents());
-      attachEventCardListeners(outlet);
+      // Re-trigger render
+      triggerEventsFetch(outlet, user.uid);
     });
   });
 
-  attachEventCardListeners(outlet);
+  triggerEventsFetch(outlet, user.uid);
 }
 
-function getFilteredEvents() {
-  if (activeTab === 'All Events') return demoEvents;
-  return demoEvents.filter(e => e.type === activeTab);
+function triggerEventsFetch(outlet, currentUserId) {
+  if (unsubEvents) {
+    unsubEvents();
+  }
+
+  unsubEvents = onSnapshot(collection(db, 'events'), async (snapshot) => {
+    const list = [];
+    const checkRegPromises = [];
+
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      const eventId = docSnap.id;
+
+      // Parallel check if current user is registered
+      const promise = getDoc(doc(db, 'events', eventId, 'registrants', currentUserId))
+        .then(regSnap => {
+          registrationsMap.set(eventId, regSnap.exists());
+        })
+        .catch(err => {
+          console.error('[Cosmos Events] Registration check failed:', eventId, err);
+          registrationsMap.set(eventId, false);
+        });
+
+      checkRegPromises.push(promise);
+
+      list.push({
+        id: eventId,
+        title: data.title || 'Unnamed Event',
+        description: data.description || '',
+        date: data.date || '',
+        time: data.time || '',
+        location: data.location || '',
+        type: data.type || 'OPEN_NETWORKING',
+        participantCount: data.participantCount || 0,
+        maxParticipants: data.maxParticipants || 100,
+        isPaid: data.isPaid || false,
+        price: data.price || '',
+        coverUrl: data.coverUrl || '',
+        tags: data.tags || [],
+        createdBy: data.createdBy || '',
+        createdAt: data.createdAt
+      });
+    });
+
+    await Promise.all(checkRegPromises);
+
+    const getFilteredEvents = () => {
+      if (activeTab === 'All Events') return list;
+      // Map standard event types to clean matching
+      const tabMap = {
+        'Speed Networking': 'SPEED_NETWORKING',
+        'Curated Meetup': 'CURATED_MEETUP',
+        'Invite Only': 'INVITE_ONLY',
+        'Industry Round': 'INDUSTRY_ROUND'
+      };
+      const typeKey = tabMap[activeTab] || activeTab;
+      return list.filter(e => e.type === typeKey);
+    };
+
+    const grid = outlet.querySelector('#events-grid');
+    if (grid) {
+      const filtered = getFilteredEvents();
+      grid.innerHTML = renderEventCards(filtered);
+      attachEventCardListeners(outlet, filtered, currentUserId);
+    }
+  }, (error) => {
+    console.error('[Cosmos Events] Error listening to events:', error);
+    const grid = outlet.querySelector('#events-grid');
+    if (grid) {
+      grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--red);padding:2rem;">Failed to load events: ${error.message}</div>`;
+    }
+  });
 }
 
 function renderEventCards(events) {
@@ -64,17 +134,35 @@ function renderEventCards(events) {
     `;
   }
 
+  const iconsMap = {
+    SPEED_NETWORKING: '🔥',
+    CURATED_MEETUP: '🤖',
+    INVITE_ONLY: '💰',
+    INDUSTRY_ROUND: '🎯',
+    OPEN_NETWORKING: '🤝'
+  };
+
+  const typesReadable = {
+    SPEED_NETWORKING: 'Speed Networking',
+    CURATED_MEETUP: 'Curated Meetup',
+    INVITE_ONLY: 'Invite Only',
+    INDUSTRY_ROUND: 'Industry Round',
+    OPEN_NETWORKING: 'Open Networking'
+  };
+
   return events.map(event => {
-    const spotsLeft = event.totalSpots - event.spots;
+    const spotsLeft = event.maxParticipants - event.participantCount;
     const urgency = spotsLeft <= 10;
-    const avatarColors = ['linear-gradient(135deg,#7c3aed,#a78bfa)', 'linear-gradient(135deg,#2563eb,#60a5fa)', 'linear-gradient(135deg,#db2777,#f472b6)', 'linear-gradient(135deg,#059669,#34d399)'];
+    const icon = iconsMap[event.type] || '📅';
+    const typeText = typesReadable[event.type] || event.type;
+    const isJoined = registrationsMap.get(event.id) || false;
 
     return `
       <div class="event-card anim-fade-up" data-id="${event.id}">
         <div class="event-card-header">
           <div>
-            <div class="event-card-title">${event.icon} ${event.title}</div>
-            <span class="badge badge-purple" style="margin-top:0.25rem;">${event.type}</span>
+            <div class="event-card-title">${icon} ${event.title}</div>
+            <span class="badge badge-purple" style="margin-top:0.25rem;">${typeText}</span>
           </div>
         </div>
         <div class="event-card-meta">
@@ -86,40 +174,70 @@ function renderEventCards(events) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             ${event.time}
           </span>
-          <span class="event-card-meta-item ${urgency ? 'style="color:var(--amber);"' : ''}">
+          <span class="event-card-meta-item" ${urgency && spotsLeft > 0 ? 'style="color:var(--amber);"' : ''}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-            ${spotsLeft} spots left
+            ${spotsLeft > 0 ? `${spotsLeft} spots left` : 'Sold out'}
           </span>
         </div>
         <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.75rem;line-height:1.6;">${event.description}</p>
-        <div class="event-card-tags">
+        <div class="event-card-tags" style="margin-bottom:0.75rem;">
           ${event.tags.map(t => `<span class="tag">${t}</span>`).join('')}
         </div>
         <div class="event-card-footer">
           <div class="event-card-attendees">
-            ${event.attendees.map((a, i) => `<div class="avatar" style="background:${avatarColors[i % avatarColors.length]};width:28px;height:28px;font-size:0.6rem;margin-left:${i > 0 ? '-8px' : '0'};border:2px solid var(--bg-primary);">${a}</div>`).join('')}
-            <span class="event-card-spots">${event.spots} going</span>
+            <span class="event-card-spots">${event.participantCount} going</span>
           </div>
-          <button class="btn btn-primary btn-sm event-join-btn" data-event-id="${event.id}">Join Event</button>
+          <button class="btn ${isJoined ? 'btn-success' : 'btn-primary'} btn-sm event-join-btn" data-event-id="${event.id}" ${isJoined || spotsLeft <= 0 ? 'disabled' : ''}>
+            ${isJoined ? 'Joined! ✓' : (spotsLeft <= 0 ? 'Full' : 'Join Event')}
+          </button>
         </div>
       </div>
     `;
   }).join('');
 }
 
-function attachEventCardListeners(outlet) {
+function attachEventCardListeners(outlet, events, currentUserId) {
   outlet.querySelectorAll('.event-join-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const eventId = btn.dataset.eventId;
-      const event = demoEvents.find(ev => ev.id === eventId);
-      if (event) {
+      const event = events.find(ev => ev.id === eventId);
+      if (!event) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Joining...';
+
+      try {
+        const eventRef = doc(db, 'events', eventId);
+        const registrantRef = doc(db, 'events', eventId, 'registrants', currentUserId);
+
+        // Save registration and increment attendee counter
+        await setDoc(registrantRef, { registeredAt: serverTimestamp() });
+        await updateDoc(eventRef, { participantCount: increment(1) });
+
+        // Add a notification for reminder
+        await addDoc(collection(db, 'notifications'), {
+          userId: currentUserId,
+          type: 'EVENT_REMINDER',
+          title: `Registered for ${event.title}`,
+          body: `You're all set! We'll remind you when the event starts.`,
+          timestamp: serverTimestamp(),
+          isRead: false,
+          actionId: eventId
+        });
+
+        registrationsMap.set(eventId, true);
         btn.textContent = 'Joined! ✓';
-        btn.disabled = true;
         btn.classList.remove('btn-primary');
         btn.classList.add('btn-success');
         showToast(`You've joined "${event.title}"! 🎉`, 'success');
+      } catch (err) {
+        console.error('[Cosmos Events] Join failed:', err);
+        showToast('Failed to join event', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Join Event';
       }
     });
   });
 }
+

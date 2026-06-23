@@ -161,9 +161,9 @@ fun NetworkingDashboardScreen(
                         CosmosSectionHeader("Networking Stats")
                         Spacer(Modifier.height(8.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            CosmosStatCard("Followers", "${me.followersCount}", modifier = Modifier.weight(1f))
-                            CosmosStatCard("Following", "${me.followingCount}", modifier = Modifier.weight(1f), accent = CosmosSecondary)
-                            CosmosStatCard("Connections", "${me.connectionsCount}", modifier = Modifier.weight(1f), accent = CosmosTertiary)
+                            CosmosStatCard("Followers", "${me.followersCount}", modifier = Modifier.weight(1f), onClick = { onNavigate(Screen.NetworkRelations.createRoute("followers")) })
+                            CosmosStatCard("Following", "${me.followingCount}", modifier = Modifier.weight(1f), accent = CosmosSecondary, onClick = { onNavigate(Screen.NetworkRelations.createRoute("following")) })
+                            CosmosStatCard("Connections", "${me.connectionsCount}", modifier = Modifier.weight(1f), accent = CosmosTertiary, onClick = { onNavigate(Screen.NetworkRelations.createRoute("connections")) })
                         }
                         Spacer(Modifier.height(10.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -482,6 +482,7 @@ fun SettingsPrivacyScreen(
     onBack: () -> Unit,
     onSignOut: () -> Unit = {},
     onEditProfileTap: () -> Unit = {},
+    onNavigate: (String) -> Unit = {},
     authViewModel: app.cosmos.com.ui.viewmodel.AuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val context = LocalContext.current
@@ -719,6 +720,11 @@ fun SettingsPrivacyScreen(
                 }
                 item {
                     CosmosSettingsCard {
+                        SettingsItem(
+                            title = "Network Relations",
+                            icon = Icons.Outlined.People,
+                            onClick = { onNavigate(Screen.NetworkRelations.createRoute("connections")) }
+                        )
                         SettingsItemWithTrailingText(
                             title = "Monthly Connection Limit",
                             icon = Icons.Outlined.TrendingUp,

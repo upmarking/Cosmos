@@ -36,6 +36,7 @@ interface ConnectionRequestRepository {
     fun getConnectionStatusFlow(currentUserId: String, otherUserId: String): Flow<ConnectionProfileStatus>
 
     fun getIncomingRequestCount(userId: String): Flow<Int>
+    suspend fun removeConnection(currentUserId: String, otherUserId: String): Result<Unit>
 }
 
 class FirestoreConnectionRequestRepository(
@@ -374,5 +375,61 @@ class FirestoreConnectionRequestRepository(
             status = status,
             createdAt = createdAt
         )
+    }
+
+    override suspend fun removeConnection(currentUserId: String, otherUserId: String): Result<Unit> = runCatching {
+        val connectionId = if (currentUserId < otherUserId) "${currentUserId}_${otherUserId}" else "${otherUserId}_${currentUserId}"
+        
+        // 1. Delete connection messages subcollection
+        val messagesSnapshot = firestore.collection("connections").document(connectionId)
+            .collection("messages").get().await()
+        for (doc in messagesSnapshot.documents) {
+            doc.reference.delete().await()
+        }
+        
+        // 2. Delete connection document
+        firestore.collection("connections").document(connectionId).delete().await()
+        
+        // 3. Decrement counts transactionally
+        val senderDoc = firestore.collection("users").document(currentUserId)
+        val receiverDoc = firestore.collection("users").document(otherUserId)
+        
+        firestore.runTransaction { transaction ->
+            val senderSnap = transaction.get(senderDoc)
+            val receiverSnap = transaction.get(receiverDoc)
+            
+            if (senderSnap.exists()) {
+                val currentConn = senderSnap.getLong("connectionsCount") ?: 0
+                val currentFollowers = senderSnap.getLong("followersCount") ?: 0
+                val currentFollowing = senderSnap.getLong("followingCount") ?: 0
+                transaction.update(senderDoc, mapOf(
+                    "connectionsCount" to (currentConn - 1).coerceAtLeast(0),
+                    "followersCount" to (currentFollowers - 1).coerceAtLeast(0),
+                    "followingCount" to (currentFollowing - 1).coerceAtLeast(0)
+                ))
+            }
+            if (receiverSnap.exists()) {
+                val currentConn = receiverSnap.getLong("connectionsCount") ?: 0
+                val currentFollowers = receiverSnap.getLong("followersCount") ?: 0
+                val currentFollowing = receiverSnap.getLong("followingCount") ?: 0
+                transaction.update(receiverDoc, mapOf(
+                    "connectionsCount" to (currentConn - 1).coerceAtLeast(0),
+                    "followersCount" to (currentFollowers - 1).coerceAtLeast(0),
+                    "followingCount" to (currentFollowing - 1).coerceAtLeast(0)
+                ))
+            }
+        }.await()
+        
+        // 4. Also delete any swipe documents to clean up swipe deck status
+        val swipeId1 = "${currentUserId}_${otherUserId}"
+        val swipeId2 = "${otherUserId}_${currentUserId}"
+        firestore.collection("swipes").document(swipeId1).delete().await()
+        firestore.collection("swipes").document(swipeId2).delete().await()
+        
+        // Also delete any pending connection requests
+        val reqId1 = "req_${currentUserId}_${otherUserId}"
+        val reqId2 = "req_${otherUserId}_${currentUserId}"
+        firestore.collection("connection_requests").document(reqId1).delete().await()
+        firestore.collection("connection_requests").document(reqId2).delete().await()
     }
 }

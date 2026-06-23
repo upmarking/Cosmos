@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -793,10 +794,33 @@ fun CosmosStatCard(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    accent: Color = CosmosPrimary
+    accent: Color = CosmosPrimary,
+    onClick: (() -> Unit)? = null
 ) {
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        label = "statCardScale"
+    )
+
+    val cardModifier = if (onClick != null) {
+        modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = androidx.compose.foundation.LocalIndication.current,
+                onClick = onClick
+            )
+    } else {
+        modifier
+    }
+
     CosmosGlassCard(
-        modifier = modifier,
+        modifier = cardModifier,
         showTopGradientBorder = false
     ) {
         Text(

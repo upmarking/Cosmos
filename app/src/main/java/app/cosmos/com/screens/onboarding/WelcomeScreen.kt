@@ -129,6 +129,8 @@ fun WelcomeScreen(
             if (error == "ACCOUNT_NOT_FOUND") {
                 showAccountNotFoundDialog = true
                 localError = ""
+            } else if (error == "EMAIL_NOT_VERIFIED") {
+                localError = "Please verify your email address before signing in. Check your inbox for the verification link."
             } else {
                 localError = error
             }

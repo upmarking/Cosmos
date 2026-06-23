@@ -36,6 +36,7 @@ import app.cosmos.com.screens.onboarding.CompleteIdentityScreen
 import app.cosmos.com.screens.onboarding.DefineIntentScreen
 import app.cosmos.com.screens.onboarding.ResetPasswordScreen
 import app.cosmos.com.screens.onboarding.SplashScreen
+import app.cosmos.com.screens.onboarding.VerifyEmailScreen
 import app.cosmos.com.screens.onboarding.WelcomeScreen
 import app.cosmos.com.screens.onboarding.YourVisionScreen
 import app.cosmos.com.screens.profile.MembershipTiersScreen
@@ -44,6 +45,7 @@ import app.cosmos.com.screens.profile.NotificationsCenterScreen
 import app.cosmos.com.screens.profile.SettingsPrivacyScreen
 import app.cosmos.com.screens.profile.EditProfileScreen
 import app.cosmos.com.screens.profile.HelpSupportScreen
+import app.cosmos.com.screens.profile.NetworkRelationsScreen
 import app.cosmos.com.screens.social.SocialFeedScreen
 import app.cosmos.com.screens.social.PostDetailScreen
 
@@ -60,6 +62,18 @@ fun CosmosNavHost(
     val currentUserState by authViewModel.currentUser.collectAsState()
 
     androidx.compose.runtime.LaunchedEffect(currentUserState) {
+        val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        if (firebaseUser != null && !firebaseUser.isEmailVerified) {
+            val currentRoute = navController.currentDestination?.route
+            val bypassRoutes = listOf(Screen.VerifyEmail.route, Screen.Welcome.route, Screen.WelcomeSignIn.route)
+            if (currentRoute != null && currentRoute !in bypassRoutes) {
+                navController.navigate(Screen.VerifyEmail.route) {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
+            return@LaunchedEffect
+        }
+
         val user = currentUserState
         if (user != null && !user.isProfileComplete && !user.isFromCache) {
             val currentRoute = navController.currentDestination?.route
@@ -68,6 +82,7 @@ fun CosmosNavHost(
                 Screen.Welcome.route,
                 Screen.WelcomeSignIn.route,
                 Screen.CompleteIdentity.route,
+                Screen.VerifyEmail.route,
                 Screen.DefineIntent.route,
                 Screen.YourVision.route,
                 Screen.AiMatchingRefinement.route
@@ -108,7 +123,7 @@ fun CosmosNavHost(
             SplashScreen(
                 onAnimationFinished = {
                     val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-                    val dest = if (firebaseUser != null) Screen.Connect.route else Screen.Welcome.route
+                    val dest = if (firebaseUser != null && firebaseUser.isEmailVerified) Screen.Connect.route else Screen.Welcome.route
                     navController.navigate(dest) {
                         popUpTo(Screen.Splash.route) { inclusive = true }
                     }
@@ -166,13 +181,28 @@ fun CosmosNavHost(
         }
         composable(Screen.CompleteIdentity.route) {
             CompleteIdentityScreen(
-                onNext = { navController.navigate(Screen.DefineIntent.route) },
+                onNext = { navController.navigate(Screen.VerifyEmail.route) },
                 onBack = { navController.popBackStack() },
                 onSignInInstead = {
                     navController.navigate(Screen.WelcomeSignIn.route) {
                         popUpTo(Screen.Welcome.route) { inclusive = false }
                     }
                 }
+            )
+        }
+        composable(Screen.VerifyEmail.route) {
+            VerifyEmailScreen(
+                onVerified = {
+                    navController.navigate(Screen.DefineIntent.route) {
+                        popUpTo(Screen.VerifyEmail.route) { inclusive = true }
+                    }
+                },
+                onSignOut = {
+                    navController.navigate(Screen.Welcome.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                authViewModel = authViewModel
             )
         }
         composable(Screen.DefineIntent.route) {
@@ -481,6 +511,7 @@ fun CosmosNavHost(
                 onEditProfileTap = {
                     navController.navigate(Screen.EditProfile.route)
                 },
+                onNavigate = { route -> navController.navigate(route) },
                 authViewModel = authViewModel
             )
         }
@@ -493,6 +524,22 @@ fun CosmosNavHost(
         composable(Screen.HelpSupport.route) {
             HelpSupportScreen(
                 onBack = { navController.popBackStack() }
+            )
+        }
+        composable(
+            route = Screen.NetworkRelations.route,
+            arguments = listOf(
+                navArgument("tab") {
+                    type = NavType.StringType
+                    defaultValue = "followers"
+                }
+            )
+        ) { backStackEntry ->
+            val initialTab = backStackEntry.arguments?.getString("tab") ?: "followers"
+            NetworkRelationsScreen(
+                initialTab = initialTab,
+                onBack = { navController.popBackStack() },
+                onNavigate = { route -> navController.navigate(route) }
             )
         }
     }

@@ -2,9 +2,10 @@
    Cosmos PWA — Main Application Entry Point
    ============================================================ */
 
-import { auth, onAuthStateChanged } from './firebase-config.js';
+import { auth, onAuthStateChanged, signOut, db, collection, query, where, onSnapshot } from './firebase-config.js';
 import router from './router.js';
 import { renderAuth } from './pages/auth.js';
+import { renderVerifyEmail } from './pages/verify-email.js';
 import { renderConnect } from './pages/connect.js';
 import { renderEvents } from './pages/events.js';
 import { renderConversations } from './pages/conversations.js';
@@ -12,6 +13,7 @@ import { renderCommunities } from './pages/communities.js';
 import { renderSocial } from './pages/social.js';
 import { renderProfile } from './pages/profile.js';
 import { renderNotifications } from './pages/notifications.js';
+import { renderSettings } from './pages/settings.js';
 
 /* ── Global State ── */
 window.cosmosApp = {
@@ -45,20 +47,103 @@ export function createSkeleton(width, height) {
   return `<div class="skeleton" style="width:${width};height:${height};"></div>`;
 }
 
+/* ── Global Real-Time Counters ── */
+let unsubGlobalNotifs = null;
+let unsubGlobalChats = null;
+
+function startGlobalListeners(uid) {
+  stopGlobalListeners();
+
+  // 1. Unread notifications
+  const notifQuery = query(
+    collection(db, 'notifications'),
+    where('userId', '==', uid),
+    where('isRead', '==', false)
+  );
+  unsubGlobalNotifs = onSnapshot(notifQuery, (snap) => {
+    const badge = document.getElementById('notif-badge');
+    if (badge) {
+      const count = snap.size;
+      if (count > 0) {
+        badge.style.display = 'flex';
+        badge.textContent = count;
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+  }, (err) => {
+    console.error('[Cosmos App] Error in global notifications listener:', err);
+  });
+
+  // 2. Unread connection chats
+  const chatQuery = query(
+    collection(db, 'connections'),
+    where('members', 'array-contains', uid)
+  );
+  unsubGlobalChats = onSnapshot(chatQuery, (snap) => {
+    const badge = document.getElementById('chat-badge');
+    if (badge) {
+      let unreadSum = 0;
+      snap.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.unreadCountMap && typeof data.unreadCountMap[uid] === 'number') {
+          unreadSum += data.unreadCountMap[uid];
+        }
+      });
+      if (unreadSum > 0) {
+        badge.style.display = 'flex';
+        badge.textContent = unreadSum;
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+  }, (err) => {
+    console.error('[Cosmos App] Error in global chat listener:', err);
+  });
+}
+
+function stopGlobalListeners() {
+  if (unsubGlobalNotifs) {
+    unsubGlobalNotifs();
+    unsubGlobalNotifs = null;
+  }
+  if (unsubGlobalChats) {
+    unsubGlobalChats();
+    unsubGlobalChats = null;
+  }
+  const notifBadge = document.getElementById('notif-badge');
+  const chatBadge = document.getElementById('chat-badge');
+  if (notifBadge) notifBadge.style.display = 'none';
+  if (chatBadge) chatBadge.style.display = 'none';
+}
+
 /* ── Auth State Management ── */
 function handleAuthState(user) {
   const splash = document.getElementById('splash-screen');
   
+  if (user && !user.emailVerified) {
+    window.cosmosApp.user = user;
+    stopGlobalListeners();
+    document.body.classList.add('auth-mode');
+    router.navigate('/verify-email');
+    setTimeout(() => {
+      splash.classList.add('hidden');
+    }, 800);
+    return;
+  }
+
   window.cosmosApp.user = user;
 
   if (user) {
     document.body.classList.remove('auth-mode');
+    startGlobalListeners(user.uid);
     // If on auth page or root, navigate to connect
     const hash = window.location.hash;
-    if (!hash || hash === '#/' || hash === '#/auth') {
+    if (!hash || hash === '#/' || hash === '#/auth' || hash === '#/verify-email') {
       router.navigate('/connect');
     }
   } else {
+    stopGlobalListeners();
     document.body.classList.add('auth-mode');
     router.navigate('/auth');
   }
@@ -80,11 +165,16 @@ function initRouter() {
       router.navigate('/auth');
       return false;
     }
+    if (window.cosmosApp.user && !window.cosmosApp.user.emailVerified && path !== '/verify-email') {
+      router.navigate('/verify-email');
+      return false;
+    }
     return true;
   });
 
   // Register routes
   router.addRoute('/auth', renderAuth);
+  router.addRoute('/verify-email', renderVerifyEmail);
   router.addRoute('/connect', renderConnect);
   router.addRoute('/events', renderEvents);
   router.addRoute('/conversations', renderConversations);
@@ -92,6 +182,7 @@ function initRouter() {
   router.addRoute('/social', renderSocial);
   router.addRoute('/profile', renderProfile);
   router.addRoute('/notifications', renderNotifications);
+  router.addRoute('/settings', renderSettings);
 }
 
 /* ── PWA Install Prompt ── */

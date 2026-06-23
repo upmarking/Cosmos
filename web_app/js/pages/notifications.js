@@ -2,84 +2,98 @@
    Cosmos PWA — Notifications Page
    ============================================================ */
 
+import { auth, db, collection, doc, query, where, orderBy, onSnapshot, updateDoc } from '../firebase-config.js';
 import { showToast } from '../app.js';
 
-const demoNotifications = [
-  { id: '1', type: 'match', icon: '🎯', iconBg: 'rgba(167,139,250,0.15)', text: '<strong>Sarah Chen</strong> matched with you! Start a conversation.', time: '2 mins ago', unread: true },
-  { id: '2', type: 'message', icon: '💬', iconBg: 'rgba(96,165,250,0.15)', text: '<strong>Marcus Rivera</strong> sent you a message: "I\'d love to hear more..."', time: '1 hour ago', unread: true },
-  { id: '3', type: 'event', icon: '📅', iconBg: 'rgba(52,211,153,0.15)', text: 'Reminder: <strong>Founders Speed Network</strong> starts in 2 hours', time: '2 hours ago', unread: true },
-  { id: '4', type: 'ai', icon: '🤖', iconBg: 'rgba(244,114,182,0.15)', text: 'AI summary ready for your meeting with <strong>Aisha Patel</strong>', time: '3 hours ago', unread: false },
-  { id: '5', type: 'endorsement', icon: '⭐', iconBg: 'rgba(251,191,36,0.15)', text: '<strong>Elena Volkov</strong> endorsed your <strong>Product Thinking</strong> skill', time: '5 hours ago', unread: false },
-  { id: '6', type: 'intro', icon: '🤝', iconBg: 'rgba(45,212,191,0.15)', text: '<strong>James Okafor</strong> accepted your warm introduction request', time: 'Yesterday', unread: false },
-  { id: '7', type: 'community', icon: '🌐', iconBg: 'rgba(167,139,250,0.15)', text: 'New post in <strong>Founders Building in AI</strong>: "AI agents are the new SaaS..."', time: 'Yesterday', unread: false },
-  { id: '8', type: 'follow_up', icon: '⏰', iconBg: 'rgba(248,113,113,0.15)', text: 'Follow-up reminder: Send deck to <strong>Marcus Rivera</strong>', time: '2 days ago', unread: false },
-  { id: '9', type: 'event', icon: '🎉', iconBg: 'rgba(52,211,153,0.15)', text: 'You\'ve been invited to <strong>Investor-Founder Match</strong> (invite-only)', time: '2 days ago', unread: false },
-  { id: '10', type: 'match', icon: '✨', iconBg: 'rgba(167,139,250,0.15)', text: '<strong>Kai Tanaka</strong> wants to connect — 82% match score', time: '3 days ago', unread: false },
-];
+function formatTime(timestamp) {
+  if (!timestamp) return 'Now';
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  const diff = Date.now() - date.getTime();
+  if (diff < 60000) return 'now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return date.toLocaleDateString([], { day: 'numeric', month: 'short' });
+}
 
 export async function renderNotifications(outlet) {
-  const unreadCount = demoNotifications.filter(n => n.unread).length;
+  const user = auth.currentUser;
+  if (!user) return;
+
+  // Clean up any existing listener
+  if (window.cosmosApp._notifUnsubscribe) {
+    window.cosmosApp._notifUnsubscribe();
+    window.cosmosApp._notifUnsubscribe = null;
+  }
 
   outlet.innerHTML = `
     <div class="notifications-page page">
       <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;">
         <div>
           <h1 class="page-title">Notifications</h1>
-          <p class="page-subtitle">${unreadCount} unread</p>
+          <p class="page-subtitle" id="notif-subtitle">Loading...</p>
         </div>
-        <button class="btn btn-ghost btn-sm" id="mark-all-read">Mark all read</button>
+        <button class="btn btn-ghost btn-sm" id="mark-all-read" style="display:none;">Mark all read</button>
       </div>
       <div class="notif-list stagger" id="notif-list">
-        ${renderNotifItems(demoNotifications)}
+        <div class="loading-spinner" style="margin:2rem auto; display:block;"></div>
       </div>
     </div>
   `;
 
-  // Mark all read
-  outlet.querySelector('#mark-all-read')?.addEventListener('click', () => {
-    demoNotifications.forEach(n => n.unread = false);
-    outlet.querySelectorAll('.notif-item.unread').forEach(item => item.classList.remove('unread'));
-    outlet.querySelectorAll('.notif-dot').forEach(dot => dot.style.display = 'none');
-    outlet.querySelector('.page-subtitle').textContent = '0 unread';
-    // Update badge in top bar
-    const badge = document.getElementById('notif-badge');
-    if (badge) badge.style.display = 'none';
-    showToast('All notifications marked as read', 'success');
-  });
+  const q = query(
+    collection(db, 'notifications'),
+    where('userId', '==', user.uid),
+    orderBy('timestamp', 'desc')
+  );
 
-  // Individual notification clicks
-  outlet.querySelectorAll('.notif-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const id = item.dataset.id;
-      const notif = demoNotifications.find(n => n.id === id);
-      if (notif) {
-        notif.unread = false;
-        item.classList.remove('unread');
-        const dot = item.querySelector('.notif-dot');
-        if (dot) dot.style.display = 'none';
-
-        // Navigate based on type
-        switch (notif.type) {
-          case 'match': window.location.hash = '#/connect'; break;
-          case 'message': window.location.hash = '#/conversations'; break;
-          case 'event': window.location.hash = '#/events'; break;
-          case 'community': window.location.hash = '#/communities'; break;
-          default: showToast('Notification viewed', 'info');
-        }
-      }
+  window.cosmosApp._notifUnsubscribe = onSnapshot(q, (snapshot) => {
+    const list = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      list.push({
+        id: docSnap.id,
+        type: data.type || '',
+        title: data.title || '',
+        body: data.body || '',
+        isRead: data.isRead || false,
+        timestamp: data.timestamp,
+        actionId: data.actionId || ''
+      });
     });
-  });
 
-  // Update unread badge
-  const badge = document.getElementById('notif-badge');
-  if (badge) {
-    if (unreadCount > 0) {
-      badge.style.display = 'flex';
-      badge.textContent = unreadCount;
-    } else {
-      badge.style.display = 'none';
+    const unreadCount = list.filter(n => !n.isRead).length;
+
+    // Update subtitle
+    const subtitle = outlet.querySelector('#notif-subtitle');
+    if (subtitle) {
+      subtitle.textContent = `${unreadCount} unread`;
     }
-  }
+
+    // Mark all read button
+    const markAllBtn = outlet.querySelector('#mark-all-read');
+    if (markAllBtn) {
+      markAllBtn.style.display = unreadCount > 0 ? 'block' : 'none';
+    }
+
+    // Render list
+    const listContainer = outlet.querySelector('#notif-list');
+    if (listContainer) {
+      listContainer.innerHTML = renderNotifItems(list);
+      attachNotifListeners(outlet, list);
+    }
+  }, (error) => {
+    console.error('[Cosmos Notifications] Error in snapshot:', error);
+    const listContainer = outlet.querySelector('#notif-list');
+    if (listContainer) {
+      listContainer.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">⚠️</div>
+          <h3 class="empty-state-title">Error Loading Notifications</h3>
+          <p class="empty-state-desc">${error.message}</p>
+        </div>
+      `;
+    }
+  });
 }
 
 function renderNotifItems(notifications) {
@@ -93,14 +107,96 @@ function renderNotifItems(notifications) {
     `;
   }
 
-  return notifications.map((n, i) => `
-    <div class="notif-item ${n.unread ? 'unread' : ''} anim-fade-up" data-id="${n.id}" style="animation-delay:${i * 0.04}s;">
-      <div class="notif-icon" style="background:${n.iconBg};">${n.icon}</div>
-      <div class="notif-content">
-        <div class="notif-text">${n.text}</div>
-        <div class="notif-time">${n.time}</div>
+  const icons = {
+    CONNECTION_REQUEST: '🎯',
+    CONNECTION_ACCEPTED: '🎉',
+    EVENT_REMINDER: '📅',
+    COMMUNITY_ANNOUNCEMENT: '🌐',
+    MESSAGE: '💬'
+  };
+
+  const iconBgs = {
+    CONNECTION_REQUEST: 'rgba(167,139,250,0.15)',
+    CONNECTION_ACCEPTED: 'rgba(52,211,153,0.15)',
+    EVENT_REMINDER: 'rgba(96,165,250,0.15)',
+    COMMUNITY_ANNOUNCEMENT: 'rgba(244,114,182,0.15)',
+    MESSAGE: 'rgba(96,165,250,0.15)'
+  };
+
+  return notifications.map((n, i) => {
+    const icon = icons[n.type] || '🔔';
+    const bg = iconBgs[n.type] || 'rgba(255,255,255,0.05)';
+    const text = `<strong>${n.title}</strong>: ${n.body}`;
+    const time = formatTime(n.timestamp);
+
+    return `
+      <div class="notif-item ${!n.isRead ? 'unread' : ''} anim-fade-up" data-id="${n.id}" style="animation-delay:${i * 0.04}s;">
+        <div class="notif-icon" style="background:${bg};">${icon}</div>
+        <div class="notif-content">
+          <div class="notif-text">${text}</div>
+          <div class="notif-time">${time}</div>
+        </div>
+        ${!n.isRead ? '<div class="notif-dot"></div>' : ''}
       </div>
-      ${n.unread ? '<div class="notif-dot"></div>' : ''}
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
+
+function attachNotifListeners(outlet, notifications) {
+  // Mark all read button
+  const markAllBtn = outlet.querySelector('#mark-all-read');
+  if (markAllBtn) {
+    const newBtn = markAllBtn.cloneNode(true);
+    markAllBtn.replaceWith(newBtn);
+    newBtn.addEventListener('click', async () => {
+      const unread = notifications.filter(n => !n.isRead);
+      try {
+        await Promise.all(unread.map(n => 
+          updateDoc(doc(db, 'notifications', n.id), { isRead: true })
+        ));
+        showToast('All notifications marked as read', 'success');
+      } catch (e) {
+        showToast('Failed to mark notifications read', 'error');
+      }
+    });
+  }
+
+  // Individual notification items
+  outlet.querySelectorAll('.notif-item').forEach(item => {
+    item.addEventListener('click', async () => {
+      const id = item.dataset.id;
+      const notif = notifications.find(n => n.id === id);
+      if (notif) {
+        if (!notif.isRead) {
+          try {
+            await updateDoc(doc(db, 'notifications', id), { isRead: true });
+          } catch (e) {
+            console.error('[Cosmos Notifications] Error marking read:', e);
+          }
+        }
+
+        // Navigate based on type
+        switch (notif.type) {
+          case 'CONNECTION_REQUEST':
+            window.location.hash = '#/settings';
+            break;
+          case 'CONNECTION_ACCEPTED':
+            window.location.hash = '#/conversations';
+            break;
+          case 'EVENT_REMINDER':
+            window.location.hash = '#/events';
+            break;
+          case 'COMMUNITY_ANNOUNCEMENT':
+            window.location.hash = '#/communities';
+            break;
+          case 'MESSAGE':
+            window.location.hash = '#/conversations';
+            break;
+          default:
+            showToast('Notification viewed', 'info');
+        }
+      }
+    });
+  });
+}
+

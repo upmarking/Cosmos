@@ -9,7 +9,13 @@ class CosmosRouter {
     this.beforeEach = null;
     this.outlet = null;
     window.addEventListener('hashchange', () => this.handleRoute());
-    window.addEventListener('load', () => this.handleRoute());
+    
+    // Handle cases where the load event has already fired
+    if (document.readyState === 'complete') {
+      setTimeout(() => this.handleRoute(), 0);
+    } else {
+      window.addEventListener('load', () => this.handleRoute());
+    }
   }
 
   setOutlet(selector) {

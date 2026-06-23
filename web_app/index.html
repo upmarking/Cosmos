@@ -4,6 +4,61 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>Cosmos — Professional Networking</title>
+  <script>
+    window.addEventListener('error', function(e) {
+      console.error("Global Error Caught: ", e);
+      var errDiv = document.getElementById('debug-error-box') || document.createElement('div');
+      errDiv.id = 'debug-error-box';
+      errDiv.style.color = '#f87171';
+      errDiv.style.background = 'rgba(248,113,113,0.1)';
+      errDiv.style.border = '1px solid rgba(248,113,113,0.3)';
+      errDiv.style.padding = '10px';
+      errDiv.style.margin = '20px auto';
+      errDiv.style.maxWidth = '400px';
+      errDiv.style.borderRadius = '8px';
+      errDiv.style.fontSize = '12px';
+      errDiv.style.fontFamily = 'monospace';
+      errDiv.style.textAlign = 'left';
+      errDiv.style.whiteSpace = 'pre-wrap';
+      errDiv.innerHTML = '<strong>JS Error:</strong> ' + e.message + '\nat ' + e.filename + ':' + e.lineno + ':' + e.colno;
+      
+      var splashContent = document.querySelector('.splash-content');
+      if (splashContent) {
+        splashContent.appendChild(errDiv);
+        var loader = document.querySelector('.splash-loader');
+        if (loader) loader.style.display = 'none';
+      } else {
+        document.body.appendChild(errDiv);
+      }
+    });
+
+    window.addEventListener('unhandledrejection', function(e) {
+      console.error("Unhandled Promise Rejection: ", e.reason);
+      var errDiv = document.getElementById('debug-error-box') || document.createElement('div');
+      errDiv.id = 'debug-error-box';
+      errDiv.style.color = '#f87171';
+      errDiv.style.background = 'rgba(248,113,113,0.1)';
+      errDiv.style.border = '1px solid rgba(248,113,113,0.3)';
+      errDiv.style.padding = '10px';
+      errDiv.style.margin = '20px auto';
+      errDiv.style.maxWidth = '400px';
+      errDiv.style.borderRadius = '8px';
+      errDiv.style.fontSize = '12px';
+      errDiv.style.fontFamily = 'monospace';
+      errDiv.style.textAlign = 'left';
+      errDiv.style.whiteSpace = 'pre-wrap';
+      errDiv.innerHTML = '<strong>Promise Rejection:</strong> ' + (e.reason ? (e.reason.message || e.reason) : 'Unknown Promise Rejection');
+      
+      var splashContent = document.querySelector('.splash-content');
+      if (splashContent) {
+        splashContent.appendChild(errDiv);
+        var loader = document.querySelector('.splash-loader');
+        if (loader) loader.style.display = 'none';
+      } else {
+        document.body.appendChild(errDiv);
+      }
+    });
+  </script>
   <meta name="description" content="Cosmos is a premium professional networking platform for founders, operators, investors, and builders who value quality over quantity." />
   <meta name="theme-color" content="#060811" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -13,6 +68,7 @@
   <meta property="og:description" content="Premium networking for founders, operators, and builders." />
   <meta property="og:type" content="website" />
   <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/webp" href="icons/logo.webp" />
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -50,12 +106,13 @@
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
             <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
           </svg>
-          <span class="notif-badge" id="notif-badge" style="display:none;">3</span>
+          <span class="notif-badge" id="notif-badge" style="display:none;">0</span>
         </button>
-        <button class="top-bar-btn" id="btn-chat" onclick="window.location.hash='#/conversations'" aria-label="Messages">
+        <button class="top-bar-btn" id="btn-chat" onclick="window.location.hash='#/conversations'" aria-label="Messages" style="position:relative;">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
+          <span class="notif-badge" id="chat-badge" style="display:none; position:absolute; top:-2px; right:-2px;">0</span>
         </button>
       </div>
     </div>
@@ -121,7 +178,21 @@
     // Register service worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js')
-        .then(() => console.log('[Cosmos] SW registered'))
+        .then((reg) => {
+          console.log('[Cosmos] SW registered');
+          // Auto-reload when new service worker takes over
+          reg.onupdatefound = () => {
+            const installingWorker = reg.installing;
+            installingWorker.onstatechange = () => {
+              if (installingWorker.state === 'installed') {
+                if (navigator.serviceWorker.controller) {
+                  console.log('[Cosmos] New update active. Reloading page...');
+                  window.location.reload();
+                }
+              }
+            };
+          };
+        })
         .catch((err) => console.warn('[Cosmos] SW registration failed:', err));
     }
   </script>

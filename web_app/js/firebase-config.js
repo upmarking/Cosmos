@@ -4,8 +4,8 @@
    ============================================================ */
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, limit, onSnapshot, serverTimestamp, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, sendEmailVerification } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getFirestore, collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy, limit, onSnapshot, serverTimestamp, Timestamp, increment, arrayUnion, arrayRemove } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
 
 const firebaseConfig = {
@@ -28,8 +28,8 @@ const googleProvider = new GoogleAuthProvider();
 export {
   app, auth, db, storage, googleProvider,
   onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  signOut, sendPasswordResetEmail, signInWithPopup,
-  collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, limit, onSnapshot, serverTimestamp, Timestamp,
+  signOut, sendPasswordResetEmail, signInWithPopup, sendEmailVerification,
+  collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc,
+  query, where, orderBy, limit, onSnapshot, serverTimestamp, Timestamp, increment, arrayUnion, arrayRemove,
   ref, uploadBytes, getDownloadURL
 };

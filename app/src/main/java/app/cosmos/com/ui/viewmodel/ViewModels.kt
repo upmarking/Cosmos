@@ -117,7 +117,12 @@ class AuthViewModel(
         }
     }
 
-    fun saveOnboarding(member: Member, onSuccess: () -> Unit, imageBytes: ByteArray? = null) {
+    fun saveOnboarding(
+        member: Member,
+        onSuccess: () -> Unit,
+        imageBytes: ByteArray? = null,
+        optimisticNavigation: Boolean = true
+    ) {
         val previousUser = _localOverride.value ?: currentUser.value
         
         // Optimistically update the avatarUrl locally using a base64 encoding if a new image was captured/selected,
@@ -137,10 +142,14 @@ class AuthViewModel(
         // Optimistically update current user so UI reflects immediately
         _localOverride.value = tempAvatarMember
 
-        // Fire onSuccess (navigate back/dismiss) immediately for instant UX feedback
-        onSuccess()
+        if (optimisticNavigation) {
+            // Fire onSuccess (navigate back/dismiss) immediately for instant UX feedback
+            onSuccess()
+        } else {
+            _isLoading.value = true
+        }
 
-        // Perform photo upload and database sync silently in the background
+        // Perform photo upload and database sync
         viewModelScope.launch {
             try {
                 val avatarUrl = if (imageBytes != null) {
@@ -160,13 +169,25 @@ class AuthViewModel(
                         // Clear local override once Firestore confirms the write —
                         // the Firestore snapshot listener will now be the source of truth.
                         _localOverride.value = null
+                        if (!optimisticNavigation) {
+                            _isLoading.value = false
+                            onSuccess()
+                        }
                     }
                     .onFailure { error ->
                         // Since Firestore has built-in offline caching/syncing, we don't revert the optimistic update
                         // because it will retry syncing once online.
+                        if (!optimisticNavigation) {
+                            _isLoading.value = false
+                            _authError.emit(error.message ?: "Failed to save details")
+                        }
                     }
             } catch (e: Exception) {
                 e.printStackTrace()
+                if (!optimisticNavigation) {
+                    _isLoading.value = false
+                    _authError.emit(e.message ?: "Failed to save details")
+                }
             }
         }
     }
@@ -272,6 +293,36 @@ class AuthViewModel(
                 .onFailure { error ->
                     _isLoading.value = false
                     onError(error.message ?: "Failed to reset password")
+                }
+        }
+    }
+
+    fun reloadUser(onResult: (Boolean) -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            authRepo.reloadUser()
+                .onSuccess { isVerified ->
+                    _isLoading.value = false
+                    onResult(isVerified)
+                }
+                .onFailure { error ->
+                    _isLoading.value = false
+                    onError(error.message ?: "Failed to reload user status")
+                }
+        }
+    }
+
+    fun resendVerificationEmail(onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            authRepo.resendVerificationEmail()
+                .onSuccess {
+                    _isLoading.value = false
+                    onSuccess()
+                }
+                .onFailure { error ->
+                    _isLoading.value = false
+                    onError(error.message ?: "Failed to resend verification email")
                 }
         }
     }

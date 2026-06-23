@@ -2,37 +2,34 @@
    Cosmos PWA — Social Feed Page
    ============================================================ */
 
+import { auth, db, collection, query, orderBy, onSnapshot, addDoc, doc, updateDoc, arrayUnion, arrayRemove, increment, getDoc, serverTimestamp } from '../firebase-config.js';
 import { showToast } from '../app.js';
 
-const demoPosts = [
-  {
-    id: '1', author: 'Sarah Chen', initials: 'SC', role: 'Founder @ BuildSpark AI',
-    content: '🚀 Just closed our first enterprise pilot! 3 months of building, 47 user interviews, and countless pivots later — we have paying customers.\n\nBiggest lesson: Stop building features. Start solving pain points.\n\nGrateful for this Cosmos community for the introductions that made it possible.',
-    time: '2h ago', likes: 42, comments: 8, liked: false
-  },
-  {
-    id: '2', author: 'Marcus Rivera', initials: 'MR', role: 'Angel Investor @ Horizon Capital',
-    content: '📊 What I look for in pre-seed founders:\n\n1. Obsession with the problem (not the solution)\n2. Speed of learning, not speed of building\n3. Ability to tell a story that makes me lean forward\n4. A network that vouches for their character\n\nThe best founders I\'ve backed weren\'t the most technical — they were the most relentless.',
-    time: '5h ago', likes: 89, comments: 23, liked: true
-  },
-  {
-    id: '3', author: 'Elena Volkov', initials: 'EV', role: 'Startup Operator @ Sequoia Scout',
-    content: '💡 Hot take: Your first 10 hires matter more than your first 10 customers.\n\nCustomers validate your product. Hires define your culture. And culture is the one thing that compounds.',
-    time: '8h ago', likes: 67, comments: 15, liked: false
-  },
-  {
-    id: '4', author: 'Kai Tanaka', initials: 'KT', role: 'Design Director @ Figma',
-    content: '🎨 Redesigned our entire onboarding flow last week. Results:\n\n• Time to first value: -40%\n• Completion rate: +28%\n• Support tickets: -65%\n\nThe secret? We removed 3 steps and added 0. Sometimes the best design is what you take away.',
-    time: '1d ago', likes: 134, comments: 31, liked: false
-  },
-  {
-    id: '5', author: 'Aisha Patel', initials: 'AP', role: 'Product Lead @ Notion',
-    content: '🤝 Met an incredible CTO through a Cosmos Speed Network event last week. We talked about building AI interfaces that feel human.\n\nNow we\'re co-writing an article about it. This is what intentional networking looks like — not collecting business cards, but building something together.',
-    time: '1d ago', likes: 56, comments: 9, liked: false
-  },
-];
+let unsubSocial = null;
+
+function formatTime(timestamp) {
+  if (!timestamp) return 'Now';
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  const diff = Date.now() - date.getTime();
+  return whenDiff(diff, date);
+}
+
+function whenDiff(diff, date) {
+  if (diff < 60000) return 'now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return date.toLocaleDateString([], { day: 'numeric', month: 'short' });
+}
 
 export async function renderSocial(outlet) {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  if (unsubSocial) {
+    unsubSocial();
+    unsubSocial = null;
+  }
+
   outlet.innerHTML = `
     <div class="social-page page">
       <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;">
@@ -46,69 +43,154 @@ export async function renderSocial(outlet) {
         </button>
       </div>
       <div id="social-feed" class="stagger">
-        ${renderPosts(demoPosts)}
+        <div class="loading-spinner" style="margin:2rem auto; display:block;"></div>
       </div>
     </div>
   `;
 
-  // Create post
+  const q = query(
+    collection(db, 'social_posts'),
+    orderBy('timestamp', 'desc')
+  );
+
+  unsubSocial = onSnapshot(q, (snapshot) => {
+    const list = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      list.push({
+        id: docSnap.id,
+        authorId: data.authorId || '',
+        authorName: data.authorName || 'Anonymous',
+        authorHeadline: data.authorHeadline || 'Cosmos Member',
+        authorAvatarUrl: data.authorAvatarUrl || '',
+        content: data.content || '',
+        timestamp: data.timestamp,
+        likesCount: data.likesCount || 0,
+        repliesCount: data.repliesCount || 0,
+        likes: data.likes || [],
+        isLinkedInConnected: data.isLinkedInConnected || false
+      });
+    });
+
+    const feed = outlet.querySelector('#social-feed');
+    if (feed) {
+      feed.innerHTML = renderPosts(list, user.uid);
+      attachPostListeners(outlet, list, user.uid);
+    }
+  }, (error) => {
+    console.error('[Cosmos Social] Error in snapshot:', error);
+    const feed = outlet.querySelector('#social-feed');
+    if (feed) {
+      feed.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">⚠️</div>
+          <h3 class="empty-state-title">Error Loading Feed</h3>
+          <p class="empty-state-desc">${error.message}</p>
+        </div>
+      `;
+    }
+  });
+
+  // Create post button
   outlet.querySelector('#create-post-btn')?.addEventListener('click', () => {
     showCreatePostModal(outlet);
   });
-
-  attachPostListeners(outlet);
 }
 
-function renderPosts(posts) {
+function renderPosts(posts, currentUserId) {
+  if (!posts.length) {
+    return `
+      <div class="empty-state">
+        <div class="empty-state-icon">📝</div>
+        <h3 class="empty-state-title">No Posts Yet</h3>
+        <p class="empty-state-desc">Be the first to share an update with the Cosmos community!</p>
+      </div>
+    `;
+  }
+
   const avatarColors = ['linear-gradient(135deg,#7c3aed,#a78bfa)', 'linear-gradient(135deg,#2563eb,#60a5fa)', 'linear-gradient(135deg,#d97706,#fbbf24)', 'linear-gradient(135deg,#059669,#34d399)', 'linear-gradient(135deg,#db2777,#f472b6)'];
 
-  return posts.map((post, i) => `
-    <div class="post-card anim-fade-up" data-id="${post.id}" style="animation-delay:${i * 0.06}s;">
-      <div class="post-header">
-        <div class="avatar" style="background:${avatarColors[i % avatarColors.length]};">${post.initials}</div>
-        <div>
-          <div class="post-author-name">${post.author}</div>
-          <div class="post-author-role">${post.role}</div>
+  return posts.map((post, i) => {
+    const isLiked = post.likes.includes(currentUserId);
+    const avatarUrl = post.authorAvatarUrl || '';
+    const initials = post.authorName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || 'U';
+    const hasPhoto = !!avatarUrl;
+    const authorColorIdx = post.authorId.charCodeAt(0) || 0;
+    const timeString = formatTime(post.timestamp);
+
+    return `
+      <div class="post-card anim-fade-up" data-id="${post.id}" style="animation-delay:${i * 0.06}s;">
+        <div class="post-header">
+          <div class="avatar" style="${hasPhoto ? '' : 'background:' + avatarColors[authorColorIdx % avatarColors.length]}">
+            ${hasPhoto ? `<img src="${avatarUrl}" alt="${post.authorName}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />` : initials}
+          </div>
+          <div>
+            <div class="post-author-name">
+              ${post.authorName}
+              ${post.isLinkedInConnected ? `
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="#0a66c2" style="margin-left:0.2rem;display:inline-block;vertical-align:middle;"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.779-1.75-1.75s.784-1.75 1.75-1.75 1.75.779 1.75 1.75-.784 1.75-1.75 1.75zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>` : ''}
+            </div>
+            <div class="post-author-role">${post.authorHeadline}</div>
+          </div>
+          <span class="post-time">${timeString}</span>
         </div>
-        <span class="post-time">${post.time}</span>
+        <div class="post-content">${post.content.replace(/\n/g, '<br>')}</div>
+        <div class="post-actions">
+          <button class="post-action ${isLiked ? 'liked' : ''}" data-action="like" data-post-id="${post.id}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            <span>${post.likesCount}</span>
+          </button>
+          <button class="post-action" data-action="comment" data-post-id="${post.id}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span>${post.repliesCount}</span>
+          </button>
+          <button class="post-action" data-action="share" data-post-id="${post.id}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            Share
+          </button>
+        </div>
       </div>
-      <div class="post-content">${post.content.replace(/\n/g, '<br>')}</div>
-      <div class="post-actions">
-        <button class="post-action ${post.liked ? 'liked' : ''}" data-action="like" data-post-id="${post.id}">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="${post.liked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-          ${post.likes}
-        </button>
-        <button class="post-action" data-action="comment" data-post-id="${post.id}">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          ${post.comments}
-        </button>
-        <button class="post-action" data-action="share" data-post-id="${post.id}">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-          Share
-        </button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
-function attachPostListeners(outlet) {
+function attachPostListeners(outlet, posts, currentUserId) {
   outlet.querySelectorAll('.post-action').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       const action = btn.dataset.action;
       const postId = btn.dataset.postId;
-      const post = demoPosts.find(p => p.id === postId);
+      const post = posts.find(p => p.id === postId);
 
       if (action === 'like' && post) {
-        post.liked = !post.liked;
-        post.likes += post.liked ? 1 : -1;
-        btn.classList.toggle('liked');
-        const svg = btn.querySelector('svg');
-        svg.setAttribute('fill', post.liked ? 'currentColor' : 'none');
-        btn.innerHTML = `${svg.outerHTML} ${post.likes}`;
+        const isLiked = post.likes.includes(currentUserId);
+        try {
+          const postRef = doc(db, 'social_posts', postId);
+          if (isLiked) {
+            await updateDoc(postRef, {
+              likes: arrayRemove(currentUserId),
+              likesCount: increment(-1)
+            });
+          } else {
+            await updateDoc(postRef, {
+              likes: arrayUnion(currentUserId),
+              likesCount: increment(1)
+            });
+          }
+        } catch (err) {
+          console.error('[Cosmos Social] Error liking post:', err);
+          showToast('Failed to update like status', 'error');
+        }
       } else if (action === 'comment') {
         showToast('Comments coming soon!', 'info');
       } else if (action === 'share') {
-        showToast('Post link copied!', 'success');
+        try {
+          const url = `${window.location.origin}/#/social/post/${postId}`;
+          await navigator.clipboard.writeText(url);
+          showToast('Post link copied to clipboard!', 'success');
+        } catch {
+          showToast('Failed to copy post link', 'error');
+        }
       }
     });
   });
@@ -136,13 +218,39 @@ function showCreatePostModal(outlet) {
   overlay.querySelector('#cancel-post')?.addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
-  overlay.querySelector('#submit-post')?.addEventListener('click', () => {
+  overlay.querySelector('#submit-post')?.addEventListener('click', async () => {
     const text = overlay.querySelector('#new-post-text').value.trim();
-    if (text) {
+    if (!text) {
+      showToast('Please write something first', 'error');
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) return;
+
+    try {
+      const snap = await getDoc(doc(db, 'users', user.uid));
+      const profile = snap.exists() ? snap.data() : {};
+
+      await addDoc(collection(db, 'social_posts'), {
+        authorId: user.uid,
+        authorName: profile.name || user.displayName || user.email?.split('@')[0] || 'Builder',
+        authorHeadline: profile.headline || profile.role || 'Cosmos Member',
+        authorAvatarUrl: profile.avatarUrl || user.photoURL || '',
+        content: text,
+        timestamp: serverTimestamp(),
+        likesCount: 0,
+        repliesCount: 0,
+        likes: [],
+        isLinkedInConnected: profile.isLinkedInConnected || false
+      });
+
       showToast('Post published! ✨', 'success');
       overlay.remove();
-    } else {
-      showToast('Please write something first', 'error');
+    } catch (e) {
+      console.error('[Cosmos Social] Error creating post:', e);
+      showToast('Failed to publish post', 'error');
     }
   });
 }
+

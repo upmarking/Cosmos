@@ -106,16 +106,7 @@ fun DiscoveryDeckScreen(
                     showSearchBar = false
                     searchViewModel.clearSearch()
                 },
-                searchPlaceholder    = "Search by name, headline, tags...",
-                extraActions = {
-                    if (!showSearchBar) {
-                        GlassIconButton(
-                            icon = Icons.Outlined.People,
-                            contentDescription = "Feed",
-                            onClick = onNavigateToFeed
-                        )
-                    }
-                }
+                searchPlaceholder    = "Search by name, headline, tags..."
             )
 
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
