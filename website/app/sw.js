@@ -5,26 +5,29 @@
 
 const CACHE_NAME = 'cosmos-pwa-v11';
 const STATIC_ASSETS = [
-  '/web_app/index.html',
-  '/web_app/css/styles.css',
-  '/web_app/js/app.js',
-  '/web_app/js/router.js',
-  '/web_app/js/firebase-config.js',
-  '/web_app/js/pages/auth.js',
-  '/web_app/js/pages/connect.js',
-  '/web_app/js/pages/events.js',
-  '/web_app/js/pages/conversations.js',
-  '/web_app/js/pages/communities.js',
-  '/web_app/js/pages/social.js',
-  '/web_app/js/pages/profile.js',
-  '/web_app/js/pages/notifications.js',
-  '/web_app/js/pages/settings.js',
-  '/web_app/js/pages/edit-profile.js',
-  '/web_app/js/pages/help-support.js',
-  '/web_app/manifest.json',
-  '/web_app/icons/icon-192.png',
-  '/web_app/icons/icon-512.png',
-  '/web_app/icons/logo.webp',
+  '/app/index.html',
+  '/app/css/styles.css',
+  '/app/js/app.js',
+  '/app/js/router.js',
+  '/app/js/firebase-config.js',
+  '/app/js/pages/auth.js',
+  '/app/js/pages/connect.js',
+  '/app/js/pages/events.js',
+  '/app/js/pages/conversations.js',
+  '/app/js/pages/communities.js',
+  '/app/js/pages/social.js',
+  '/app/js/pages/profile.js',
+  '/app/js/pages/notifications.js',
+  '/app/js/pages/settings.js',
+  '/app/js/pages/edit-profile.js',
+  '/app/js/pages/help-support.js',
+  '/app/js/pages/messenger.js',
+  '/app/js/pages/orbits.js',
+  '/app/js/pages/organize.js',
+  '/app/manifest.json',
+  '/app/icons/icon-192.png',
+  '/app/icons/icon-512.png',
+  '/app/icons/logo.webp',
 ];
 
 // Install — cache static shell
@@ -70,7 +73,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // 2. Local app assets (HTML, CSS, JS, manifest, icons)
-  if (url.pathname.startsWith('/web_app/')) {
+  if (url.pathname.startsWith('/app/')) {
     event.respondWith(
       fetch(request)
         .then((response) => {
@@ -98,7 +101,7 @@ self.addEventListener('fetch', (event) => {
       });
     }).catch(() => {
       if (request.mode === 'navigate') {
-        return caches.match('/web_app/index.html');
+        return caches.match('/app/index.html');
       }
     })
   );

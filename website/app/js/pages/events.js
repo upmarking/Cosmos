@@ -396,7 +396,24 @@ function showEventDetailsModal(outlet, event, currentUserId) {
 
   resolveHostProfiles(modal);
   modal.classList.remove('hidden');
-  modal.querySelector('#btn-close-details-modal').onclick = () => modal.classList.add('hidden');
+  modal.offsetHeight; // trigger reflow
+  modal.classList.add('active');
+
+  const closeDetailsModal = () => {
+    modal.classList.remove('active');
+    setTimeout(() => {
+      if (!modal.classList.contains('active')) {
+        modal.classList.add('hidden');
+      }
+    }, 300);
+  };
+
+  modal.querySelector('#btn-close-details-modal').onclick = closeDetailsModal;
+  modal.onclick = (e) => {
+    if (e.target === modal) {
+      closeDetailsModal();
+    }
+  };
 
   const joinBtn = modal.querySelector('.event-join-btn-modal');
   if (joinBtn && !isJoined && spotsLeft > 0) {
@@ -408,7 +425,7 @@ function showEventDetailsModal(outlet, event, currentUserId) {
         await updateDoc(doc(db, 'events', event.id), { participantCount: increment(1) });
         registrationsMap.set(event.id, true);
         showToast(`Joined ${event.title}!`, 'success');
-        modal.classList.add('hidden');
+        closeDetailsModal();
         updateEventsDisplay(outlet, currentUserId);
       } catch (err) {
         showToast('Failed to join', 'error');

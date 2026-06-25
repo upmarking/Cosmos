@@ -2,7 +2,7 @@
    Cosmos PWA — Social Feed Page
    ============================================================ */
 
-import { auth, db, collection, query, orderBy, onSnapshot, addDoc, doc, updateDoc, arrayUnion, arrayRemove, increment, getDoc, serverTimestamp } from '../firebase-config.js';
+import { auth, db, storage, ref, uploadBytes, getDownloadURL, collection, query, orderBy, onSnapshot, addDoc, doc, updateDoc, arrayUnion, arrayRemove, increment, getDoc, serverTimestamp } from '../firebase-config.js';
 import { showToast } from '../app.js';
 
 let unsubSocial = null;
@@ -64,6 +64,7 @@ export async function renderSocial(outlet) {
         authorHeadline: data.authorHeadline || 'Cosmos Member',
         authorAvatarUrl: data.authorAvatarUrl || '',
         content: data.content || '',
+        imageUrl: data.imageUrl || '',
         timestamp: data.timestamp,
         likesCount: data.likesCount || 0,
         repliesCount: data.repliesCount || 0,
@@ -134,7 +135,12 @@ function renderPosts(posts, currentUserId) {
           </div>
           <span class="post-time">${timeString}</span>
         </div>
-        <div class="post-content">${post.content.replace(/\n/g, '<br>')}</div>
+        ${post.content ? `<div class="post-content">${post.content.replace(/\n/g, '<br>')}</div>` : ''}
+        ${post.imageUrl ? `
+          <div class="post-image-wrap">
+            <img src="${post.imageUrl}" alt="Post image" loading="lazy" />
+          </div>
+        ` : ''}
         <div class="post-actions">
           <button class="post-action ${isLiked ? 'liked' : ''}" data-action="like" data-post-id="${post.id}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
@@ -202,9 +208,11 @@ function showCommentModal(post, currentUserId) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal-content" style="max-width:480px;max-height:80vh;display:flex;flex-direction:column;">
-      <div class="modal-handle"></div>
-      <h3 style="font-family:var(--font-display);font-size:1.15rem;font-weight:700;margin-bottom:0.75rem;">Comments</h3>
+    <div class="modal-card" style="max-width:480px;max-height:80vh;display:flex;flex-direction:column;padding:1.5rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <h3 style="font-family:var(--font-display);font-size:1.15rem;font-weight:700;margin:0;">Comments</h3>
+        <button type="button" id="modal-comment-close" style="background:none;border:none;color:var(--text-muted);font-size:1.25rem;cursor:pointer;padding:4px;">✕</button>
+      </div>
       <div id="comments-list" style="flex:1;overflow-y:auto;margin-bottom:1rem;min-height:100px;">
         <div class="loading-spinner" style="margin:1rem auto;display:block;"></div>
       </div>
@@ -218,13 +226,19 @@ function showCommentModal(post, currentUserId) {
   `;
 
   document.body.appendChild(overlay);
+  overlay.offsetHeight;
+  overlay.classList.add('active');
 
   const closeModal = () => {
     if (commentUnsub) commentUnsub();
-    overlay.remove();
+    overlay.classList.remove('active');
+    setTimeout(() => {
+      overlay.remove();
+    }, 300);
   };
 
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+  overlay.querySelector('#modal-comment-close')?.addEventListener('click', closeModal);
 
   // Real-time comments listener
   const commentsQuery = query(
@@ -326,15 +340,38 @@ function showCommentModal(post, currentUserId) {
 }
 
 function showCreatePostModal(outlet) {
+  let selectedFile = null;
+
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal-content">
-      <div class="modal-handle"></div>
-      <h3 style="font-family:var(--font-display);font-size:1.15rem;font-weight:700;margin-bottom:1rem;">Create Post</h3>
+    <div class="modal-card" style="max-width:500px;padding:1.5rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h3 style="font-family:var(--font-display);font-size:1.15rem;font-weight:700;margin:0;">Create Post</h3>
+        <button type="button" id="modal-post-close" style="background:none;border:none;color:var(--text-muted);font-size:1.25rem;cursor:pointer;padding:4px;">✕</button>
+      </div>
       <div class="form-group">
         <textarea class="form-input" id="new-post-text" placeholder="Share an insight, update, or question with your network..." style="min-height:140px;"></textarea>
       </div>
+      
+      <!-- Image Upload Area -->
+      <div class="form-group" style="margin-bottom:1rem;">
+        <input type="file" id="post-image-input" accept="image/*" style="display:none;" />
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-add-image" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          Add Photo
+        </button>
+        
+        <div id="post-image-preview-wrap" class="post-image-preview-wrap" style="display:none;">
+          <img id="post-image-preview" src="" alt="Post image preview" />
+          <button type="button" class="btn-remove-preview-image" id="btn-remove-preview-image">✕</button>
+        </div>
+      </div>
+      
       <div style="display:flex;gap:0.75rem;">
         <button class="btn btn-primary btn-full" id="submit-post">Post</button>
         <button class="btn btn-secondary" id="cancel-post">Cancel</button>
@@ -343,25 +380,87 @@ function showCreatePostModal(outlet) {
   `;
 
   document.body.appendChild(overlay);
+  overlay.offsetHeight;
+  overlay.classList.add('active');
 
-  overlay.querySelector('#cancel-post')?.addEventListener('click', () => overlay.remove());
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  const closeModal = () => {
+    overlay.classList.remove('active');
+    setTimeout(() => {
+      overlay.remove();
+    }, 300);
+  };
+
+  const fileInput = overlay.querySelector('#post-image-input');
+  const addImageBtn = overlay.querySelector('#btn-add-image');
+  const previewWrap = overlay.querySelector('#post-image-preview-wrap');
+  const previewImg = overlay.querySelector('#post-image-preview');
+  const removePreviewBtn = overlay.querySelector('#btn-remove-preview-image');
+
+  addImageBtn.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        showToast('Please select an image file', 'error');
+        fileInput.value = '';
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        showToast('Image size must be less than 5MB', 'error');
+        fileInput.value = '';
+        return;
+      }
+      selectedFile = file;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        previewImg.src = event.target.result;
+        previewWrap.style.display = 'block';
+        addImageBtn.style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+
+  removePreviewBtn.addEventListener('click', () => {
+    selectedFile = null;
+    fileInput.value = '';
+    previewImg.src = '';
+    previewWrap.style.display = 'none';
+    addImageBtn.style.display = 'flex';
+  });
+
+  overlay.querySelector('#cancel-post')?.addEventListener('click', closeModal);
+  overlay.querySelector('#modal-post-close')?.addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
 
   overlay.querySelector('#submit-post')?.addEventListener('click', async () => {
     const text = overlay.querySelector('#new-post-text').value.trim();
-    if (!text) {
-      showToast('Please write something first', 'error');
+    if (!text && !selectedFile) {
+      showToast('Please write something or select an image', 'error');
       return;
     }
 
     const user = auth.currentUser;
     if (!user) return;
 
+    const submitBtn = overlay.querySelector('#submit-post');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Publishing...';
+
     try {
+      let imageUrl = '';
+      if (selectedFile) {
+        submitBtn.textContent = 'Uploading Photo...';
+        const storageRef = ref(storage, `social_posts/${user.uid}_${Date.now()}.jpg`);
+        const uploadResult = await uploadBytes(storageRef, selectedFile);
+        imageUrl = await getDownloadURL(uploadResult.ref);
+      }
+
       const snap = await getDoc(doc(db, 'users', user.uid));
       const profile = snap.exists() ? snap.data() : {};
 
-      await addDoc(collection(db, 'social_posts'), {
+      const postData = {
         authorId: user.uid,
         authorName: profile.name || user.displayName || user.email?.split('@')[0] || 'Builder',
         authorHeadline: profile.headline || profile.role || 'Cosmos Member',
@@ -372,13 +471,21 @@ function showCreatePostModal(outlet) {
         repliesCount: 0,
         likes: [],
         isLinkedInConnected: profile.isLinkedInConnected || false
-      });
+      };
+
+      if (imageUrl) {
+        postData.imageUrl = imageUrl;
+      }
+
+      await addDoc(collection(db, 'social_posts'), postData);
 
       showToast('Post published! ✨', 'success');
-      overlay.remove();
+      closeModal();
     } catch (e) {
       console.error('[Cosmos Social] Error creating post:', e);
       showToast('Failed to publish post', 'error');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Post';
     }
   });
 }

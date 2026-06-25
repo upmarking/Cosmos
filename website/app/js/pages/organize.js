@@ -35,33 +35,39 @@ export async function renderOrganize(outlet) {
         </button>
       </div>
       
-      <div class="events-tabs" id="events-tabs">
-        ${tabs.map(t => `
-          <button class="event-tab ${t === activeTab ? 'active' : ''}" data-tab="${t}">${t}</button>
-        `).join('')}
-      </div>
-
-      <!-- Your Events Section -->
-      <div class="your-events-section" id="your-events-section">
-        <h3 class="your-events-title">Your Events</h3>
-        <div class="your-events-container" id="your-events-container">
-          <div class="loading-spinner" style="margin:1rem auto; display:block;"></div>
+      <div class="events-tabs-container">
+        <div class="events-tabs" id="events-tabs">
+          ${tabs.map(t => `
+            <button class="event-tab ${t === activeTab ? 'active' : ''}" data-tab="${t}">${t}</button>
+          `).join('')}
         </div>
       </div>
 
-      <!-- Picked for You / Timeline Section -->
-      <div class="explore-events-section">
-        <h3 class="upcoming-events-title">Picked for You</h3>
-        <div class="events-timeline stagger" id="events-timeline">
-          <div class="loading-spinner" style="margin:2rem auto; display:block;"></div>
+      <!-- Dashboard Layout Grid -->
+      <div class="organize-dashboard-grid">
+        <!-- Your Events Dashboard Card -->
+        <div class="organize-card" id="your-events-section">
+          <div class="organize-card-header">
+            <h3 class="organize-card-title">Your Events</h3>
+            <p class="organize-card-subtitle">Sessions you are hosting or attending</p>
+          </div>
+          <div class="your-events-container" id="your-events-container">
+            <div class="loading-spinner" style="margin:1rem auto; display:block;"></div>
+          </div>
+        </div>
+
+        <!-- Picked for You Dashboard Card -->
+        <div class="organize-card explore-events-section">
+          <div class="organize-card-header">
+            <h3 class="organize-card-title">Picked for You</h3>
+            <p class="organize-card-subtitle">Recommended networking events and meetups</p>
+          </div>
+          <div class="events-timeline stagger" id="events-timeline">
+            <div class="loading-spinner" style="margin:2rem auto; display:block;"></div>
+          </div>
         </div>
       </div>
 
-      <!-- Floating Action Button (+ Create Event) -->
-      <button class="luma-fab" id="btn-create-event-fab">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Create Event
-      </button>
     </div>
   `;
 
@@ -71,18 +77,9 @@ export async function renderOrganize(outlet) {
     modal = document.createElement('div');
     modal.className = 'modal-overlay hidden';
     modal.id = 'create-event-modal';
-    // Failsafe inline styles to ensure the modal renders even if CSS is cached
+    // Set minimal inline styling for safety, letting CSS classes handle transitions and layout
     Object.assign(modal.style, {
-      position: 'fixed',
-      top: '0', left: '0', right: '0', bottom: '0',
-      zIndex: '10000',
-      background: 'rgba(6, 8, 17, 0.85)',
-      backdropFilter: 'blur(16px)',
-      WebkitBackdropFilter: 'blur(16px)',
-      display: 'none', // Managed by openModal/closeModal now
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '1rem'
+      zIndex: '99999'
     });
     document.body.appendChild(modal);
   }
@@ -370,18 +367,24 @@ export async function renderOrganize(outlet) {
   const openModal = () => {
     try {
       modal.classList.remove('hidden');
-      modal.style.display = 'flex'; // Failsafe
+      // Trigger a reflow to start the transition
+      modal.offsetHeight;
+      modal.classList.add('active');
       document.body.style.overflow = 'hidden'; // Disable scroll under modal
       setStep(1);
     } catch (err) {
       console.error('[Cosmos] Error opening modal:', err);
-      alert('Failed to open event modal. Please refresh the page.');
     }
   };
 
   const closeModal = () => {
-    modal.classList.add('hidden');
-    modal.style.display = 'none'; // Failsafe
+    modal.classList.remove('active');
+    // Wait for transition to complete before hiding modal overlay
+    setTimeout(() => {
+      if (!modal.classList.contains('active')) {
+        modal.classList.add('hidden');
+      }
+    }, 300);
     document.body.style.overflow = '';
     createForm.reset();
     priceGroup.classList.add('hidden');
@@ -427,12 +430,16 @@ export async function renderOrganize(outlet) {
       suggestionsBox.innerHTML = '';
     }
   };
-
-  const btnCreateFab = outlet.querySelector('#btn-create-event-fab');
   if (btnCreate) btnCreate.addEventListener('click', openModal);
-  if (btnCreateFab) btnCreateFab.addEventListener('click', openModal);
   btnClose.addEventListener('click', closeModal);
   btnCancel.addEventListener('click', closeModal);
+
+  // Close modal when clicking backdrop
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
 
   // Image upload preview listener
   const inputImage = modal.querySelector('#event-image');

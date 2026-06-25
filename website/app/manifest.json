@@ -2,7 +2,7 @@
   "name": "Cosmos — Professional Networking",
   "short_name": "Cosmos",
   "description": "Premium professional networking for founders, operators, investors, and builders. Quality over quantity.",
-  "start_url": "/web_app/index.html",
+  "start_url": "/app/index.html",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#060811",
@@ -27,13 +27,13 @@
     {
       "name": "Connect",
       "short_name": "Connect",
-      "url": "/web_app/index.html#/connect",
+      "url": "/app/index.html#/connect",
       "icons": []
     },
     {
       "name": "Events",
       "short_name": "Events",
-      "url": "/web_app/index.html#/events",
+      "url": "/app/index.html#/events",
       "icons": []
     }
   ]

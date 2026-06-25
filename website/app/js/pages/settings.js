@@ -603,7 +603,12 @@ function showChangePasswordModal(outlet, user) {
     </div>
   `;
 
-  const close = () => modal.remove();
+  const close = () => {
+    modal.classList.remove('active');
+    setTimeout(() => {
+      modal.remove();
+    }, 300);
+  };
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
   modal.querySelector('#modal-pw-close').addEventListener('click', close);
 
@@ -648,6 +653,9 @@ function showChangePasswordModal(outlet, user) {
   });
 
   document.body.appendChild(modal);
+  // Trigger a reflow to start the transition
+  modal.offsetHeight;
+  modal.classList.add('active');
 }
 
 async function handleLinkedInToggle(outlet, uid) {
