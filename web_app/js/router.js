@@ -8,6 +8,8 @@ class CosmosRouter {
     this.currentRoute = null;
     this.beforeEach = null;
     this.outlet = null;
+    this.routeCleanup = null;
+    this.subPageRoutes = new Set(['/edit-profile', '/help-support']);
     window.addEventListener('hashchange', () => this.handleRoute());
     
     // Handle cases where the load event has already fired
@@ -34,6 +36,14 @@ class CosmosRouter {
     window.location.hash = path;
   }
 
+  getBackRoute(defaultRoute = '/settings') {
+    const params = this.getParams();
+    if (params[0] === 'edit-profile' && params[1] === 'settings') {
+      return '/settings';
+    }
+    return defaultRoute;
+  }
+
   getHash() {
     return window.location.hash.slice(1) || '/connect';
   }
@@ -57,6 +67,13 @@ class CosmosRouter {
     // Find matching route
     const handler = this.routes[basePath];
     if (handler && this.outlet) {
+      if (this.routeCleanup) {
+        this.routeCleanup();
+        this.routeCleanup = null;
+      }
+
+      document.body.classList.toggle('sub-page-mode', this.subPageRoutes.has(basePath));
+
       // Update active nav
       document.querySelectorAll('.nav-tab').forEach((tab) => {
         tab.classList.toggle('active', tab.dataset.route === basePath);
@@ -67,7 +84,10 @@ class CosmosRouter {
       await new Promise((r) => setTimeout(r, 150));
       
       this.currentRoute = basePath;
-      await handler(this.outlet, path);
+      const cleanup = await handler(this.outlet, path);
+      if (typeof cleanup === 'function') {
+        this.routeCleanup = cleanup;
+      }
       
       this.outlet.classList.remove('page-exit');
       this.outlet.classList.add('page-enter');

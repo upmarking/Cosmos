@@ -1106,12 +1106,14 @@ fun CompleteIdentityScreen(
                                                 authViewModel.saveOnboarding(
                                                     member = memberData,
                                                     onSuccess = {
-                                                        android.widget.Toast.makeText(
-                                                            context,
-                                                            "Verification email sent! Please check your inbox.",
-                                                            android.widget.Toast.LENGTH_LONG
-                                                        ).show()
-                                                        onNext()
+                                                        authViewModel.signOut {
+                                                            android.widget.Toast.makeText(
+                                                                context,
+                                                                "Verification email sent! Please check your inbox.",
+                                                                android.widget.Toast.LENGTH_LONG
+                                                            ).show()
+                                                            onSignInInstead()
+                                                        }
                                                     },
                                                     imageBytes = imageBytes,
                                                     optimisticNavigation = false

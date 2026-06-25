@@ -4,7 +4,7 @@
    ============================================================ */
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, sendEmailVerification } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, sendEmailVerification, updatePassword, reauthenticateWithCredential, EmailAuthProvider, updateProfile as updateAuthProfile } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { getFirestore, collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy, limit, onSnapshot, serverTimestamp, Timestamp, increment, arrayUnion, arrayRemove } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
 
@@ -29,6 +29,7 @@ export {
   app, auth, db, storage, googleProvider,
   onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
   signOut, sendPasswordResetEmail, signInWithPopup, sendEmailVerification,
+  updatePassword, reauthenticateWithCredential, EmailAuthProvider, updateAuthProfile,
   collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc,
   query, where, orderBy, limit, onSnapshot, serverTimestamp, Timestamp, increment, arrayUnion, arrayRemove,
   ref, uploadBytes, getDownloadURL

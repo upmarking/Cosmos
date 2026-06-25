@@ -34,8 +34,8 @@ export async function renderSocial(outlet) {
     <div class="social-page page">
       <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;">
         <div>
-          <h1 class="page-title">Feed</h1>
-          <p class="page-subtitle">Insights from your network</p>
+          <h1 class="page-title">Social</h1>
+          <p class="page-subtitle">Insights & updates from your network</p>
         </div>
         <button class="btn btn-primary btn-sm" id="create-post-btn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -181,8 +181,8 @@ function attachPostListeners(outlet, posts, currentUserId) {
           console.error('[Cosmos Social] Error liking post:', err);
           showToast('Failed to update like status', 'error');
         }
-      } else if (action === 'comment') {
-        showToast('Comments coming soon!', 'info');
+      } else if (action === 'comment' && post) {
+        showCommentModal(post, currentUserId);
       } else if (action === 'share') {
         try {
           const url = `${window.location.origin}/#/social/post/${postId}`;
@@ -193,6 +193,135 @@ function attachPostListeners(outlet, posts, currentUserId) {
         }
       }
     });
+  });
+}
+
+function showCommentModal(post, currentUserId) {
+  let commentUnsub = null;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:480px;max-height:80vh;display:flex;flex-direction:column;">
+      <div class="modal-handle"></div>
+      <h3 style="font-family:var(--font-display);font-size:1.15rem;font-weight:700;margin-bottom:0.75rem;">Comments</h3>
+      <div id="comments-list" style="flex:1;overflow-y:auto;margin-bottom:1rem;min-height:100px;">
+        <div class="loading-spinner" style="margin:1rem auto;display:block;"></div>
+      </div>
+      <div style="display:flex;gap:0.5rem;align-items:flex-end;">
+        <textarea class="form-input" id="comment-text" placeholder="Write a comment..." style="min-height:48px;max-height:120px;resize:none;flex:1;"></textarea>
+        <button class="btn btn-primary btn-sm" id="submit-comment" style="height:48px;padding:0 1rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const closeModal = () => {
+    if (commentUnsub) commentUnsub();
+    overlay.remove();
+  };
+
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+
+  // Real-time comments listener
+  const commentsQuery = query(
+    collection(db, 'social_posts', post.id, 'comments'),
+    orderBy('timestamp', 'asc')
+  );
+
+  const commentsList = overlay.querySelector('#comments-list');
+
+  commentUnsub = onSnapshot(commentsQuery, (snapshot) => {
+    const comments = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      comments.push({
+        id: docSnap.id,
+        authorName: data.authorName || 'Anonymous',
+        authorAvatarUrl: data.authorAvatarUrl || '',
+        content: data.content || '',
+        timestamp: data.timestamp
+      });
+    });
+
+    if (comments.length === 0) {
+      commentsList.innerHTML = `
+        <div style="text-align:center;color:var(--text-muted);padding:2rem 0;font-size:0.88rem;">
+          No comments yet. Be the first to reply!
+        </div>
+      `;
+    } else {
+      const avatarColors = ['linear-gradient(135deg,#7c3aed,#a78bfa)', 'linear-gradient(135deg,#2563eb,#60a5fa)', 'linear-gradient(135deg,#d97706,#fbbf24)', 'linear-gradient(135deg,#059669,#34d399)', 'linear-gradient(135deg,#db2777,#f472b6)'];
+
+      commentsList.innerHTML = comments.map((c, i) => {
+        const initials = c.authorName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || 'U';
+        const hasPhoto = !!c.authorAvatarUrl;
+        const colorIdx = c.authorName.charCodeAt(0) || 0;
+        const time = formatTime(c.timestamp);
+
+        return `
+          <div class="comment-item anim-fade-up" style="display:flex;gap:0.75rem;padding:0.625rem 0;border-bottom:1px solid var(--border);animation-delay:${i * 0.03}s;">
+            <div class="avatar avatar-sm" style="${hasPhoto ? '' : 'background:' + avatarColors[colorIdx % avatarColors.length]}">
+              ${hasPhoto ? `<img src="${c.authorAvatarUrl}" alt="${c.authorName}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />` : initials}
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:0.5rem;">
+                <span style="font-weight:600;font-size:0.85rem;">${c.authorName}</span>
+                <span style="font-size:0.72rem;color:var(--text-muted);">${time}</span>
+              </div>
+              <div style="font-size:0.85rem;color:var(--text-secondary);margin-top:0.15rem;line-height:1.5;">${c.content.replace(/\n/g, '<br>')}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      commentsList.scrollTop = commentsList.scrollHeight;
+    }
+  }, (error) => {
+    console.error('[Cosmos Social] Comments error:', error);
+    commentsList.innerHTML = `<div style="text-align:center;color:var(--red);padding:1rem;">Failed to load comments</div>`;
+  });
+
+  // Submit comment
+  overlay.querySelector('#submit-comment')?.addEventListener('click', async () => {
+    const text = overlay.querySelector('#comment-text').value.trim();
+    if (!text) return;
+
+    const user = auth.currentUser;
+    if (!user) return;
+
+    overlay.querySelector('#comment-text').value = '';
+
+    try {
+      const userSnap = await getDoc(doc(db, 'users', user.uid));
+      const profile = userSnap.exists() ? userSnap.data() : {};
+
+      await addDoc(collection(db, 'social_posts', post.id, 'comments'), {
+        authorId: user.uid,
+        authorName: profile.name || user.displayName || 'Builder',
+        authorAvatarUrl: profile.avatarUrl || user.photoURL || '',
+        content: text,
+        timestamp: serverTimestamp()
+      });
+
+      // Increment reply count on the post
+      await updateDoc(doc(db, 'social_posts', post.id), {
+        repliesCount: increment(1)
+      });
+    } catch (err) {
+      console.error('[Cosmos Social] Error posting comment:', err);
+      showToast('Failed to post comment', 'error');
+    }
+  });
+
+  // Enter to submit (Shift+Enter for newline)
+  overlay.querySelector('#comment-text')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      overlay.querySelector('#submit-comment')?.click();
+    }
   });
 }
 

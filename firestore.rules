@@ -26,7 +26,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isOwner(userId);
       allow update: if isOwner(userId)
-                    || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['connectionsCount', 'followersCount', 'followingCount']))
+                    || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['connectionsCount', 'followersCount', 'followingCount', 'joinedCircles', 'pendingCircles']))
                     || (isSignedIn() && userId.matches('mock_user_.*'));
 
       match /skills/{skillId} {
@@ -63,11 +63,22 @@ service cloud.firestore {
     // 4. Events collection rules
     match /events/{eventId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn(); // Or check request.auth.uid for admin roles
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        resource.data.createdBy == request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participantCount'])
+      );
+      allow delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
 
       match /registrants/{userId} {
-        allow read: if isSignedIn();
-        allow write: if isOwner(userId);
+        allow read: if isSignedIn() && (
+          isOwner(userId) || 
+          get(/databases/$(database)/documents/events/$(eventId)).data.createdBy == request.auth.uid
+        );
+        allow write: if isSignedIn() && (
+          isOwner(userId) || 
+          get(/databases/$(database)/documents/events/$(eventId)).data.createdBy == request.auth.uid
+        );
       }
 
       match /rounds/{roundId} {
@@ -82,20 +93,27 @@ service cloud.firestore {
     // 5. Circles collection rules
     match /circles/{circleId} {
       allow read: if isSignedIn();
-      // Allow join transaction to increment memberCount
-      allow update: if isSignedIn();
+      // Allow creator to update everything, other users can only increment/decrement memberCount (joining/leaving)
+      allow update: if isSignedIn() && (
+        resource.data.createdBy == request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberCount'])
+      );
       allow create: if isSignedIn();
-      allow delete: if false;
+      allow delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
 
       match /members/{userId} {
         allow read: if isSignedIn();
-        allow write: if isOwner(userId) || (isSignedIn() && userId.matches('mock_user_.*'));
+        allow write: if isOwner(userId) || (isSignedIn() && (userId.matches('mock_user_.*') || get(/databases/$(database)/documents/circles/$(circleId)).data.createdBy == request.auth.uid));
       }
 
       match /posts/{postId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn();
-        allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+        // Allow creator of post OR creator of circle to update/delete posts
+        allow update, delete: if isSignedIn() && (
+          resource.data.authorId == request.auth.uid ||
+          get(/databases/$(database)/documents/circles/$(circleId)).data.createdBy == request.auth.uid
+        );
       }
     }
 

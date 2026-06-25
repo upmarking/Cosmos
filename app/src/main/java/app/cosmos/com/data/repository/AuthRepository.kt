@@ -39,8 +39,6 @@ interface AuthRepository {
     suspend fun deleteAccount(): Result<Unit>
     suspend fun updateEmail(newEmail: String): Result<Unit>
     suspend fun updatePassword(currentPassword: String, newPassword: String): Result<Unit>
-    suspend fun reloadUser(): Result<Boolean>
-    suspend fun resendVerificationEmail(): Result<Unit>
 }
 
 class FirebaseAuthRepository(
@@ -61,9 +59,11 @@ class FirebaseAuthRepository(
     private val firebaseUserFlow: Flow<FirebaseUser?> = callbackFlow {
         // Emit the current user synchronously so the first subscriber
         // gets a value without waiting for the listener to fire.
-        trySend(auth.currentUser)
+        val initialUser = auth.currentUser
+        trySend(if (initialUser != null && !initialUser.isEmailVerified) null else initialUser)
         val authListener = FirebaseAuth.AuthStateListener { fa ->
-            trySend(fa.currentUser)
+            val user = fa.currentUser
+            trySend(if (user != null && !user.isEmailVerified) null else user)
         }
         auth.addAuthStateListener(authListener)
         awaitClose { auth.removeAuthStateListener(authListener) }
@@ -244,7 +244,12 @@ class FirebaseAuthRepository(
         if (password.isBlank()) return Result.failure(Exception("Password is required"))
 
         return try {
-            auth.signInWithEmailAndPassword(email.trim(), password).await()
+            val result = auth.signInWithEmailAndPassword(email.trim(), password).await()
+            val user = result.user
+            if (user != null && !user.isEmailVerified) {
+                auth.signOut()
+                return Result.failure(Exception("EMAIL_NOT_VERIFIED"))
+            }
             Result.success(Unit)
         } catch (e: com.google.firebase.auth.FirebaseAuthInvalidUserException) {
             Result.failure(Exception("ACCOUNT_NOT_FOUND"))
@@ -470,34 +475,6 @@ class FirebaseAuthRepository(
             user.reauthenticate(credential).await()
             user.updatePassword(newPassword).await()
             Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun reloadUser(): Result<Boolean> {
-        return try {
-            val user = auth.currentUser
-            if (user != null) {
-                user.reload().await()
-                Result.success(user.isEmailVerified)
-            } else {
-                Result.failure(Exception("No user logged in"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun resendVerificationEmail(): Result<Unit> {
-        return try {
-            val user = auth.currentUser
-            if (user != null) {
-                user.sendEmailVerification().await()
-                Result.success(Unit)
-            } else {
-                Result.failure(Exception("No user logged in"))
-            }
         } catch (e: Exception) {
             Result.failure(e)
         }

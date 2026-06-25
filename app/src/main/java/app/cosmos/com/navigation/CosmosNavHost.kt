@@ -36,7 +36,6 @@ import app.cosmos.com.screens.onboarding.CompleteIdentityScreen
 import app.cosmos.com.screens.onboarding.DefineIntentScreen
 import app.cosmos.com.screens.onboarding.ResetPasswordScreen
 import app.cosmos.com.screens.onboarding.SplashScreen
-import app.cosmos.com.screens.onboarding.VerifyEmailScreen
 import app.cosmos.com.screens.onboarding.WelcomeScreen
 import app.cosmos.com.screens.onboarding.YourVisionScreen
 import app.cosmos.com.screens.profile.MembershipTiersScreen
@@ -62,18 +61,6 @@ fun CosmosNavHost(
     val currentUserState by authViewModel.currentUser.collectAsState()
 
     androidx.compose.runtime.LaunchedEffect(currentUserState) {
-        val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-        if (firebaseUser != null && !firebaseUser.isEmailVerified) {
-            val currentRoute = navController.currentDestination?.route
-            val bypassRoutes = listOf(Screen.VerifyEmail.route, Screen.Welcome.route, Screen.WelcomeSignIn.route)
-            if (currentRoute != null && currentRoute !in bypassRoutes) {
-                navController.navigate(Screen.VerifyEmail.route) {
-                    popUpTo(0) { inclusive = true }
-                }
-            }
-            return@LaunchedEffect
-        }
-
         val user = currentUserState
         if (user != null && !user.isProfileComplete && !user.isFromCache) {
             val currentRoute = navController.currentDestination?.route
@@ -82,7 +69,6 @@ fun CosmosNavHost(
                 Screen.Welcome.route,
                 Screen.WelcomeSignIn.route,
                 Screen.CompleteIdentity.route,
-                Screen.VerifyEmail.route,
                 Screen.DefineIntent.route,
                 Screen.YourVision.route,
                 Screen.AiMatchingRefinement.route
@@ -181,28 +167,13 @@ fun CosmosNavHost(
         }
         composable(Screen.CompleteIdentity.route) {
             CompleteIdentityScreen(
-                onNext = { navController.navigate(Screen.VerifyEmail.route) },
+                onNext = { navController.navigate(Screen.DefineIntent.route) },
                 onBack = { navController.popBackStack() },
                 onSignInInstead = {
                     navController.navigate(Screen.WelcomeSignIn.route) {
                         popUpTo(Screen.Welcome.route) { inclusive = false }
                     }
                 }
-            )
-        }
-        composable(Screen.VerifyEmail.route) {
-            VerifyEmailScreen(
-                onVerified = {
-                    navController.navigate(Screen.DefineIntent.route) {
-                        popUpTo(Screen.VerifyEmail.route) { inclusive = true }
-                    }
-                },
-                onSignOut = {
-                    navController.navigate(Screen.Welcome.route) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                },
-                authViewModel = authViewModel
             )
         }
         composable(Screen.DefineIntent.route) {
@@ -482,6 +453,17 @@ fun CosmosNavHost(
                 authViewModel = authViewModel
             )
         }
+        composable(
+            route = Screen.NetworkRelations.route,
+            arguments = listOf(navArgument("initialTab") { type = NavType.StringType })
+        ) { backStack ->
+            val initialTab = backStack.arguments?.getString("initialTab") ?: "followers"
+            NetworkRelationsScreen(
+                initialTab = initialTab,
+                onBack = { navController.popBackStack() },
+                onNavigate = { route -> navController.navigate(route) }
+            )
+        }
         composable(Screen.MembershipTiers.route) {
             MembershipTiersScreen(
                 onBack = { navController.popBackStack() },
@@ -511,7 +493,6 @@ fun CosmosNavHost(
                 onEditProfileTap = {
                     navController.navigate(Screen.EditProfile.route)
                 },
-                onNavigate = { route -> navController.navigate(route) },
                 authViewModel = authViewModel
             )
         }
@@ -524,22 +505,6 @@ fun CosmosNavHost(
         composable(Screen.HelpSupport.route) {
             HelpSupportScreen(
                 onBack = { navController.popBackStack() }
-            )
-        }
-        composable(
-            route = Screen.NetworkRelations.route,
-            arguments = listOf(
-                navArgument("tab") {
-                    type = NavType.StringType
-                    defaultValue = "followers"
-                }
-            )
-        ) { backStackEntry ->
-            val initialTab = backStackEntry.arguments?.getString("tab") ?: "followers"
-            NetworkRelationsScreen(
-                initialTab = initialTab,
-                onBack = { navController.popBackStack() },
-                onNavigate = { route -> navController.navigate(route) }
             )
         }
     }

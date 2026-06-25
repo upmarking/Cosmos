@@ -121,7 +121,7 @@ fun CommunityHubScreen(
     val isLoading by communityViewModel.isLoading.collectAsState()
     val isRefreshing by communityViewModel.isRefreshing.collectAsState()
     val errorMessage by communityViewModel.errorMessage.collectAsState()
-    val canCreateCircle = currentUser?.isOrganizer == true
+    val canCreateCircle = currentUser != null
     var showCreateDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 

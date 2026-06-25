@@ -3,7 +3,7 @@
    Cache-first for static assets, network-first for API calls
    ============================================================ */
 
-const CACHE_NAME = 'cosmos-pwa-v5';
+const CACHE_NAME = 'cosmos-pwa-v11';
 const STATIC_ASSETS = [
   '/web_app/index.html',
   '/web_app/css/styles.css',
@@ -19,7 +19,8 @@ const STATIC_ASSETS = [
   '/web_app/js/pages/profile.js',
   '/web_app/js/pages/notifications.js',
   '/web_app/js/pages/settings.js',
-  '/web_app/js/pages/verify-email.js',
+  '/web_app/js/pages/edit-profile.js',
+  '/web_app/js/pages/help-support.js',
   '/web_app/manifest.json',
   '/web_app/icons/icon-192.png',
   '/web_app/icons/icon-512.png',
@@ -53,30 +54,42 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch — cache-first for static, network-first for API
+// Fetch — network-first for API and local assets, falling back to cache
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Network-first for Firebase / API calls
+  // 1. Firebase / API calls — let the browser handle these directly
   if (
     url.hostname.includes('firestore.googleapis.com') ||
     url.hostname.includes('identitytoolkit.googleapis.com') ||
     url.hostname.includes('securetoken.googleapis.com') ||
     url.hostname.includes('firebasestorage.googleapis.com')
   ) {
+    return;
+  }
+
+  // 2. Local app assets (HTML, CSS, JS, manifest, icons)
+  if (url.pathname.startsWith('/web_app/')) {
     event.respondWith(
-      fetch(request).catch(() => caches.match(request))
+      fetch(request)
+        .then((response) => {
+          if (request.method === 'GET' && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
     );
     return;
   }
 
-  // Cache-first for static assets
+  // 3. Fallback cache-first for other external assets (fonts, CDNs, etc.)
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
       return fetch(request).then((response) => {
-        // Cache successful GET responses
         if (request.method === 'GET' && response.status === 200) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
@@ -84,10 +97,16 @@ self.addEventListener('fetch', (event) => {
         return response;
       });
     }).catch(() => {
-      // Offline fallback for navigation requests
       if (request.mode === 'navigate') {
         return caches.match('/web_app/index.html');
       }
     })
   );
+});
+
+// Update hook — allow manual update trigger
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.action === 'skipWaiting') {
+    self.skipWaiting();
+  }
 });

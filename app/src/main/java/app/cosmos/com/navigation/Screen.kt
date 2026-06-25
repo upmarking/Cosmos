@@ -10,7 +10,6 @@ sealed class Screen(val route: String) {
     object Welcome : Screen("welcome")
     object WelcomeSignIn : Screen("welcome_signin") // Welcome screen with sign-in panel open
     object CompleteIdentity : Screen("complete_identity")
-    object VerifyEmail : Screen("verify_email")
     object DefineIntent : Screen("define_intent")
     object YourVision : Screen("your_vision")
     object AiMatchingRefinement : Screen("ai_matching_refinement")
@@ -73,14 +72,14 @@ sealed class Screen(val route: String) {
 
     // ── Profile sub-screens ──────────────────────────────────────────────────
     object NetworkingDashboard : Screen("networking_dashboard")
+    object NetworkRelations : Screen("network_relations/{initialTab}") {
+        fun createRoute(initialTab: String) = "network_relations/$initialTab"
+    }
     object MembershipTiers : Screen("membership_tiers")
     object Notifications : Screen("notifications")
     object Settings : Screen("settings")
     object EditProfile : Screen("edit_profile")
     object HelpSupport : Screen("help_support")
-    object NetworkRelations : Screen("network_relations?tab={tab}") {
-        fun createRoute(tab: String) = "network_relations?tab=$tab"
-    }
 
     // ── Social sub-screens ───────────────────────────────────────────────────
     object SocialPostDetail : Screen("social_post_detail/{postId}") {

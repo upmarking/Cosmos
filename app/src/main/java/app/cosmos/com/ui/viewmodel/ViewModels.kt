@@ -296,36 +296,6 @@ class AuthViewModel(
                 }
         }
     }
-
-    fun reloadUser(onResult: (Boolean) -> Unit, onError: (String) -> Unit) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            authRepo.reloadUser()
-                .onSuccess { isVerified ->
-                    _isLoading.value = false
-                    onResult(isVerified)
-                }
-                .onFailure { error ->
-                    _isLoading.value = false
-                    onError(error.message ?: "Failed to reload user status")
-                }
-        }
-    }
-
-    fun resendVerificationEmail(onSuccess: () -> Unit, onError: (String) -> Unit) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            authRepo.resendVerificationEmail()
-                .onSuccess {
-                    _isLoading.value = false
-                    onSuccess()
-                }
-                .onFailure { error ->
-                    _isLoading.value = false
-                    onError(error.message ?: "Failed to resend verification email")
-                }
-        }
-    }
 }
 
 // ── DiscoveryViewModel ────────────────────────────────────────────────────────
@@ -674,6 +644,45 @@ class EventViewModel(
             }.onFailure { error ->
                 _isCreatingEvent.value = false
                 onError(error.message ?: "Failed to create event")
+            }
+        }
+    }
+
+    fun createEventWithImage(
+        event: NetworkEvent,
+        imageBytes: ByteArray?,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            _isCreatingEvent.value = true
+            if (imageBytes != null) {
+                try {
+                    val tempId = java.util.UUID.randomUUID().toString()
+                    val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance().reference.child("events/$tempId.jpg")
+                    storageRef.putBytes(imageBytes).await()
+                    val downloadUrl = storageRef.downloadUrl.await().toString()
+                    val eventWithImage = event.copy(coverUrl = downloadUrl)
+                    eventRepo.createEvent(eventWithImage, uid).onSuccess {
+                        _isCreatingEvent.value = false
+                        onSuccess()
+                    }.onFailure { error ->
+                        _isCreatingEvent.value = false
+                        onError(error.message ?: "Failed to create event")
+                    }
+                } catch (e: Exception) {
+                    _isCreatingEvent.value = false
+                    onError(e.message ?: "Failed to upload cover image")
+                }
+            } else {
+                eventRepo.createEvent(event, uid).onSuccess {
+                    _isCreatingEvent.value = false
+                    onSuccess()
+                }.onFailure { error ->
+                    _isCreatingEvent.value = false
+                    onError(error.message ?: "Failed to create event")
+                }
             }
         }
     }

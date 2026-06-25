@@ -37,6 +37,58 @@ class FirestoreEventRepository(
     private val firestore: FirebaseFirestore
 ) : EventRepository {
 
+    private fun isEventExpired(dateStr: String): Boolean {
+        if (dateStr.isBlank()) return false
+        
+        val cleanDate = dateStr
+            .replace("Tomorrow, ", "")
+            .replace("Today, ", "")
+            .replace("Next ", "")
+            .replace("Monday, ", "")
+            .replace("Tuesday, ", "")
+            .replace("Wednesday, ", "")
+            .replace("Thursday, ", "")
+            .replace("Friday, ", "")
+            .replace("Saturday, ", "")
+            .replace("Sunday, ", "")
+            .trim()
+            
+        val formats = listOf(
+            SimpleDateFormat("MMM d, yyyy", Locale.US),
+            SimpleDateFormat("MMMM d, yyyy", Locale.US),
+            SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        )
+        
+        var eventDate: java.util.Date? = null
+        for (format in formats) {
+            try {
+                eventDate = format.parse(cleanDate)
+                if (eventDate != null) break
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+        
+        if (eventDate == null) return false
+        
+        val today = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.time
+        
+        val eventCal = Calendar.getInstance().apply {
+            time = eventDate
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.time
+        
+        return eventCal.before(today)
+    }
+
     override fun getEvents(): Flow<List<NetworkEvent>> = callbackFlow {
         val registration = firestore.collection("events")
             .addSnapshotListener { snapshot, error ->
@@ -51,7 +103,7 @@ class FirestoreEventRepository(
                 }
                 val events = snapshot.documents.map { doc ->
                     mapDocumentToEvent(doc.id, doc.data ?: emptyMap())
-                }
+                }.filter { !isEventExpired(it.date) }
                 trySend(events)
             }
         awaitClose {
@@ -317,7 +369,7 @@ class FirestoreEventRepository(
                 val matchesTags = tags.isEmpty() ||
                     event.tags.any { eventTag -> tags.any { filterTag -> eventTag.equals(filterTag, ignoreCase = true) } }
 
-                matchesQuery && matchesType && matchesTags
+                matchesQuery && matchesType && matchesTags && !isEventExpired(event.date)
             }
     }
 

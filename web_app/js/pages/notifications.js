@@ -181,16 +181,16 @@ function attachNotifListeners(outlet, notifications) {
             window.location.hash = '#/settings';
             break;
           case 'CONNECTION_ACCEPTED':
-            window.location.hash = '#/conversations';
+            window.location.hash = '#/messenger';
             break;
           case 'EVENT_REMINDER':
-            window.location.hash = '#/events';
+            window.location.hash = '#/organize';
             break;
           case 'COMMUNITY_ANNOUNCEMENT':
-            window.location.hash = '#/communities';
+            window.location.hash = '#/orbits';
             break;
           case 'MESSAGE':
-            window.location.hash = '#/conversations';
+            window.location.hash = '#/messenger';
             break;
           default:
             showToast('Notification viewed', 'info');

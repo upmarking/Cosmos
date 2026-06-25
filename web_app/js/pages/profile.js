@@ -6,24 +6,31 @@ import { auth, signOut, db, doc, getDoc } from '../firebase-config.js';
 import { showToast } from '../app.js';
 import router from '../router.js';
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 export async function renderProfile(outlet) {
   const user = window.cosmosApp.user || auth.currentUser;
-  let profileData = {};
-  
+  let profileData = window.cosmosApp.userProfile || {};
+
   if (user) {
     try {
       const snap = await getDoc(doc(db, 'users', user.uid));
       if (snap.exists()) {
         profileData = snap.data();
+        window.cosmosApp.userProfile = profileData;
       }
     } catch (e) {
-      console.error("Error fetching user profile:", e);
+      console.error('Error fetching user profile:', e);
     }
   }
 
   const displayName = profileData.name || user?.displayName || user?.email?.split('@')[0] || 'Builder';
-  const email = user?.email || profileData.email || '';
-  const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
+  const initials = displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
   const photoURL = profileData.avatarUrl || user?.photoURL;
   const headline = profileData.headline || profileData.role || 'Cosmos Builder';
   const connectionsCount = profileData.connectionsCount || 0;
@@ -31,27 +38,38 @@ export async function renderProfile(outlet) {
   const followingCount = profileData.followingCount || 0;
   const membershipTier = profileData.membershipTier || 'EXPLORER';
   const tags = profileData.tags || [];
+  const bio = profileData.bio || '';
+  const company = profileData.company || '';
+  const location = profileData.location || '';
+  const primaryUserType = profileData.primaryUserType || '';
+  const isProfileComplete = profileData.isProfileComplete || !!(profileData.name && primaryUserType);
 
   const tierColors = {
     EXPLORER: 'badge-blue',
     MEMBER: 'badge-green',
     INNER_CIRCLE: 'badge-purple',
-    FOUNDER: 'badge-purple'
+    FOUNDER: 'badge-purple',
   };
   const tierBadge = membershipTier.replace('_', ' ');
 
+  const metaItems = [];
+  if (primaryUserType) metaItems.push(`<span class="profile-meta-item">${escapeHtml(primaryUserType)}</span>`);
+  if (company) metaItems.push(`<span class="profile-meta-item">🏢 ${escapeHtml(company)}</span>`);
+  if (location) metaItems.push(`<span class="profile-meta-item">📍 ${escapeHtml(location)}</span>`);
+
   outlet.innerHTML = `
     <div class="profile-page page">
-      <!-- Profile Hero -->
       <div class="profile-hero anim-fade-up">
         <div class="profile-hero-bg"></div>
         <div class="profile-avatar-wrap">
           <div class="avatar avatar-xl" style="${photoURL ? '' : 'background:var(--gradient-primary);'}">
-            ${photoURL ? `<img src="${photoURL}" alt="${displayName}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />` : initials}
+            ${photoURL ? `<img src="${photoURL}" alt="${escapeHtml(displayName)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />` : initials}
           </div>
         </div>
-        <div class="profile-name">${displayName}</div>
-        <div class="profile-headline">${headline}</div>
+        <div class="profile-name">${escapeHtml(displayName)}</div>
+        <div class="profile-headline">${escapeHtml(headline)}</div>
+        ${metaItems.length ? `<div class="profile-meta">${metaItems.join('')}</div>` : ''}
+        ${bio ? `<div class="profile-about"><p class="profile-about-text">${escapeHtml(bio)}</p></div>` : ''}
         <div style="display:flex;gap:0.5rem;justify-content:center;margin-top:0.75rem;">
           <span class="badge ${tierColors[membershipTier] || 'badge-purple'}">🚀 ${tierBadge}</span>
           ${profileData.isLinkedInConnected ? `
@@ -76,7 +94,12 @@ export async function renderProfile(outlet) {
         </div>
       </div>
 
-      <!-- Networking Dashboard -->
+      ${!isProfileComplete ? `
+      <div class="profile-complete-banner anim-fade-up">
+        <p><strong>Complete your profile</strong>Add your photo, role, and bio so other builders can discover you.</p>
+        <button class="btn btn-primary btn-sm" id="btn-complete-profile">Edit Profile</button>
+      </div>` : ''}
+
       <div class="profile-section anim-fade-up" style="animation-delay:0.1s;">
         <div class="profile-section-title">📊 Networking Dashboard</div>
         <div class="dashboard-grid">
@@ -99,17 +122,15 @@ export async function renderProfile(outlet) {
         </div>
       </div>
 
-      <!-- Interest Tags -->
       <div class="profile-section anim-fade-up" style="animation-delay:0.15s;">
         <div class="profile-section-title">🏷️ Interest Tags</div>
         <div class="profile-tags-list">
-          ${tags.length > 0 
-            ? tags.map(t => `<span class="tag">${t}</span>`).join('') 
-            : '<span style="color:var(--text-muted);font-size:0.85rem;">No tags listed yet.</span>'}
+          ${tags.length > 0
+            ? tags.map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('')
+            : '<span style="color:var(--text-muted);font-size:0.85rem;">No tags listed yet. Add them in Edit Profile.</span>'}
         </div>
       </div>
 
-      <!-- Menu Items -->
       <div class="profile-section anim-fade-up" style="animation-delay:0.2s;">
         <div class="profile-menu-item" data-action="edit">
           <div class="profile-menu-icon">
@@ -134,7 +155,6 @@ export async function renderProfile(outlet) {
         </div>
       </div>
 
-      <!-- Logout -->
       <div class="profile-section anim-fade-up" style="animation-delay:0.25s;">
         <div class="profile-menu-item" data-action="logout" style="color:var(--red);">
           <div class="profile-menu-icon" style="background:rgba(248,113,113,0.1);">
@@ -150,8 +170,11 @@ export async function renderProfile(outlet) {
     </div>
   `;
 
-  // Menu item actions
-  outlet.querySelectorAll('.profile-menu-item').forEach(item => {
+  outlet.querySelector('#btn-complete-profile')?.addEventListener('click', () => {
+    router.navigate('/edit-profile');
+  });
+
+  outlet.querySelectorAll('.profile-menu-item').forEach((item) => {
     item.addEventListener('click', async () => {
       const action = item.dataset.action;
       switch (action) {
@@ -161,29 +184,15 @@ export async function renderProfile(outlet) {
           router.navigate('/auth');
           break;
         case 'edit':
-          showToast('Profile editing coming soon!', 'info');
+          router.navigate('/edit-profile');
           break;
         case 'settings':
           router.navigate('/settings');
           break;
         case 'help':
-          showToast('Help & Support coming soon!', 'info');
+          router.navigate('/help-support');
           break;
       }
     });
   });
-}
-
-function renderSkillBar(name, endorsements, percentage) {
-  return `
-    <div>
-      <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:0.25rem;">
-        <span>${name}</span>
-        <span style="color:var(--text-muted);font-size:0.78rem;">${endorsements} endorsements</span>
-      </div>
-      <div class="progress-bar">
-        <div class="progress-bar-fill" style="width:${percentage}%;"></div>
-      </div>
-    </div>
-  `;
 }

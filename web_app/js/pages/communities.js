@@ -37,6 +37,28 @@ export async function renderCommunities(outlet) {
 
   let joinedCircles = [];
   let pendingCircles = [];
+  let circlesList = [];
+
+  const renderList = () => {
+    const container = outlet.querySelector('#orbits-list');
+    if (!container) return;
+
+    const list = circlesList.map(orbit => {
+      const isJoined = joinedCircles.includes(orbit.id) || orbit.createdBy === user.uid;
+      const isPending = pendingCircles.includes(orbit.id);
+      return { ...orbit, isJoined, isPending };
+    });
+
+    // Apply search filter if search input has value
+    const searchInput = outlet.querySelector('#orbit-search');
+    const q = searchInput ? searchInput.value.toLowerCase() : '';
+    const filtered = list.filter(o =>
+      o.name.toLowerCase().includes(q) || o.description.toLowerCase().includes(q) || o.tags.some(t => t.toLowerCase().includes(q))
+    );
+
+    container.innerHTML = renderOrbitCards(filtered);
+    attachOrbitListeners(outlet, filtered, user.uid);
+  };
 
   const userRef = doc(db, 'users', user.uid);
   window.cosmosApp._userCirclesUnsubscribe = onSnapshot(userRef, (userSnap) => {
@@ -46,61 +68,49 @@ export async function renderCommunities(outlet) {
       pendingCircles = uData.pendingCircles || [];
     }
 
-    if (window.cosmosApp._circlesUnsubscribe) return;
-
-    window.cosmosApp._circlesUnsubscribe = onSnapshot(collection(db, 'circles'), (snapshot) => {
-      const list = [];
-      snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        if (data.createdBy && data.createdBy.startsWith('mock_user_')) return;
-
-        list.push({
-          id: docSnap.id,
-          name: data.name || 'Unnamed Orbit',
-          description: data.description || '',
-          coverUrl: data.coverUrl || '',
-          memberCount: data.memberCount || 0,
-          theme: data.theme || '',
-          tags: data.tags || [],
-          isPrivate: data.isPrivate || false,
-          adminName: data.adminName || 'Admin',
-          createdBy: data.createdBy || '',
-          isJoined: joinedCircles.includes(docSnap.id) || data.createdBy === user.uid,
-          isPending: pendingCircles.includes(docSnap.id)
-        });
-      });
-
-      const renderList = (filteredList) => {
-        const container = outlet.querySelector('#orbits-list');
-        if (container) {
-          container.innerHTML = renderOrbitCards(filteredList);
-          attachOrbitListeners(outlet, filteredList, user.uid);
-        }
-      };
-
-      renderList(list);
-
-      // Search filter
-      const searchInput = outlet.querySelector('#orbit-search');
-      if (searchInput) {
-        const freshSearchInput = searchInput.cloneNode(true);
-        searchInput.replaceWith(freshSearchInput);
-        freshSearchInput.addEventListener('input', () => {
-          const q = freshSearchInput.value.toLowerCase();
-          const filtered = list.filter(o =>
-            o.name.toLowerCase().includes(q) || o.description.toLowerCase().includes(q) || o.tags.some(t => t.toLowerCase().includes(q))
-          );
-          renderList(filtered);
-        });
-      }
-    }, (error) => {
-      console.error('[Cosmos Communities] Circles snapshot error:', error);
-      const container = outlet.querySelector('#orbits-list');
-      if (container) {
-        container.innerHTML = `<div style="text-align:center;color:var(--red);padding:2rem;">Failed to load circles: ${error.message}</div>`;
-      }
-    });
+    if (circlesList.length > 0) {
+      renderList();
+    }
   });
+
+  window.cosmosApp._circlesUnsubscribe = onSnapshot(collection(db, 'circles'), (snapshot) => {
+    circlesList = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      if (data.createdBy && data.createdBy.startsWith('mock_user_')) return;
+
+      circlesList.push({
+        id: docSnap.id,
+        name: data.name || 'Unnamed Orbit',
+        description: data.description || '',
+        coverUrl: data.coverUrl || '',
+        memberCount: data.memberCount || 0,
+        theme: data.theme || '',
+        tags: data.tags || [],
+        isPrivate: data.isPrivate || false,
+        adminName: data.adminName || 'Admin',
+        createdBy: data.createdBy || '',
+      });
+    });
+
+    renderList();
+  }, (error) => {
+    console.error('[Cosmos Communities] Circles snapshot error:', error);
+    const container = outlet.querySelector('#orbits-list');
+    if (container) {
+      container.innerHTML = `<div style="text-align:center;color:var(--red);padding:2rem;">Failed to load circles: ${error.message}</div>`;
+    }
+  });
+
+  // Search input change listener
+  setTimeout(() => {
+    const searchInput = outlet.querySelector('#orbit-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        renderList();
+      });
+    }
+  }, 100);
 }
 
 function renderOrbitCards(orbits) {
@@ -174,6 +184,8 @@ function attachOrbitListeners(outlet, orbits, currentUserId) {
         const circleSnap = await getDoc(circleRef);
         if (!circleSnap.exists()) {
           showToast('Orbit not found', 'error');
+          btn.disabled = false;
+          btn.textContent = orbit.isPrivate ? 'Join Orbit' : 'Join Orbit';
           return;
         }
 
@@ -195,11 +207,19 @@ function attachOrbitListeners(outlet, orbits, currentUserId) {
               actionId: orbitId
             });
           }
+          
+          btn.textContent = 'Requested';
+          btn.classList.remove('btn-primary');
+          btn.classList.add('btn-secondary');
           showToast(`Request sent to join "${orbit.name}"! 🚀`, 'success');
         } else {
           await setDoc(memberRef, { joinedAt: serverTimestamp(), status: 'APPROVED' });
           await updateDoc(circleRef, { memberCount: increment(1) });
           await updateDoc(userRef, { joinedCircles: arrayUnion(orbitId) });
+          
+          btn.textContent = 'View Orbit';
+          btn.classList.remove('btn-primary');
+          btn.classList.add('btn-secondary');
           showToast(`Joined "${orbit.name}"! 🎉`, 'success');
         }
       } catch (err) {
@@ -221,4 +241,3 @@ function attachOrbitListeners(outlet, orbits, currentUserId) {
     });
   });
 }
-
