@@ -14,11 +14,19 @@ import app.cosmos.com.navigation.CosmosNavHost
 import app.cosmos.com.navigation.Screen
 import app.cosmos.com.ui.components.CosmosBottomNavBar
 import app.cosmos.com.ui.theme.CosmosTheme
+import com.razorpay.Checkout
+import com.razorpay.PaymentResultWithDataListener
+import com.razorpay.PaymentData
+import android.util.Log
+import app.cosmos.com.data.payment.RazorpayPaymentHelper
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Preload Razorpay Checkout resources for performance optimization
+        Checkout.preload(applicationContext)
 
         setContent {
             CosmosTheme {
@@ -55,5 +63,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onPaymentSuccess(razorpayPaymentId: String?, paymentData: PaymentData?) {
+        val paymentId = razorpayPaymentId ?: paymentData?.paymentId ?: ""
+        val orderId = paymentData?.orderId ?: ""
+        val signature = paymentData?.signature ?: ""
+        Log.d("CosmosPayment", "Payment SUCCESS — paymentId=$paymentId, orderId=$orderId")
+        RazorpayPaymentHelper.onPaymentSuccess?.invoke(paymentId, orderId, signature)
+    }
+
+    override fun onPaymentError(code: Int, response: String?, paymentData: PaymentData?) {
+        Log.w("CosmosPayment", "Payment ERROR — code=$code, response=$response")
+        RazorpayPaymentHelper.onPaymentError?.invoke(code, response ?: "Unknown Error")
     }
 }

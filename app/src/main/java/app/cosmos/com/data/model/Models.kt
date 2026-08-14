@@ -90,12 +90,48 @@ data class EndorsedSkill(
     val endorsers: List<String> = emptyList()
 )
 
-enum class MembershipTier(val label: String, val color: Long) {
-    EXPLORER("Explorer", 0xFF908FA0),
-    MEMBER("Member", 0xFF0566D9),
-    INNER_CIRCLE("Inner Circle", 0xFF494BD6),
-    FOUNDER("Founder", 0xFFC0C1FF)
+enum class MembershipTier(val label: String, val color: Long, val tierLevel: Int) {
+    EXPLORER("Explorer", 0xFF908FA0, 0),
+    MEMBER("Member", 0xFF0566D9, 1),
+    INNER_CIRCLE("Inner Circle", 0xFF494BD6, 2),
+    FOUNDER("Founder", 0xFFC0C1FF, 3);
+
+    fun canUpgradeTo(target: MembershipTier): Boolean {
+        return target.tierLevel > this.tierLevel && target != FOUNDER
+    }
 }
+
+// ── Subscription Models ──────────────────────────────────────────────────────
+
+enum class SubscriptionStatus {
+    ACTIVE, EXPIRED, CANCELLED, PENDING, NONE
+}
+
+/**
+ * Represents a subscription plan with pricing and feature details.
+ */
+data class SubscriptionPlan(
+    val tier: MembershipTier,
+    val monthlyPriceInr: Double,
+    val features: List<String>,
+    val isInviteOnly: Boolean = false,
+    val isPopular: Boolean = false
+)
+
+/**
+ * Tracks a user's active/past subscription in Firestore.
+ * Stored under: users/{userId}/subscriptions/{subscriptionId}
+ */
+data class UserSubscription(
+    val id: String = "",
+    val tier: String = "",
+    val status: String = SubscriptionStatus.NONE.name,
+    val startDate: Long = 0L,
+    val endDate: Long = 0L,
+    val razorpayPaymentId: String = "",
+    val amountPaid: Double = 0.0,
+    val createdAt: Long = 0L
+)
 
 data class Connection(
     val id: String,

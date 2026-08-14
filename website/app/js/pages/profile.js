@@ -66,7 +66,7 @@ export async function renderProfile(outlet) {
             ${photoURL ? `<img src="${photoURL}" alt="${escapeHtml(displayName)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />` : initials}
           </div>
         </div>
-        <div class="profile-name">${escapeHtml(displayName)}</div>
+        <div class="profile-name${membershipTier === 'FOUNDER' || membershipTier === 'INNER_CIRCLE' ? ' gradient-text-shimmer' : ''}">${escapeHtml(displayName)}</div>
         <div class="profile-headline">${escapeHtml(headline)}</div>
         ${metaItems.length ? `<div class="profile-meta">${metaItems.join('')}</div>` : ''}
         ${bio ? `<div class="profile-about"><p class="profile-about-text">${escapeHtml(bio)}</p></div>` : ''}
@@ -80,15 +80,15 @@ export async function renderProfile(outlet) {
         </div>
         <div class="profile-stats">
           <div class="profile-stat">
-            <div class="profile-stat-num">${connectionsCount}</div>
+            <div class="profile-stat-num" data-count="${connectionsCount}">0</div>
             <div class="profile-stat-label">Connections</div>
           </div>
           <div class="profile-stat">
-            <div class="profile-stat-num">${followersCount}</div>
+            <div class="profile-stat-num" data-count="${followersCount}">0</div>
             <div class="profile-stat-label">Followers</div>
           </div>
           <div class="profile-stat">
-            <div class="profile-stat-num">${followingCount}</div>
+            <div class="profile-stat-num" data-count="${followingCount}">0</div>
             <div class="profile-stat-label">Following</div>
           </div>
         </div>
@@ -194,5 +194,29 @@ export async function renderProfile(outlet) {
           break;
       }
     });
+  });
+
+  // Animate stat counters
+  animateStatCounters(outlet);
+}
+
+function animateStatCounters(outlet) {
+  outlet.querySelectorAll('.profile-stat-num[data-count]').forEach(el => {
+    const target = parseInt(el.dataset.count) || 0;
+    if (target === 0) { el.textContent = '0'; return; }
+
+    const duration = 800;
+    const start = performance.now();
+
+    const tick = (now) => {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = Math.round(eased * target);
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+
+    requestAnimationFrame(tick);
   });
 }

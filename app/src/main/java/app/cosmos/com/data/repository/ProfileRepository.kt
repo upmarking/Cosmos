@@ -2,6 +2,7 @@ package app.cosmos.com.data.repository
 
 import app.cosmos.com.data.model.EndorsedSkill
 import app.cosmos.com.data.model.Member
+import app.cosmos.com.data.model.UserSubscription
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
@@ -19,6 +20,10 @@ interface ProfileRepository {
     suspend fun updateProfile(userId: String, updates: Map<String, Any>): Result<Unit>
     suspend fun searchProfiles(query: String, tags: List<String> = emptyList(), userType: String = ""): Result<List<Member>>
     suspend fun getProfilesPaginated(lastDocId: String?, limit: Int = 20): Result<List<Member>>
+    suspend fun recordPayment(userId: String, paymentId: String, amount: Double, tier: String, subscriptionId: String = ""): Result<Unit>
+    suspend fun createSubscription(userId: String, subscription: UserSubscription): Result<String>
+    suspend fun getActiveSubscription(userId: String): Result<UserSubscription?>
+    suspend fun getPaymentHistory(userId: String): Result<List<Map<String, Any>>>
 }
 
 class FirestoreProfileRepository(
@@ -213,5 +218,89 @@ class FirestoreProfileRepository(
             .map { doc ->
                 FirebaseAuthRepository.mapDocumentToMember(doc.id, doc.data ?: emptyMap())
             }
+    }
+
+    override suspend fun recordPayment(
+        userId: String,
+        paymentId: String,
+        amount: Double,
+        tier: String,
+        subscriptionId: String
+    ): Result<Unit> = runCatching {
+        val paymentData = mutableMapOf<String, Any>(
+            "userId" to userId,
+            "paymentId" to paymentId,
+            "amount" to amount,
+            "tier" to tier,
+            "timestamp" to FieldValue.serverTimestamp(),
+            "status" to "SUCCESS"
+        )
+        if (subscriptionId.isNotBlank()) {
+            paymentData["subscriptionId"] = subscriptionId
+        }
+        firestore.collection("payments").document(paymentId).set(paymentData).await()
+    }
+
+    override suspend fun createSubscription(
+        userId: String,
+        subscription: UserSubscription
+    ): Result<String> = runCatching {
+        val subData = mapOf(
+            "tier" to subscription.tier,
+            "status" to subscription.status,
+            "startDate" to subscription.startDate,
+            "endDate" to subscription.endDate,
+            "razorpayPaymentId" to subscription.razorpayPaymentId,
+            "amountPaid" to subscription.amountPaid,
+            "createdAt" to FieldValue.serverTimestamp()
+        )
+        val docRef = firestore.collection("users").document(userId)
+            .collection("subscriptions").add(subData).await()
+        docRef.id
+    }
+
+    override suspend fun getActiveSubscription(userId: String): Result<UserSubscription?> = runCatching {
+        val snapshot = firestore.collection("users").document(userId)
+            .collection("subscriptions")
+            .whereEqualTo("status", "ACTIVE")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(1)
+            .get().await()
+
+        if (snapshot.isEmpty) {
+            null
+        } else {
+            val doc = snapshot.documents.first()
+            val data = doc.data ?: emptyMap()
+            UserSubscription(
+                id = doc.id,
+                tier = data["tier"] as? String ?: "",
+                status = data["status"] as? String ?: "NONE",
+                startDate = data["startDate"] as? Long ?: 0L,
+                endDate = data["endDate"] as? Long ?: 0L,
+                razorpayPaymentId = data["razorpayPaymentId"] as? String ?: "",
+                amountPaid = (data["amountPaid"] as? Number)?.toDouble() ?: 0.0,
+                createdAt = (data["createdAt"] as? com.google.firebase.Timestamp)?.seconds?.times(1000) ?: 0L
+            )
+        }
+    }
+
+    override suspend fun getPaymentHistory(userId: String): Result<List<Map<String, Any>>> = runCatching {
+        val snapshot = firestore.collection("payments")
+            .whereEqualTo("userId", userId)
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(20)
+            .get().await()
+
+        snapshot.documents.map { doc ->
+            val data = doc.data?.toMutableMap() ?: mutableMapOf()
+            data["id"] = doc.id
+            // Convert Firestore Timestamp to millis for display
+            val ts = data["timestamp"]
+            if (ts is com.google.firebase.Timestamp) {
+                data["timestampMillis"] = ts.seconds * 1000
+            }
+            data
+        }
     }
 }

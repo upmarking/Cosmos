@@ -33,6 +33,12 @@ service cloud.firestore {
         allow read: if isSignedIn();
         allow write: if isSignedIn();
       }
+
+      // Subscription records for membership tiers
+      match /subscriptions/{subId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId);
+      }
     }
 
     // 2. Swipes collection rules
@@ -180,6 +186,12 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.auth.uid == request.resource.data.requesterId;
       allow update: if isSignedIn() && request.auth.uid == resource.data.connectorId;
       allow delete: if false;
+    }
+
+    // 11. Payments collection rules
+    match /payments/{paymentId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
     }
   }
 }

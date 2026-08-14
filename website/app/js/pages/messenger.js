@@ -350,24 +350,50 @@ async function renderChatDetail(outlet, chatId) {
         `;
       } else {
         messagesContainer.innerHTML = `
-          <div style="text-align:center;color:var(--text-muted);font-size:0.85rem;padding:2rem;">
-            Connection established! Say hello to ${name}.
+          <div style="text-align:center;color:var(--text-muted);padding:3rem 1.5rem;">
+            <div style="font-size:2.5rem;margin-bottom:1rem;opacity:0.5;">🤝</div>
+            <div style="font-family:var(--font-display);font-size:1.1rem;font-weight:700;color:var(--text-primary);margin-bottom:0.35rem;">Connection Established!</div>
+            <div style="font-size:0.85rem;line-height:1.6;">Say hello to ${name} and start building a meaningful relationship.</div>
           </div>
         `;
       }
       return;
     }
 
-    messagesContainer.innerHTML = displayMessages.map(m => {
+    // Build messages with date separators
+    let messagesHtml = '';
+    let lastDateStr = '';
+    let lastSenderId = '';
+
+    displayMessages.forEach((m, idx) => {
+      // Add date separator between different days
+      if (m.timestamp) {
+        const msgDate = m.timestamp.toDate ? m.timestamp.toDate() : new Date(m.timestamp);
+        const dateStr = msgDate.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'short' });
+        if (dateStr !== lastDateStr) {
+          const today = new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'short' });
+          const yesterday = new Date(Date.now() - 86400000).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'short' });
+          let displayDate = dateStr;
+          if (dateStr === today) displayDate = 'Today';
+          else if (dateStr === yesterday) displayDate = 'Yesterday';
+
+          messagesHtml += `<div class="chat-date-separator">${displayDate}</div>`;
+          lastDateStr = dateStr;
+          lastSenderId = ''; // Reset grouping across dates
+        }
+      }
+
       if (m.isDeleted) {
-        return `
+        messagesHtml += `
           <div class="chat-bubble chat-bubble-received" style="font-style: italic; color: var(--text-muted);">
             This message was deleted
           </div>
         `;
+        lastSenderId = '';
+        return;
       }
       if (m.type === 'AI_SUMMARY' || m.senderId === 'system') {
-        return `
+        messagesHtml += `
           <div class="ai-summary anim-fade-up">
             <div class="ai-summary-header">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
@@ -376,17 +402,24 @@ async function renderChatDetail(outlet, chatId) {
             <div class="ai-summary-text">${highlightText(m.text, messageSearchQuery)}</div>
           </div>
         `;
+        lastSenderId = '';
+        return;
       }
+
       const isOwn = m.senderId === user.uid;
       const bubbleTime = formatMessageTime(m.timestamp);
+      const isGrouped = m.senderId === lastSenderId;
 
-      return `
-        <div class="chat-bubble ${isOwn ? 'chat-bubble-sent' : 'chat-bubble-received'}">
+      messagesHtml += `
+        <div class="chat-bubble ${isOwn ? 'chat-bubble-sent' : 'chat-bubble-received'}${isGrouped ? ' chat-bubble-group' : ''}" style="${isGrouped ? 'margin-top:2px;' : ''}">
           ${highlightText(m.text, messageSearchQuery)}
           <div class="chat-bubble-time">${bubbleTime}</div>
         </div>
       `;
-    }).join('');
+      lastSenderId = m.senderId;
+    });
+
+    messagesContainer.innerHTML = messagesHtml;
 
     // Only scroll to bottom if user is not actively searching
     if (!messageSearchQuery.trim()) {

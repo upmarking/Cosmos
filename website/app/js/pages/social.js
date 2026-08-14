@@ -200,6 +200,43 @@ function attachPostListeners(outlet, posts, currentUserId) {
       }
     });
   });
+
+  // Image lightbox — click to fullscreen
+  outlet.querySelectorAll('.post-image-wrap img').forEach(img => {
+    img.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openImageLightbox(img.src, img.alt);
+    });
+  });
+}
+
+function openImageLightbox(src, alt) {
+  const overlay = document.createElement('div');
+  overlay.className = 'image-lightbox-overlay';
+  overlay.innerHTML = `
+    <button class="image-lightbox-close" aria-label="Close">✕</button>
+    <img src="${src}" alt="${alt || 'Image'}" />
+  `;
+
+  const close = () => {
+    overlay.style.opacity = '0';
+    setTimeout(() => overlay.remove(), 200);
+  };
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay || e.target.classList.contains('image-lightbox-close')) {
+      close();
+    }
+  });
+  overlay.querySelector('.image-lightbox-close').addEventListener('click', close);
+
+  // ESC key to close
+  const escHandler = (e) => {
+    if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
+  };
+  document.addEventListener('keydown', escHandler);
+
+  document.body.appendChild(overlay);
 }
 
 function showCommentModal(post, currentUserId) {

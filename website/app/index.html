@@ -101,6 +101,12 @@
         <span class="top-bar-title">Cosmos</span>
       </a>
       <div class="top-bar-actions">
+        <button class="top-bar-btn" id="btn-search" onclick="window.location.hash='#/search'" aria-label="Search">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </button>
         <button class="top-bar-btn" id="btn-notifications" onclick="window.location.hash='#/notifications'" aria-label="Notifications">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -113,6 +119,9 @@
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
           <span class="notif-badge" id="chat-badge" style="display:none; position:absolute; top:-2px; right:-2px;">0</span>
+        </button>
+        <button class="top-bar-btn" id="btn-profile" onclick="window.location.hash='#/profile'" aria-label="Profile" style="margin-left:4px;">
+          <div class="avatar avatar-sm" id="top-bar-avatar" style="width:26px;height:26px;font-size:0.65rem;">U</div>
         </button>
       </div>
     </div>

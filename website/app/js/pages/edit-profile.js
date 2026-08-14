@@ -175,25 +175,37 @@ export async function renderEditProfile(outlet, path = '') {
     removePhotoBtn.hidden = true;
   });
 
-  outlet.querySelector('#btn-linkedin-toggle').addEventListener('click', () => {
+  outlet.querySelector('#btn-linkedin-toggle').addEventListener('click', async () => {
     if (state.isLinkedInConnected) {
       if (!confirm('Disconnect LinkedIn? This removes your verified credentials and trust badge.')) return;
-      state.isLinkedInConnected = false;
+      try {
+        state.isLinkedInConnected = false;
+        await updateDoc(doc(db, 'users', user.uid), {
+          isLinkedInConnected: false,
+          linkedInProfile: null,
+          updatedAt: serverTimestamp()
+        });
+        refreshLinkedInUI(outlet, state);
+        showToast('LinkedIn disconnected', 'success');
+      } catch (err) {
+        showToast('Failed to disconnect LinkedIn', 'error');
+      }
     } else {
-      state.isLinkedInConnected = true;
-      const nameEl = outlet.querySelector('#field-name');
-      const headlineEl = outlet.querySelector('#field-headline');
-      const roleEl = outlet.querySelector('#field-role');
-      const companyEl = outlet.querySelector('#field-company');
-      const locationEl = outlet.querySelector('#field-location');
-      if (!nameEl.value.trim()) nameEl.value = 'Alexandra Chen';
-      if (!headlineEl.value.trim()) headlineEl.value = 'Founder & CEO at NexusAI';
-      if (!roleEl.value.trim()) roleEl.value = 'CEO';
-      if (!companyEl.value.trim()) companyEl.value = 'NexusAI';
-      if (!locationEl.value.trim()) locationEl.value = 'San Francisco, CA';
-      if (!state.primaryUserType) selectUserType('Founder');
+      // Redirect to LinkedIn OAuth
+      const clientId = '86w9zd45y9pupv';
+      const redirectUri = window.location.origin + window.location.pathname;
+      const oauthState = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+      sessionStorage.setItem('linkedin_oauth_state', oauthState);
+      sessionStorage.setItem('linkedin_redirect_route', '/edit-profile');
+
+      const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${oauthState}&scope=openid%20profile%20email`;
+      
+      showToast('Redirecting to LinkedIn...', 'info');
+      setTimeout(() => {
+        window.location.href = authUrl;
+      }, 800);
     }
-    refreshLinkedInUI(outlet, state);
   });
 
   outlet.querySelectorAll('.tag-chip').forEach((chip) => {

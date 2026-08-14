@@ -18,6 +18,7 @@ let isDragging = false;
 let isLoading = true;
 let loadError = null;
 let unsubscribeSnapshot = null;    // real-time listener cleanup
+let currentUserProfile = null;
 
 /* ── Firestore Data Fetching ── */
 
@@ -72,6 +73,7 @@ async function fetchDiscoveryDeck() {
 
   const scored = candidates.map(candidate => {
     const cTags = (candidate.tags || []).map(t => t.toLowerCase());
+    const matchedTagsList = (candidate.tags || []).filter(t => myTags.has(t.toLowerCase()));
     const sharedTags = cTags.filter(t => myTags.has(t)).length;
 
     let hasSharedGoal = false;
@@ -90,7 +92,12 @@ async function fetchDiscoveryDeck() {
     const sharedLF = cLookingFor.filter(l => myLookingFor.has(l)).length;
     score += sharedLF * 8;
 
-    return { profile: candidate, score };
+    return {
+      profile: candidate,
+      score,
+      sharedTags: matchedTagsList,
+      sharedGoal: hasSharedGoal
+    };
   });
 
   // Include all users (even zero-score ones) — just sort by score descending
@@ -121,6 +128,10 @@ async function fetchDiscoveryDeck() {
       initials,
       lookingFor: p.lookingFor || [],
       primaryUserType: p.primaryUserType || '',
+      sharedTags: s.sharedTags || [],
+      sharedGoal: s.sharedGoal || false,
+      goalStatement: p.goalStatement || '',
+      longTermVision: p.longTermVision || ''
     };
   });
 }
@@ -142,12 +153,81 @@ async function recordSwipe(likedId, action) {
 
   // If "connect" → also send a connection request
   if (action === 'right') {
-    await addDoc(collection(db, 'connectionRequests'), {
-      senderId: user.uid,
-      receiverId: likedId,
-      status: 'PENDING',
-      createdAt: serverTimestamp()
-    });
+    const targetProfile = profiles.find(p => p.id === likedId);
+    if (targetProfile) {
+      const requestId = `req_${user.uid}_${likedId}`;
+      await setDoc(doc(db, 'connection_requests', requestId), {
+        senderId: user.uid,
+        receiverId: likedId,
+        senderName: currentUserProfile?.name || window.cosmosApp?.userProfile?.name || 'Builder',
+        senderHeadline: currentUserProfile?.headline || window.cosmosApp?.userProfile?.headline || '',
+        senderAvatarUrl: currentUserProfile?.avatarUrl || window.cosmosApp?.userProfile?.avatarUrl || '',
+        receiverName: targetProfile.displayName || '',
+        receiverHeadline: targetProfile.headline || '',
+        receiverAvatarUrl: targetProfile.avatarUrl || '',
+        message: '',
+        status: 'PENDING',
+        createdAt: serverTimestamp()
+      });
+
+      // Also create a notification for the receiver!
+      await addDoc(collection(db, 'notifications'), {
+        userId: likedId,
+        type: 'CONNECTION_REQUEST',
+        title: 'New Connection Request',
+        body: `${currentUserProfile?.name || window.cosmosApp?.userProfile?.name || 'Builder'} wants to connect with you.`,
+        timestamp: serverTimestamp(),
+        isRead: false,
+        actionId: user.uid
+      });
+    }
+  }
+}
+
+/**
+ * Records a swipe with custom pitch message in Firestore
+ */
+async function recordSwipeWithPitch(likedId, action, message = '') {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  const swipeId = `${user.uid}_${likedId}`;
+  await setDoc(doc(db, 'swipes', swipeId), {
+    likerId: user.uid,
+    likedId: likedId,
+    action: action,
+    timestamp: serverTimestamp()
+  });
+
+  if (action === 'right') {
+    const targetProfile = profiles.find(p => p.id === likedId);
+    if (targetProfile) {
+      const requestId = `req_${user.uid}_${likedId}`;
+      await setDoc(doc(db, 'connection_requests', requestId), {
+        senderId: user.uid,
+        receiverId: likedId,
+        senderName: currentUserProfile?.name || window.cosmosApp?.userProfile?.name || 'Builder',
+        senderHeadline: currentUserProfile?.headline || window.cosmosApp?.userProfile?.headline || '',
+        senderAvatarUrl: currentUserProfile?.avatarUrl || window.cosmosApp?.userProfile?.avatarUrl || '',
+        receiverName: targetProfile.displayName || '',
+        receiverHeadline: targetProfile.headline || '',
+        receiverAvatarUrl: targetProfile.avatarUrl || '',
+        message: message,
+        status: 'PENDING',
+        createdAt: serverTimestamp()
+      });
+
+      // Also create a notification for the receiver!
+      await addDoc(collection(db, 'notifications'), {
+        userId: likedId,
+        type: 'CONNECTION_REQUEST',
+        title: 'New Connection Request',
+        body: `${currentUserProfile?.name || window.cosmosApp?.userProfile?.name || 'Builder'} sent you a connection request.`,
+        timestamp: serverTimestamp(),
+        isRead: false,
+        actionId: user.uid
+      });
+    }
   }
 }
 
@@ -192,37 +272,55 @@ export async function renderConnect(outlet) {
   outlet.innerHTML = renderLoadingState();
 
   try {
-    // Fetch connection count + discovery deck in parallel
-    const [monthlyCount, deck] = await Promise.all([
+    // Fetch connection count + discovery deck in parallel + current user profile
+    const [monthlyCount, deck, meSnap] = await Promise.all([
       getMonthlyConnectionsCount(),
-      fetchDiscoveryDeck()
+      fetchDiscoveryDeck(),
+      getDoc(doc(db, 'users', auth.currentUser.uid))
     ]);
 
+    currentUserProfile = meSnap.exists() ? meSnap.data() : {};
     profiles = deck;
     isLoading = false;
 
     const connectionsLeft = 10 - monthlyCount;
+    const progressPercent = Math.min(100, Math.max(0, (monthlyCount / 10) * 100));
 
     outlet.innerHTML = `
       <div class="connect-page" id="connect-page">
         <div class="connect-header">
-          <div class="page-header" style="margin-bottom:0;">
-            <h1 class="page-title">Discover</h1>
-            <p class="page-subtitle">Find your next meaningful connection</p>
+          <div class="connect-header-top">
+            <div class="page-header" style="margin-bottom:0;border-bottom:none;padding-bottom:0.75rem;">
+              <h1 class="page-title">Discover</h1>
+              <p class="page-subtitle">Find your next meaningful connection</p>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.625rem;flex-shrink:0;">
+              ${profiles.length > 0 ? `<div class="connect-counter" id="card-position" style="opacity:0.8;"><strong>1</strong> of ${profiles.length}</div>` : ''}
+              <div class="connect-counter" id="connect-counter">
+                <strong>${Math.max(0, connectionsLeft)}</strong> / 10 left
+              </div>
+            </div>
           </div>
-          <div class="connect-counter" id="connect-counter">
-            <strong>${Math.max(0, connectionsLeft)}</strong> / 10 left
+          <div class="connect-progress-bar" title="${monthlyCount} connections used this month">
+            <div class="connect-progress-fill" id="connect-progress-fill" style="width: ${progressPercent}%"></div>
           </div>
         </div>
+        
         <div class="swipe-area" id="swipe-area">
           ${profiles.length > 0 ? renderProfileCard(profiles[0]) : renderEmptyState()}
         </div>
+        
         ${profiles.length > 0 ? renderSwipeActions() : ''}
+
+        <!-- Detailed Profile Drawer overlay and sheet -->
+        <div class="profile-drawer-overlay" id="profile-drawer-overlay"></div>
+        <div class="profile-drawer" id="profile-drawer"></div>
       </div>
     `;
 
     if (profiles.length > 0) {
       attachSwipeListeners(outlet);
+      attachKeyboardShortcuts(outlet);
     }
 
   } catch (err) {
@@ -237,9 +335,11 @@ function renderLoadingState() {
   return `
     <div class="connect-page">
       <div class="connect-header">
-        <div class="page-header" style="margin-bottom:0;">
-          <h1 class="page-title">Discover</h1>
-          <p class="page-subtitle">Find your next meaningful connection</p>
+        <div class="connect-header-top">
+          <div class="page-header" style="margin-bottom:0;">
+            <h1 class="page-title">Discover</h1>
+            <p class="page-subtitle">Find your next meaningful connection</p>
+          </div>
         </div>
       </div>
       <div class="swipe-area" id="swipe-area">
@@ -269,9 +369,11 @@ function renderErrorState(message) {
   return `
     <div class="connect-page">
       <div class="connect-header">
-        <div class="page-header" style="margin-bottom:0;">
-          <h1 class="page-title">Discover</h1>
-          <p class="page-subtitle">Find your next meaningful connection</p>
+        <div class="connect-header-top">
+          <div class="page-header" style="margin-bottom:0;">
+            <h1 class="page-title">Discover</h1>
+            <p class="page-subtitle">Find your next meaningful connection</p>
+          </div>
         </div>
       </div>
       <div class="swipe-area" id="swipe-area">
@@ -293,11 +395,18 @@ function renderErrorState(message) {
 
 function renderEmptyState() {
   return `
-    <div class="card" style="height:100%;display:flex;align-items:center;justify-content:center;">
-      <div class="empty-state">
-        <div class="empty-state-icon">🌟</div>
-        <h3 class="empty-state-title">You're All Caught Up!</h3>
-        <p class="empty-state-desc">Check back later for new profiles that match your interests.</p>
+    <div class="card" style="height:100%;display:flex;align-items:center;justify-content:center;border-style:dashed;">
+      <div class="caught-up-container">
+        <div class="radar-scanner">
+          <div class="radar-circle"></div>
+          <div class="radar-circle"></div>
+          <div class="radar-circle"></div>
+        </div>
+        <h3 class="caught-up-title">You're All Caught Up!</h3>
+        <p class="caught-up-desc">Check back later for new profiles that match your goals and interests.</p>
+        <button class="btn btn-secondary btn-sm" onclick="window.location.hash='#/profile'">
+          Complete Your Profile
+        </button>
       </div>
     </div>
   `;
@@ -306,13 +415,13 @@ function renderEmptyState() {
 function renderSwipeActions() {
   return `
     <div class="swipe-actions" id="swipe-actions">
-      <button class="swipe-btn swipe-btn-skip" id="btn-skip" aria-label="Pass">
+      <button class="swipe-btn swipe-btn-skip" id="btn-skip" aria-label="Pass" data-tooltip="Pass (←)">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
-      <button class="swipe-btn swipe-btn-connect" id="btn-connect" aria-label="Connect">
+      <button class="swipe-btn swipe-btn-connect" id="btn-connect" aria-label="Connect" data-tooltip="Connect (→)">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
       </button>
-      <button class="swipe-btn swipe-btn-info" id="btn-info" aria-label="More info">
+      <button class="swipe-btn swipe-btn-info" id="btn-info" aria-label="More info" data-tooltip="View Details">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
       </button>
     </div>
@@ -380,6 +489,31 @@ function renderProfileCard(profile) {
     ? `<span class="user-type-badge">${profile.primaryUserType}</span>`
     : '';
 
+  // Match Insights
+  let insightHtml = '';
+  if (profile.sharedTags && profile.sharedTags.length > 0) {
+    insightHtml = `
+      <div class="profile-card-insight" title="Matching interests">
+        <span class="insight-icon">🎯</span>
+        <span>Shared interest in ${profile.sharedTags.slice(0, 2).join(', ')}</span>
+      </div>
+    `;
+  } else if (profile.sharedGoal) {
+    insightHtml = `
+      <div class="profile-card-insight" title="Aligned professional goals">
+        <span class="insight-icon">🚀</span>
+        <span>Aligned professional goals</span>
+      </div>
+    `;
+  } else if (profile.mutualConnections > 0) {
+    insightHtml = `
+      <div class="profile-card-insight" title="Mutual connections count">
+        <span class="insight-icon">👥</span>
+        <span>${profile.mutualConnections} mutual connection${profile.mutualConnections > 1 ? 's' : ''}</span>
+      </div>
+    `;
+  }
+
   return `
     <div class="profile-card" id="profile-card" data-id="${profile.id}">
       <div class="swipe-indicator swipe-indicator-right" id="indicator-right">CONNECT</div>
@@ -390,7 +524,7 @@ function renderProfileCard(profile) {
         ${userTypeBadge}
       </div>
       <div class="profile-card-avatar">
-        <div class="avatar avatar-lg" style="background:${bg};width:84px;height:84px;font-size:1.5rem;">
+        <div class="avatar avatar-lg" style="background:${bg};width:88px;height:88px;font-size:1.5rem;">
           ${avatarContent}
         </div>
       </div>
@@ -400,6 +534,7 @@ function renderProfileCard(profile) {
         ${locationLine}
         ${linkedInBadge}
         <div class="profile-card-tags">${tagsHtml}</div>
+        ${insightHtml}
         ${profile.bio ? `<div class="profile-card-bio">${profile.bio}</div>` : ''}
         ${lookingForHtml ? `<div class="profile-card-looking-for">${lookingForHtml}</div>` : ''}
         <div class="profile-card-match">
@@ -410,6 +545,217 @@ function renderProfileCard(profile) {
       </div>
     </div>
   `;
+}
+
+
+
+/* ── Cosmic Match Success Gravitational Animation Trigger ── */
+
+function triggerGravitationalMatchSuccess(profile, outlet) {
+  let overlay = outlet.querySelector('#cosmic-match-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'cosmic-match-overlay';
+    overlay.id = 'cosmic-match-overlay';
+    outlet.appendChild(overlay);
+  }
+  
+  const myAvatarUrl = currentUserProfile?.avatarUrl || window.cosmosApp?.userProfile?.avatarUrl || '';
+  const myInitials = (currentUserProfile?.name || window.cosmosApp?.userProfile?.name || 'Me')
+    .split(' ')
+    .map(w => w.charAt(0))
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+    
+  const myAvatarContent = myAvatarUrl
+    ? `<img src="${myAvatarUrl}" style="width:100%;height:100%;object-fit:cover;" />`
+    : `<span style="font-weight:700;color:#fff;">${myInitials}</span>`;
+    
+  const targetAvatarContent = profile.avatarUrl
+    ? `<img src="${profile.avatarUrl}" style="width:100%;height:100%;object-fit:cover;" />`
+    : `<span style="font-weight:700;color:#fff;">${profile.initials}</span>`;
+    
+  const avatarColors = [
+    'linear-gradient(135deg,#7c3aed,#a78bfa)',
+    'linear-gradient(135deg,#2563eb,#60a5fa)',
+    'linear-gradient(135deg,#db2777,#f472b6)',
+    'linear-gradient(135deg,#059669,#34d399)'
+  ];
+  const myBg = avatarColors[0];
+  const themBg = avatarColors[2];
+
+  overlay.innerHTML = `
+    <h2 class="cosmic-match-title">Cosmic Alignment!</h2>
+    <div class="cosmic-match-system">
+      <div class="cosmic-match-orbit"></div>
+      <div class="cosmic-match-wave"></div>
+      <div class="cosmic-match-node cosmic-match-node-me" style="background:${myBg};display:flex;align-items:center;justify-content:center;">
+        ${myAvatarContent}
+      </div>
+      <div class="cosmic-match-node cosmic-match-node-them" style="background:${themBg};display:flex;align-items:center;justify-content:center;">
+        ${targetAvatarContent}
+      </div>
+    </div>
+    <p class="cosmic-match-desc">You are now in orbit with <strong>${profile.displayName}</strong>. A connection request has been sent.</p>
+    <button class="btn btn-secondary btn-sm" id="success-dismiss-btn" style="border-radius:var(--radius-full);">Dismiss</button>
+  `;
+  
+  const dismissOverlay = () => {
+    overlay.classList.remove('active');
+  };
+  
+  overlay.querySelector('#success-dismiss-btn').addEventListener('click', dismissOverlay);
+  overlay.classList.add('active');
+  
+  setTimeout(dismissOverlay, 3000);
+}
+
+/* ── Detailed Profile Bottom Drawer / Modal ── */
+
+function openProfileDrawer(profile, outlet) {
+  const overlay = outlet.querySelector('#profile-drawer-overlay');
+  const drawer = outlet.querySelector('#profile-drawer');
+  if (!overlay || !drawer) return;
+
+  const avatarColors = [
+    'linear-gradient(135deg,#7c3aed,#a78bfa)',
+    'linear-gradient(135deg,#2563eb,#60a5fa)',
+    'linear-gradient(135deg,#db2777,#f472b6)',
+    'linear-gradient(135deg,#059669,#34d399)',
+    'linear-gradient(135deg,#d97706,#fbbf24)',
+    'linear-gradient(135deg,#7c3aed,#f472b6)',
+  ];
+  const bg = avatarColors[currentIndex % avatarColors.length];
+
+  // Render drawer contents
+  const tagsHtml = (profile.tags || []).map((t, i) => {
+    const cls = ['tag-blue', 'tag-pink', 'tag-green', 'tag-amber'][i % 4];
+    return `<span class="tag ${cls}">${t}</span>`;
+  }).join('');
+
+  const lookingForHtml = (profile.lookingFor || []).map(l => {
+    return `<span class="looking-for-pill">🔍 ${l}</span>`;
+  }).join('') || '<span style="font-size:0.85rem;color:var(--text-muted);font-style:italic;">No preferences listed</span>';
+
+  const goalItems = profile.goalStatement
+    ? `<div class="drawer-goal-item">🎯 ${profile.goalStatement}</div>`
+    : '';
+
+  const visionHtml = profile.longTermVision
+    ? `<div class="drawer-meta-title">Long Term Vision</div>
+       <div class="drawer-text-block">${profile.longTermVision}</div>`
+    : '';
+
+  const avatarContent = profile.avatarUrl
+    ? `<img src="${profile.avatarUrl}" alt="${profile.displayName}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" /><span class="avatar-initials-fallback" style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-weight:700;">${profile.initials}</span>`
+    : `<span style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-weight:700;">${profile.initials}</span>`;
+
+  drawer.innerHTML = `
+    <div class="profile-drawer-header">
+      <h3>Builder Profile</h3>
+      <button class="profile-drawer-close" id="drawer-close" aria-label="Close">✕</button>
+    </div>
+    <div class="profile-drawer-body">
+      <div class="profile-drawer-intro-section">
+        <div class="profile-drawer-headline-row">
+          <div class="drawer-avatar" style="background:${bg};display:flex;align-items:center;justify-content:center;font-size:1.2rem;color:#fff;">
+            ${avatarContent}
+          </div>
+          <div>
+            <div style="font-family:var(--font-display);font-size:1.2rem;font-weight:800;">${profile.displayName}</div>
+            <div style="font-size:0.85rem;color:var(--purple-l);font-weight:600;margin-top:0.15rem;">${profile.headline}${profile.company ? ' @ ' + profile.company : ''}</div>
+            ${profile.location ? `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem;">📍 ${profile.location}</div>` : ''}
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.75rem;">
+          <span class="profile-tier-badge" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.1);color:var(--text-primary);padding:0.2rem 0.5rem;font-size:0.6rem;">${profile.membershipTier}</span>
+          ${profile.primaryUserType ? `<span class="user-type-badge" style="padding:0.2rem 0.5rem;font-size:0.6rem;">${profile.primaryUserType}</span>` : ''}
+          ${profile.isLinkedInConnected ? `<span class="profile-card-linkedin" style="margin-bottom:0;padding:0.2rem 0.5rem;font-size:0.65rem;">LinkedIn Verified</span>` : ''}
+        </div>
+      </div>
+
+      <div class="drawer-meta-title">Biography</div>
+      <div class="drawer-text-block">${profile.bio || 'No biography details provided.'}</div>
+
+      ${goalItems ? `<div class="drawer-meta-title">Core Goals</div><div class="drawer-goals-grid">${goalItems}</div>` : ''}
+      
+      ${visionHtml}
+
+      <div class="drawer-meta-title">Expertise / Tags</div>
+      <div class="profile-card-tags" style="justify-content:flex-start;margin-bottom:1.5rem;">${tagsHtml}</div>
+
+      <div class="drawer-meta-title">Looking For</div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:1.5rem;">${lookingForHtml}</div>
+
+      <div class="drawer-pitch-area">
+        <div class="drawer-meta-title" style="margin-bottom:0.25rem;">Send a Warm Pitch</div>
+        <p style="font-size:0.75rem;color:var(--text-muted);line-height:1.4;">Add a personalized message. It will be sent with your connection request to stand out.</p>
+        <textarea class="drawer-pitch-input" id="drawer-pitch-msg" placeholder="Hey ${profile.displayName.split(' ')[0]}, saw you were building in B2B SaaS..."></textarea>
+        <button class="btn btn-primary btn-sm btn-full" id="drawer-send-connect">
+          Connect with Pitch
+        </button>
+      </div>
+    </div>
+  `;
+
+  // Bind close events
+  const closeBtn = drawer.querySelector('#drawer-close');
+  const closeDrawer = () => {
+    overlay.classList.remove('active');
+    drawer.classList.remove('active');
+  };
+  closeBtn.addEventListener('click', closeDrawer);
+  overlay.addEventListener('click', closeDrawer);
+
+  // Connect from Drawer
+  const connectBtn = drawer.querySelector('#drawer-send-connect');
+  connectBtn.addEventListener('click', async () => {
+    const pitchMsg = drawer.querySelector('#drawer-pitch-msg').value.trim();
+    closeDrawer();
+    
+    // Trigger Right Swipe (Connect)
+    const area = outlet.querySelector('#swipe-area');
+    const card = area?.querySelector('#profile-card');
+    if (card) {
+      card.classList.add('swipe-right');
+      
+      await recordSwipeWithPitch(profile.id, 'right', pitchMsg).catch(err => {
+        console.warn('[Cosmos] Swipe record error:', err);
+      });
+
+      // Show match success overlay
+      triggerGravitationalMatchSuccess(profile, outlet);
+      
+      const count = parseInt(localStorage.getItem('cosmos-connections-month') || '0') + 1;
+      localStorage.setItem('cosmos-connections-month', count.toString());
+
+      // Transition to next card
+      setTimeout(() => {
+        currentIndex++;
+        const nextProfile = profiles[currentIndex] || null;
+        area.innerHTML = renderProfileCard(nextProfile);
+
+        // Update progress and counter
+        updateProgressAndCounter(outlet);
+
+        if (nextProfile) {
+          setupDragListeners(area, outlet);
+        } else {
+          const actions = outlet.querySelector('#swipe-actions');
+          if (actions) actions.style.display = 'none';
+          const positionEl = outlet.querySelector('#card-position');
+          if (positionEl) positionEl.style.display = 'none';
+          const visualKbd = outlet.querySelector('.visual-kbd-row');
+          if (visualKbd) visualKbd.style.display = 'none';
+        }
+      }, 500);
+    }
+  });
+
+  // Open drawer
+  overlay.classList.add('active');
+  drawer.classList.add('active');
 }
 
 /* ── Swipe Interaction ── */
@@ -433,8 +779,7 @@ function attachSwipeListeners(outlet) {
   infoBtn?.addEventListener('click', () => {
     const profile = profiles[currentIndex];
     if (profile) {
-      const infoText = profile.bio || `${profile.displayName} — ${profile.headline}`;
-      showToast(infoText.slice(0, 120) + (infoText.length > 120 ? '…' : ''), 'info');
+      openProfileDrawer(profile, outlet);
     }
   });
 
@@ -442,9 +787,36 @@ function attachSwipeListeners(outlet) {
   setupDragListeners(area, outlet);
 }
 
+// Tilt effect removed for cleaner production layout
+
+function updateProgressAndCounter(outlet) {
+  const currentCount = parseInt(localStorage.getItem('cosmos-connections-month') || '0');
+  const left = 10 - currentCount;
+  
+  const counter = outlet.querySelector('#connect-counter');
+  if (counter) {
+    counter.innerHTML = `<strong>${Math.max(0, left)}</strong> / 10 left`;
+  }
+  
+  const progressFill = outlet.querySelector('#connect-progress-fill');
+  if (progressFill) {
+    const percent = Math.min(100, Math.max(0, (currentCount / 10) * 100));
+    progressFill.style.width = `${percent}%`;
+    progressFill.parentElement.setAttribute('title', `${currentCount} connections used this month`);
+  }
+}
+
 function setupDragListeners(area, outlet) {
   const card = area?.querySelector('#profile-card');
   if (!card) return;
+
+  // Double click to open details
+  card.addEventListener('dblclick', () => {
+    const profile = profiles[currentIndex];
+    if (profile) {
+      openProfileDrawer(profile, outlet);
+    }
+  });
 
   const onStart = (clientX) => {
     isDragging = true;
@@ -498,7 +870,7 @@ function swipeOut(direction, area, outlet) {
 
   const profile = profiles[currentIndex];
 
-  // Record swipe in Firestore (fire-and-forget)
+  // Record swipe in Firestore
   if (profile) {
     recordSwipe(profile.id, direction).catch(err => {
       console.warn('[Cosmos] Failed to record swipe:', err);
@@ -506,7 +878,9 @@ function swipeOut(direction, area, outlet) {
   }
 
   if (direction === 'right' && profile) {
-    showToast(`Connected with ${profile.displayName}! 🎉`, 'success');
+    // Show match success overlay
+    triggerGravitationalMatchSuccess(profile, outlet);
+    
     const count = parseInt(localStorage.getItem('cosmos-connections-month') || '0') + 1;
     localStorage.setItem('cosmos-connections-month', count.toString());
   }
@@ -516,20 +890,56 @@ function swipeOut(direction, area, outlet) {
     const nextProfile = profiles[currentIndex] || null;
     area.innerHTML = renderProfileCard(nextProfile);
 
-    // Update counter
-    const counter = document.querySelector('#connect-counter');
-    if (counter) {
-      const left = 10 - parseInt(localStorage.getItem('cosmos-connections-month') || '0');
-      counter.innerHTML = `<strong>${Math.max(0, left)}</strong> / 10 left`;
-    }
+    // Update counter and progress
+    updateProgressAndCounter(outlet);
 
     // Re-attach drag listeners for the new card
     if (nextProfile) {
       setupDragListeners(area, outlet);
     } else {
       // Hide action buttons when no more profiles
-      const actions = document.querySelector('#swipe-actions');
+      const actions = outlet.querySelector('#swipe-actions');
       if (actions) actions.style.display = 'none';
+      const positionEl = outlet.querySelector('#card-position');
+      if (positionEl) positionEl.style.display = 'none';
+      const visualKbd = outlet.querySelector('.visual-kbd-row');
+      if (visualKbd) visualKbd.style.display = 'none';
+    }
+
+    // Update card position indicator
+    const positionEl = outlet.querySelector('#card-position');
+    if (positionEl && nextProfile) {
+      positionEl.innerHTML = `<strong>${currentIndex + 1}</strong> of ${profiles.length}`;
+    } else if (positionEl) {
+      positionEl.style.display = 'none';
     }
   }, 500);
+}
+
+/* ── Keyboard Shortcuts ── */
+let keyboardHandler = null;
+
+function attachKeyboardShortcuts(outlet) {
+  // Clean up previous handler
+  if (keyboardHandler) {
+    document.removeEventListener('keydown', keyboardHandler);
+  }
+
+  keyboardHandler = (e) => {
+    // Don't trigger if user is typing in an input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    const area = outlet.querySelector('#swipe-area');
+    if (!area) return;
+
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      swipeOut('left', area, outlet);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      swipeOut('right', area, outlet);
+    }
+  };
+
+  document.addEventListener('keydown', keyboardHandler);
 }

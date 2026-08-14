@@ -2,7 +2,7 @@
    Cosmos PWA — Settings and Network Relations Page
    ============================================================ */
 
-import { auth, db, doc, getDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, increment, serverTimestamp, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from '../firebase-config.js';
+import { auth, db, doc, getDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, increment, serverTimestamp, updatePassword, reauthenticateWithCredential, EmailAuthProvider, addDoc, setDoc } from '../firebase-config.js';
 import { showToast } from '../app.js';
 import router from '../router.js';
 
@@ -236,6 +236,9 @@ export async function renderSettings(outlet) {
     outgoingUnsubscribe = null;
     userUnsubscribe = null;
     delete window.handleWebRemoveAction;
+    delete window.handleWebAcceptAction;
+    delete window.handleWebDeclineAction;
+    delete window.handleWebWithdrawAction;
   };
 }
 
@@ -350,6 +353,85 @@ function setupRelationsDashboard(outlet, uid) {
     }
   };
 
+  window.handleWebAcceptAction = async (requestId, senderId, senderName) => {
+    try {
+      // 1. Update request status to ACCEPTED
+      await updateDoc(doc(db, 'connection_requests', requestId), { status: 'ACCEPTED' });
+
+      // 2. Create connection document
+      const connectionId = uid < senderId ? `${uid}_${senderId}` : `${senderId}_${uid}`;
+      await setDoc(doc(db, 'connections', connectionId), {
+        id: connectionId,
+        members: [uid, senderId],
+        lastMessage: 'Connection established! Say hello.',
+        lastMessageTime: serverTimestamp(),
+        unreadCountMap: { [uid]: 0, [senderId]: 0 },
+        labels: { [uid]: [], [senderId]: [] },
+        privateGoals: { [uid]: '', [senderId]: '' },
+        status: 'ACTIVE',
+        createdAt: serverTimestamp()
+      });
+
+      // 3. Increment counters on users
+      await updateDoc(doc(db, 'users', uid), {
+        connectionsCount: increment(1),
+        followersCount: increment(1),
+        followingCount: increment(1)
+      });
+      await updateDoc(doc(db, 'users', senderId), {
+        connectionsCount: increment(1),
+        followersCount: increment(1),
+        followingCount: increment(1)
+      });
+
+      // 4. Send notifications
+      const myName = window.cosmosApp?.userProfile?.name || 'Builder';
+      await addDoc(collection(db, 'notifications'), {
+        userId: senderId,
+        type: 'CONNECTION_ACCEPTED',
+        title: 'Connection Accepted! 🎉',
+        body: 'Your connection request was accepted. Start a conversation now!',
+        timestamp: serverTimestamp(),
+        isRead: false,
+        actionId: uid
+      });
+      await addDoc(collection(db, 'notifications'), {
+        userId: uid,
+        type: 'CONNECTION_ACCEPTED',
+        title: 'Connection Established! 🎉',
+        body: `You are now connected with ${senderName}. Start a conversation!`,
+        timestamp: serverTimestamp(),
+        isRead: false,
+        actionId: senderId
+      });
+
+      showToast(`Connected with ${senderName}! 🎉`, 'success');
+    } catch (err) {
+      console.error('Accept request failed:', err);
+      showToast('Failed to accept request', 'error');
+    }
+  };
+
+  window.handleWebDeclineAction = async (requestId) => {
+    try {
+      await updateDoc(doc(db, 'connection_requests', requestId), { status: 'DECLINED' });
+      showToast('Request declined', 'info');
+    } catch (err) {
+      console.error('Decline request failed:', err);
+      showToast('Failed to decline request', 'error');
+    }
+  };
+
+  window.handleWebWithdrawAction = async (requestId) => {
+    try {
+      await updateDoc(doc(db, 'connection_requests', requestId), { status: 'WITHDRAWN' });
+      showToast('Request withdrawn', 'info');
+    } catch (err) {
+      console.error('Withdraw request failed:', err);
+      showToast('Failed to withdraw request', 'error');
+    }
+  };
+
   const startListeners = () => {
     isFetching = true;
     hasFailed = false;
@@ -451,22 +533,26 @@ function setupRelationsDashboard(outlet, uid) {
   });
 
   const updateCountsDisplay = () => {
-    const fConns = connectionsList.map((c) => c.member);
+    const fConns = connectionsList.map((c) => ({ ...c.member, isConnection: true }));
     const fReqs = incomingRequests.map((r) => ({
       id: r.senderId,
       name: r.senderName,
       headline: r.senderHeadline,
       avatarUrl: r.senderAvatarUrl,
+      requestId: r.id,
+      isRequest: true
     }));
     const followers = (connectionsList.length > 0 || incomingRequests.length > 0) ? [...fConns, ...fReqs] : mockFollowers;
     const finalFollowers = followers.filter((f) => !removedUserIds.has(f.id));
 
-    const fgConns = connectionsList.map((c) => c.member);
+    const fgConns = connectionsList.map((c) => ({ ...c.member, isConnection: true }));
     const fgReqs = outgoingRequests.map((r) => ({
       id: r.receiverId,
       name: r.receiverName,
       headline: r.receiverHeadline,
       avatarUrl: r.receiverAvatarUrl,
+      requestId: r.id,
+      isRequest: true
     }));
     const following = (connectionsList.length > 0 || outgoingRequests.length > 0) ? [...fgConns, ...fgReqs] : mockFollowing;
     const finalFollowing = following.filter((f) => !removedUserIds.has(f.id));
@@ -498,21 +584,25 @@ function setupRelationsDashboard(outlet, uid) {
 
     let list = [];
     if (activeTab === 'followers') {
-      const fConns = connectionsList.map((c) => c.member);
+      const fConns = connectionsList.map((c) => ({ ...c.member, isConnection: true }));
       const fReqs = incomingRequests.map((r) => ({
         id: r.senderId,
         name: r.senderName,
         headline: r.senderHeadline,
         avatarUrl: r.senderAvatarUrl,
+        requestId: r.id,
+        isRequest: true
       }));
       list = (connectionsList.length > 0 || incomingRequests.length > 0) ? [...fConns, ...fReqs] : mockFollowers;
     } else if (activeTab === 'following') {
-      const fgConns = connectionsList.map((c) => c.member);
+      const fgConns = connectionsList.map((c) => ({ ...c.member, isConnection: true }));
       const fgReqs = outgoingRequests.map((r) => ({
         id: r.receiverId,
         name: r.receiverName,
         headline: r.receiverHeadline,
         avatarUrl: r.receiverAvatarUrl,
+        requestId: r.id,
+        isRequest: true
       }));
       list = (connectionsList.length > 0 || outgoingRequests.length > 0) ? [...fgConns, ...fgReqs] : mockFollowing;
     } else {
@@ -540,13 +630,28 @@ function setupRelationsDashboard(outlet, uid) {
 
       let btnHtml = '';
       if (activeTab === 'followers') {
-        btnHtml = `<button class="btn btn-outline-danger btn-sm" onclick="handleWebRemoveAction('${item.id}', 'followers')" style="border-radius:18px;padding:0.35rem 1rem;font-size:0.78rem;">Remove</button>`;
+        if (item.isRequest) {
+          btnHtml = `
+            <div style="display:flex;gap:4px;">
+              <button class="btn btn-primary btn-sm" onclick="handleWebAcceptAction('${item.requestId}', '${item.id}', '${item.name.replace(/'/g, "\\'")}')" style="border-radius:18px;padding:0.35rem 0.75rem;font-size:0.75rem;">Accept</button>
+              <button class="btn btn-outline-danger btn-sm" onclick="handleWebDeclineAction('${item.requestId}')" style="border-radius:18px;padding:0.35rem 0.75rem;font-size:0.75rem;">Decline</button>
+            </div>
+          `;
+        } else {
+          btnHtml = `<button class="btn btn-outline-danger btn-sm" onclick="handleWebRemoveAction('${item.id}', 'followers')" style="border-radius:18px;padding:0.35rem 1rem;font-size:0.78rem;">Remove</button>`;
+        }
       } else if (activeTab === 'following') {
-        btnHtml = `
-          <button class="btn btn-sm" onclick="handleWebRemoveAction('${item.id}', 'following')" style="border-radius:18px;padding:0.35rem 1rem;font-size:0.78rem;background:rgba(255,255,255,0.08);color:var(--text-primary);border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;gap:4px;">
-            <span style="color:var(--purple);">✓</span> Following
-          </button>
-        `;
+        if (item.isRequest) {
+          btnHtml = `
+            <button class="btn btn-outline btn-sm" onclick="handleWebWithdrawAction('${item.requestId}')" style="border-radius:18px;padding:0.35rem 1rem;font-size:0.78rem;color:var(--text-muted);border-color:var(--border);">Withdraw</button>
+          `;
+        } else {
+          btnHtml = `
+            <button class="btn btn-sm" onclick="handleWebRemoveAction('${item.id}', 'following')" style="border-radius:18px;padding:0.35rem 1rem;font-size:0.78rem;background:rgba(255,255,255,0.08);color:var(--text-primary);border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;gap:4px;">
+              <span style="color:var(--purple);">✓</span> Following
+            </button>
+          `;
+        }
       } else {
         btnHtml = `<button class="btn btn-outline btn-sm" onclick="handleWebRemoveAction('${item.id}', 'connections')" style="border-radius:18px;padding:0.35rem 1rem;font-size:0.78rem;color:var(--text-muted);border-color:var(--border);">Disconnect</button>`;
       }
@@ -666,15 +771,32 @@ async function handleLinkedInToggle(outlet, uid) {
 
     if (connected) {
       if (!confirm('Disconnect LinkedIn? This removes your verified credentials and trust badge.')) return;
-      await updateDoc(userRef, { isLinkedInConnected: false, updatedAt: serverTimestamp() });
+      await updateDoc(userRef, {
+        isLinkedInConnected: false,
+        linkedInProfile: null,
+        updatedAt: serverTimestamp()
+      });
       outlet.querySelector('#txt-linkedin-status').textContent = 'Not Connected';
       showToast('LinkedIn disconnected', 'success');
       return;
     }
 
-    await updateDoc(userRef, { isLinkedInConnected: true, updatedAt: serverTimestamp() });
-    outlet.querySelector('#txt-linkedin-status').textContent = 'Connected';
-    showToast('LinkedIn connected successfully!', 'success');
+    // Initialize OAuth flow
+    const clientId = '86w9zd45y9pupv';
+    const redirectUri = window.location.origin + window.location.pathname;
+    const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+    // Save state and destination in sessionStorage for security check and router routing
+    sessionStorage.setItem('linkedin_oauth_state', state);
+    sessionStorage.setItem('linkedin_redirect_route', '/settings');
+
+    const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=openid%20profile%20email`;
+    
+    showToast('Redirecting to LinkedIn...', 'info');
+    setTimeout(() => {
+      window.location.href = authUrl;
+    }, 800);
+
   } catch (err) {
     showToast('Failed to update LinkedIn status', 'error');
   }

@@ -15,6 +15,8 @@ import { renderSettings } from './pages/settings.js';
 import { renderNotifications } from './pages/notifications.js';
 import { renderEditProfile } from './pages/edit-profile.js';
 import { renderHelpSupport } from './pages/help-support.js';
+import { renderProfile } from './pages/profile.js';
+import { renderSearch } from './pages/search.js';
 
 /* ── Global State ── */
 window.cosmosApp = {
@@ -50,6 +52,25 @@ export function showLoading(container) {
 /* ── Skeleton Helper ── */
 export function createSkeleton(width, height) {
   return `<div class="skeleton" style="width:${width};height:${height};"></div>`;
+}
+
+/* ── Top Bar Avatar Helper ── */
+export function updateTopBarAvatar() {
+  const profile = window.cosmosApp.userProfile;
+  const avatarEl = document.getElementById('top-bar-avatar');
+  if (avatarEl) {
+    const user = window.cosmosApp.user || auth.currentUser;
+    const displayName = profile?.name || user?.displayName || user?.email?.split('@')[0] || 'Builder';
+    const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
+    const avatarUrl = profile?.avatarUrl || user?.photoURL;
+    if (avatarUrl) {
+      avatarEl.innerHTML = `<img src="${avatarUrl}" alt="${displayName}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" /><span class="avatar-initials-fallback" style="display:none;width:100%;height:100%;align-items:center;justify-content:center;">${initials}</span>`;
+      avatarEl.style.background = 'none';
+    } else {
+      avatarEl.textContent = initials;
+      avatarEl.style.background = 'var(--gradient-primary)';
+    }
+  }
 }
 
 /* ── Real-Time Badge Listeners ── */
@@ -166,6 +187,83 @@ async function ensureUserProfile(user) {
 
   const profileSnap = await getDoc(userRef);
   window.cosmosApp.userProfile = profileSnap.exists() ? profileSnap.data() : null;
+  updateTopBarAvatar();
+}
+
+async function handleLinkedInCallback(user) {
+  const urlParams = new URLSearchParams(window.location.search);
+  const code = urlParams.get('code');
+  const state = urlParams.get('state');
+
+  if (!code || !state) return;
+
+  // Verify state matches to prevent CSRF
+  const savedState = sessionStorage.getItem('linkedin_oauth_state');
+  sessionStorage.removeItem('linkedin_oauth_state'); // Clear state immediately
+
+  if (state !== savedState) {
+    console.error('LinkedIn OAuth State mismatch. Potential CSRF attack.');
+    showToast('LinkedIn verification failed (state mismatch).', 'error');
+    clearUrlParams();
+    return;
+  }
+
+  try {
+    showToast('Linking your LinkedIn account...', 'info');
+
+    const redirectUri = window.location.origin + window.location.pathname;
+    
+    // Determine the API URL (local emulator vs deployed functions)
+    let functionsUrl = 'https://us-central1-cosmos-app-42ed2.cloudfunctions.net/exchangeLinkedInCode';
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      functionsUrl = 'http://127.0.0.1:5001/cosmos-app-42ed2/us-central1/exchangeLinkedInCode';
+    }
+
+    const response = await fetch(functionsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        code: code,
+        uid: user.uid,
+        redirectUri: redirectUri
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Server error exchanging code');
+    }
+
+    const data = await response.json();
+    showToast('LinkedIn connected successfully! 🎉', 'success');
+
+    // Refresh local profile
+    const userRef = doc(db, 'users', user.uid);
+    const snap = await getDoc(userRef);
+    if (snap.exists()) {
+      window.cosmosApp.userProfile = snap.data();
+      updateTopBarAvatar();
+    }
+
+    // Route to destination page if set
+    const redirectRoute = sessionStorage.getItem('linkedin_redirect_route') || '/settings';
+    sessionStorage.removeItem('linkedin_redirect_route');
+    router.navigate(redirectRoute);
+
+  } catch (error) {
+    console.error('LinkedIn Connection Error:', error);
+    showToast(`LinkedIn connection failed: ${error.message}`, 'error');
+  } finally {
+    clearUrlParams();
+  }
+}
+
+function clearUrlParams() {
+  const url = new URL(window.location.href);
+  url.search = '';
+  window.history.replaceState({}, document.title, url.toString());
 }
 
 function handleAuthState(user) {
@@ -188,12 +286,15 @@ function handleAuthState(user) {
 
   if (user) {
     document.body.classList.remove('auth-mode');
-    ensureUserProfile(user).catch((err) => {
+    ensureUserProfile(user).then(() => {
+      handleLinkedInCallback(user);
+    }).catch((err) => {
       console.warn('Failed to sync user profile:', err);
     });
 
     // Start real-time badge listeners
     startBadgeListeners(user.uid);
+    updateTopBarAvatar();
 
     // If on auth page or root, navigate to connect
     const hash = window.location.hash;
@@ -204,6 +305,11 @@ function handleAuthState(user) {
     window.cosmosApp.userProfile = null;
     stopBadgeListeners();
     document.body.classList.add('auth-mode');
+    const avatarEl = document.getElementById('top-bar-avatar');
+    if (avatarEl) {
+      avatarEl.innerHTML = 'U';
+      avatarEl.style.background = '';
+    }
     router.navigate('/auth');
   }
 
@@ -235,6 +341,8 @@ function initRouter() {
   router.addRoute('/messenger', renderMessenger);      // M
   router.addRoute('/orbits', renderOrbits);            // O
   router.addRoute('/settings', renderSettings);         // S
+  router.addRoute('/profile', renderProfile);
+  router.addRoute('/search', renderSearch);
 
   // Sub-page routes
   router.addRoute('/notifications', renderNotifications);

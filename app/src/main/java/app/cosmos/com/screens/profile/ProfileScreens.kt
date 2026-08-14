@@ -236,114 +236,599 @@ fun MembershipTiersScreen(
     onBack: () -> Unit,
     authViewModel: app.cosmos.com.ui.viewmodel.AuthViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
-    val tiers = listOf(
-        Triple("Explorer", "Free", "Up to 3 connections/month, basic discovery"),
-        Triple("Member", "$29/mo", "10 connections/month, events, AI summaries"),
-        Triple("Inner Circle", "$99/mo", "Unlimited connections, priority matching, exclusive events"),
-        Triple("Founder", "By Invite", "Full platform access, featured profile, dedicated advisor")
-    )
-    val tierColors = listOf(CosmosOutline, CosmosSecondary, CosmosPrimary, CosmosTertiary)
-    val tierIcons = listOf(Icons.Default.Explore, Icons.Default.Star, Icons.Default.WorkspacePremium, Icons.Default.Diamond)
-
     val currentUserState by authViewModel.currentUser.collectAsState()
     val currentTier = currentUserState?.membershipTier ?: MembershipTier.EXPLORER
 
-    // State for checkout dialog
-    var selectedTierToUpgrade by remember { mutableStateOf<String?>(null) }
-    var upgradePrice by remember { mutableStateOf(0.0) }
+    val allPlans = app.cosmos.com.data.payment.PaymentManager.getAllPlans()
+    val availableUpgrades = app.cosmos.com.data.payment.PaymentManager.getAvailableUpgrades(currentTier)
+
+    // Checkout dialog state
+    var selectedUpgradeTier by remember { mutableStateOf<MembershipTier?>(null) }
     val coroutineScope = rememberCoroutineScope()
+
+    // Payment history state
+    var paymentHistory by remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
+    var isLoadingHistory by remember { mutableStateOf(true) }
+
+    LaunchedEffect(currentUserState?.id) {
+        currentUserState?.id?.let { userId ->
+            if (userId.isNotBlank()) {
+                app.cosmos.com.data.repository.ServiceLocator.profileRepository
+                    .getPaymentHistory(userId)
+                    .onSuccess { payments -> paymentHistory = payments }
+                isLoadingHistory = false
+            }
+        }
+    }
+
+    val tierIcons = mapOf(
+        MembershipTier.EXPLORER to Icons.Default.Explore,
+        MembershipTier.MEMBER to Icons.Default.Star,
+        MembershipTier.INNER_CIRCLE to Icons.Default.WorkspacePremium,
+        MembershipTier.FOUNDER to Icons.Default.Diamond
+    )
 
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
-            CosmosTopBar(title = "Membership Tiers", onBack = onBack)
+            CosmosTopBar(title = "Membership & Plans", onBack = onBack)
 
-            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // ── Hero Status Card ─────────────────────────────────────
                 item {
-                    Text("Choose your level", style = MaterialTheme.typography.headlineMedium, color = CosmosOnBackground, fontWeight = FontWeight.Bold)
-                    Text("Upgrade to unlock more connections and exclusive features.", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
-                }
-                tiers.forEachIndexed { index, (name, price, description) ->
-                    item {
-                        val isCurrentTier = when (index) {
-                            0 -> currentTier == MembershipTier.EXPLORER
-                            1 -> currentTier == MembershipTier.MEMBER
-                            2 -> currentTier == MembershipTier.INNER_CIRCLE
-                            3 -> currentTier == MembershipTier.FOUNDER
-                            else -> false
-                        }
-                        Box(
-                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                                .background(if (isCurrentTier) Brush.linearGradient(listOf(CosmosGradientStart.copy(alpha = 0.2f), CosmosGradientEnd.copy(alpha = 0.2f))) else Brush.linearGradient(listOf(CosmosGlass, CosmosGlass)))
-                                .border(width = if (isCurrentTier) 1.5.dp else 1.dp, color = if (isCurrentTier) CosmosPrimary.copy(alpha = 0.6f) else CosmosGlassBorder, shape = RoundedCornerShape(16.dp))
-                                .padding(20.dp)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        Color(currentTier.color).copy(alpha = 0.15f),
+                                        CosmosGradientEnd.copy(alpha = 0.08f)
+                                    )
+                                )
+                            )
+                            .border(
+                                1.dp,
+                                Color(currentTier.color).copy(alpha = 0.3f),
+                                RoundedCornerShape(20.dp)
+                            )
+                            .padding(24.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            Column {
-                                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        Icon(tierIcons[index], null, tint = tierColors[index], modifier = Modifier.size(24.dp))
-                                        Text(name, style = MaterialTheme.typography.titleLarge, color = CosmosOnBackground, fontWeight = FontWeight.Bold)
-                                    }
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(price, style = MaterialTheme.typography.titleMedium, color = tierColors[index], fontWeight = FontWeight.Bold)
-                                        if (isCurrentTier) {
-                                            Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(CosmosPrimary.copy(alpha = 0.2f)).padding(horizontal = 8.dp, vertical = 2.dp)) {
-                                                Text("Current", style = MaterialTheme.typography.labelSmall, color = CosmosPrimary)
-                                            }
-                                        }
-                                    }
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                Text(description, style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant)
-                                if (!isCurrentTier && index > (if (currentTier == MembershipTier.EXPLORER) 0 else if (currentTier == MembershipTier.MEMBER) 1 else if (currentTier == MembershipTier.INNER_CIRCLE) 2 else 3)) {
-                                    Spacer(Modifier.height(12.dp))
-                                    CosmosOutlinedButton(
-                                        text = "Upgrade to $name",
-                                        onClick = {
-                                            selectedTierToUpgrade = name
-                                            upgradePrice = if (name == "Member") 29.0 else 99.0
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(
+                                                Color(currentTier.color),
+                                                Color(currentTier.color).copy(alpha = 0.6f)
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    tierIcons[currentTier] ?: Icons.Default.Star,
+                                    null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Your Current Plan",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = CosmosOnSurfaceVariant
+                                )
+                                Text(
+                                    currentTier.label,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = CosmosOnBackground,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(CosmosSuccess)
+                                    )
+                                    Text(
+                                        "Active",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = CosmosSuccess,
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                 }
                             }
                         }
                     }
                 }
-                item { Spacer(Modifier.height(80.dp)) }
+
+                // ── Section Title ────────────────────────────────────────
+                item {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        if (availableUpgrades.isNotEmpty()) "Upgrade Your Plan"
+                        else "All Plans",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = CosmosOnBackground,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        if (availableUpgrades.isNotEmpty()) "Unlock more connections and exclusive features"
+                        else "You're on the highest available plan",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = CosmosOnSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
+                // ── Tier Cards ───────────────────────────────────────────
+                allPlans.forEach { plan ->
+                    item {
+                        val isCurrentTier = plan.tier == currentTier
+                        val canUpgrade = currentTier.canUpgradeTo(plan.tier)
+                        val isLowerTier = plan.tier.tierLevel < currentTier.tierLevel
+                        val tierColor = Color(plan.tier.color)
+                        val tierIcon = tierIcons[plan.tier] ?: Icons.Default.Star
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(
+                                    if (isCurrentTier) Brush.linearGradient(
+                                        listOf(
+                                            CosmosGradientStart.copy(alpha = 0.15f),
+                                            CosmosGradientEnd.copy(alpha = 0.15f)
+                                        )
+                                    ) else Brush.linearGradient(listOf(CosmosGlass, CosmosGlass))
+                                )
+                                .border(
+                                    width = if (isCurrentTier) 1.5.dp else 1.dp,
+                                    color = if (isCurrentTier) CosmosPrimary.copy(alpha = 0.5f)
+                                    else if (plan.isPopular) tierColor.copy(alpha = 0.4f)
+                                    else CosmosGlassBorder,
+                                    shape = RoundedCornerShape(18.dp)
+                                )
+                                .padding(20.dp)
+                        ) {
+                            Column {
+                                // Header row
+                                Row(
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(tierColor.copy(alpha = 0.15f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(tierIcon, null, tint = tierColor, modifier = Modifier.size(20.dp))
+                                        }
+                                        Column {
+                                            Text(
+                                                plan.tier.label,
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = CosmosOnBackground,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        if (plan.isInviteOnly) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(CosmosTertiary.copy(alpha = 0.15f))
+                                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                                            ) {
+                                                Text(
+                                                    "Invite Only",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = CosmosTertiary,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        } else if (plan.monthlyPriceInr > 0) {
+                                            Text(
+                                                "₹${plan.monthlyPriceInr.toInt()}",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = tierColor,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                "/month",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = CosmosOnSurfaceVariant
+                                            )
+                                        } else {
+                                            Text(
+                                                "Free",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = tierColor,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        if (isCurrentTier) {
+                                            Spacer(Modifier.height(4.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(CosmosPrimary.copy(alpha = 0.2f))
+                                                    .padding(horizontal = 10.dp, vertical = 3.dp)
+                                            ) {
+                                                Text(
+                                                    "Current Plan",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = CosmosPrimary,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Popular badge
+                                if (plan.isPopular && !isCurrentTier) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(
+                                                Brush.linearGradient(
+                                                    listOf(tierColor.copy(alpha = 0.15f), tierColor.copy(alpha = 0.05f))
+                                                )
+                                            )
+                                            .padding(horizontal = 10.dp, vertical = 3.dp)
+                                    ) {
+                                        Text(
+                                            "⭐ Most Popular",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = tierColor,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.height(12.dp))
+
+                                // Feature list
+                                plan.features.forEach { feature ->
+                                    Row(
+                                        modifier = Modifier.padding(vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            null,
+                                            tint = if (isLowerTier) CosmosOnSurfaceVariant.copy(alpha = 0.5f) else CosmosSuccess,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            feature,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (isLowerTier) CosmosOnSurfaceVariant.copy(alpha = 0.6f) else CosmosOnBackground
+                                        )
+                                    }
+                                }
+
+                                // Upgrade button
+                                if (canUpgrade) {
+                                    Spacer(Modifier.height(16.dp))
+                                    Button(
+                                        onClick = { selectedUpgradeTier = plan.tier },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(48.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (plan.isPopular) tierColor else CosmosPrimary
+                                        )
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Upgrade,
+                                                null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Text(
+                                                "Upgrade to ${plan.tier.label}",
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Payment History ──────────────────────────────────────
+                item {
+                    Spacer(Modifier.height(16.dp))
+                    CosmosSectionHeader("Payment History")
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                if (isLoadingHistory) {
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = CosmosPrimary,
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    }
+                } else if (paymentHistory.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(CosmosGlass)
+                                .padding(20.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Outlined.Receipt,
+                                    null,
+                                    tint = CosmosOnSurfaceVariant,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "No payments yet",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = CosmosOnSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    paymentHistory.forEach { payment ->
+                        item {
+                            val tier = payment["tier"] as? String ?: "Unknown"
+                            val amount = (payment["amount"] as? Number)?.toDouble() ?: 0.0
+                            val status = payment["status"] as? String ?: "Unknown"
+                            val paymentId = payment["paymentId"] as? String ?: ""
+                            val timestampMillis = (payment["timestampMillis"] as? Long) ?: 0L
+
+                            val dateStr = if (timestampMillis > 0) {
+                                val sdf = java.text.SimpleDateFormat("dd MMM yyyy, hh:mm a", java.util.Locale.getDefault())
+                                sdf.format(java.util.Date(timestampMillis))
+                            } else "—"
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(CosmosGlass)
+                                    .border(1.dp, CosmosGlassBorder, RoundedCornerShape(12.dp))
+                                    .padding(16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(40.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(CosmosSuccess.copy(alpha = 0.1f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.CheckCircle,
+                                                null,
+                                                tint = CosmosSuccess,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        Column {
+                                            Text(
+                                                "$tier Plan",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = CosmosOnBackground,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                dateStr,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = CosmosOnSurfaceVariant
+                                            )
+                                            if (paymentId.isNotBlank()) {
+                                                Text(
+                                                    "ID: ${if (paymentId.length > 14) paymentId.take(14) + "…" else paymentId}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = CosmosOnSurfaceVariant.copy(alpha = 0.7f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            "₹${amount.toInt()}",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = CosmosOnBackground,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(CosmosSuccess.copy(alpha = 0.15f))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                status,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = CosmosSuccess,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── FAQ Section ──────────────────────────────────────────
+                item {
+                    Spacer(Modifier.height(16.dp))
+                    CosmosSectionHeader("FAQ")
+                    Spacer(Modifier.height(8.dp))
+                }
+                val faqs = listOf(
+                    "How do I upgrade?" to "Tap the 'Upgrade' button on the plan you want. You'll be guided through a secure Razorpay checkout.",
+                    "Can I downgrade?" to "Downgrades are not available through the app. Please contact support for assistance.",
+                    "What payment methods are accepted?" to "UPI (Google Pay, PhonePe, Paytm), Credit/Debit Cards, Netbanking, and Wallets via Razorpay.",
+                    "Is my payment secure?" to "All payments are processed through Razorpay with 256-bit encryption. We never store your card details."
+                )
+                faqs.forEach { (question, answer) ->
+                    item {
+                        var expanded by remember { mutableStateOf(false) }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(CosmosGlass)
+                                .clickable { expanded = !expanded }
+                                .padding(16.dp)
+                        ) {
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        question,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = CosmosOnBackground,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Icon(
+                                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        null,
+                                        tint = CosmosOnSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                if (expanded) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        answer,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = CosmosOnSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item { Spacer(Modifier.height(100.dp)) }
             }
         }
     }
 
-    // Render Checkout dialog
-    if (selectedTierToUpgrade != null) {
+    // ── Checkout Dialog ──────────────────────────────────────────────────
+    if (selectedUpgradeTier != null) {
         CheckoutDialog(
-            tierName = selectedTierToUpgrade!!,
-            priceInUsd = upgradePrice,
-            onDismiss = { selectedTierToUpgrade = null },
+            tierFrom = currentTier,
+            tierTo = selectedUpgradeTier!!,
+            onDismiss = { selectedUpgradeTier = null },
             onPaymentSuccess = { txId, methodUsed ->
-                val newTier = when (selectedTierToUpgrade) {
-                    "Member" -> MembershipTier.MEMBER
-                    "Inner Circle" -> MembershipTier.INNER_CIRCLE
-                    else -> MembershipTier.EXPLORER
-                }
+                val newTier = selectedUpgradeTier!!
                 currentUserState?.let { user ->
                     val updatedUser = user.copy(
                         membershipTier = newTier,
-                        monthlyConnectionLimit = if (newTier == MembershipTier.INNER_CIRCLE) 999 else 10
+                        monthlyConnectionLimit = app.cosmos.com.data.payment.PaymentManager.getConnectionLimit(newTier)
                     )
                     authViewModel.updateProfile(updatedUser) {
                         coroutineScope.launch {
+                            val plan = app.cosmos.com.data.payment.PaymentManager.getPlan(newTier)
+                            val billDetails = app.cosmos.com.data.payment.PaymentManager.calculatePayment(plan.monthlyPriceInr)
+
+                            // Create subscription record
+                            val now = System.currentTimeMillis()
+                            val subscription = app.cosmos.com.data.model.UserSubscription(
+                                tier = newTier.name,
+                                status = app.cosmos.com.data.model.SubscriptionStatus.ACTIVE.name,
+                                startDate = now,
+                                endDate = now + (30L * 24 * 60 * 60 * 1000), // 30 days
+                                razorpayPaymentId = txId,
+                                amountPaid = billDetails.grandTotal
+                            )
+                            val subId = app.cosmos.com.data.repository.ServiceLocator.profileRepository
+                                .createSubscription(user.id, subscription)
+                                .getOrDefault("")
+
+                            // Record payment with subscription reference
+                            app.cosmos.com.data.repository.ServiceLocator.profileRepository.recordPayment(
+                                userId = user.id,
+                                paymentId = txId,
+                                amount = billDetails.grandTotal,
+                                tier = newTier.label,
+                                subscriptionId = subId
+                            )
+
+                            // Send notification
                             app.cosmos.com.data.repository.ServiceLocator.notificationRepository.createNotification(
                                 userId = user.id,
                                 type = app.cosmos.com.data.model.NotificationType.COMMUNITY_ANNOUNCEMENT,
                                 title = "Membership Upgraded! 🎉",
-                                body = "Welcome to the $selectedTierToUpgrade tier. Payment confirmed via $methodUsed (ID: $txId).",
+                                body = "Welcome to the ${newTier.label} tier. Payment confirmed via $methodUsed (ID: $txId).",
                                 actionId = txId
                             )
+
+                            // Refresh payment history
+                            app.cosmos.com.data.repository.ServiceLocator.profileRepository
+                                .getPaymentHistory(user.id)
+                                .onSuccess { payments -> paymentHistory = payments }
                         }
                     }
                 }
-                selectedTierToUpgrade = null
+                selectedUpgradeTier = null
             }
         )
     }
