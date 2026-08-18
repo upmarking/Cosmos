@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#0D111A"
+        android:pathData="M0,0h108v108h-108z"/>
+    <!-- Lunar aura ring -->
+    <path
+        android:strokeColor="#336C63FF"
+        android:strokeWidth="1.5"
+        android:pathData="M54,14 A40,40 0 1,1 53.9,14 Z"/>
+    <path
+        android:fillColor="#44C0C0C8"
+        android:pathData="M22,24a1.2,1.2 0 1,0 0.01,0 Z M86,28a1.5,1.5 0 1,0 0.01,0 Z M28,84a1,1 0 1,0 0.01,0 Z M80,82a1.2,1.2 0 1,0 0.01,0 Z"/>
+</vector>

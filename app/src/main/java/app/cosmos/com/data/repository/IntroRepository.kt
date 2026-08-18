@@ -169,7 +169,7 @@ class FirestoreIntroRepository(
                         role = "",
                         company = "",
                         avatarUrl = "",
-                        membershipTier = MembershipTier.EXPLORER
+                        membershipTier = MembershipTier.ASTEROID
                     )
                     
                     IntroRequest(

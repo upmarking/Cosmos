@@ -2,19 +2,26 @@ package app.cosmos.com.data.payment
 
 import app.cosmos.com.data.model.MembershipTier
 import app.cosmos.com.data.model.SubscriptionPlan
+import java.text.DecimalFormat
 
 /**
- * Breakdown details for a membership purchase transaction.
+ * Simple data class to hold breakdown of payment.
  */
 data class PaymentDetails(
     val subtotal: Double,
     val gst: Double,
-    val grandTotal: Double
+    val grandTotal: Int
 )
 
 /**
- * PaymentManager is the single source of truth for subscription plans,
+ * PaymentManager is the single source of truth for lifetime membership plans,
  * pricing, feature lists, and upgrade logic.
+ *
+ * COSMOS Lifetime Membership uses a cosmic journey metaphor:
+ * ASTEROID → MOON → EARTH → SUN
+ *
+ * All pricing is one-time. No monthly or annual billing.
+ * Upgrades use differential pricing: upgradeAmount = targetTierPrice - currentTierPrice
  */
 object PaymentManager {
 
@@ -22,8 +29,8 @@ object PaymentManager {
 
     private val plans = listOf(
         SubscriptionPlan(
-            tier = MembershipTier.EXPLORER,
-            monthlyPriceInr = 0.0,
+            tier = MembershipTier.ASTEROID,
+            lifetimePriceInr = 0,
             features = listOf(
                 "Up to 3 connections/month",
                 "Basic discovery deck",
@@ -33,8 +40,8 @@ object PaymentManager {
             )
         ),
         SubscriptionPlan(
-            tier = MembershipTier.MEMBER,
-            monthlyPriceInr = 2407.0, // ~$29 USD
+            tier = MembershipTier.MOON,
+            lifetimePriceInr = 49_999,
             features = listOf(
                 "10 connections/month",
                 "Priority discovery deck",
@@ -44,11 +51,11 @@ object PaymentManager {
                 "CRM labels & notes",
                 "Follow-up reminders",
                 "Community posting"
-            ),
+            )
         ),
         SubscriptionPlan(
-            tier = MembershipTier.INNER_CIRCLE,
-            monthlyPriceInr = 8217.0, // ~$99 USD
+            tier = MembershipTier.EARTH,
+            lifetimePriceInr = 99_999,
             isPopular = true,
             features = listOf(
                 "Unlimited connections",
@@ -63,15 +70,14 @@ object PaymentManager {
             )
         ),
         SubscriptionPlan(
-            tier = MembershipTier.FOUNDER,
-            monthlyPriceInr = 0.0,
-            isInviteOnly = true,
+            tier = MembershipTier.SUN,
+            lifetimePriceInr = 199_999,
             features = listOf(
-                "Everything in Inner Circle",
+                "Everything in Earth",
                 "Full platform access",
                 "Dedicated relationship advisor",
                 "Custom event creation",
-                "Founder spotlight profile",
+                "Solar Elite spotlight profile",
                 "Direct team access",
                 "White-glove onboarding",
                 "Strategic intro curation"
@@ -93,7 +99,7 @@ object PaymentManager {
 
     /**
      * Returns only the plans the user can upgrade to from their current tier.
-     * Enforces strict hierarchy: can only go UP, and Founder is invite-only.
+     * Enforces strict hierarchy: can only go UP.
      */
     fun getAvailableUpgrades(currentTier: MembershipTier): List<SubscriptionPlan> {
         return plans.filter { plan ->
@@ -109,6 +115,27 @@ object PaymentManager {
     }
 
     /**
+     * Calculates the differential upgrade amount.
+     * Users only pay the difference between their current tier and the target tier.
+     *
+     * Example: MOON (₹49,999) → EARTH (₹99,999) = ₹50,000
+     */
+    fun calculateUpgradeAmount(from: MembershipTier, to: MembershipTier): Int {
+        return to.lifetimePrice - from.lifetimePrice
+    }
+
+    /**
+     * Calculates the payment breakdown (Subtotal, GST, Total) for a base amount.
+     */
+    fun calculatePayment(baseAmount: Int): PaymentDetails {
+        val gstRate = 0.18
+        val subtotal = baseAmount.toDouble()
+        val gst = subtotal * gstRate
+        val total = (subtotal + gst).toInt()
+        return PaymentDetails(subtotal, gst, total)
+    }
+
+    /**
      * Returns the new features the user will unlock when upgrading.
      */
     fun getFeatureGains(from: MembershipTier, to: MembershipTier): List<String> {
@@ -118,13 +145,31 @@ object PaymentManager {
     }
 
     /**
-     * Compute the billing breakdown (18% GST applied).
+     * Formats an amount in Indian number system with ₹ prefix.
+     * Examples: 49999 → "₹49,999", 199999 → "₹1,99,999"
      */
-    fun calculatePayment(price: Double): PaymentDetails {
-        val subtotal = price
-        val gst = if (subtotal > 0) subtotal * 0.18 else 0.0
-        val grandTotal = subtotal + gst
-        return PaymentDetails(subtotal, gst, grandTotal)
+    fun formatIndianPrice(amount: Int): String {
+        if (amount == 0) return "₹0"
+        val amountStr = amount.toString()
+        val result = StringBuilder()
+        val len = amountStr.length
+
+        // Last 3 digits
+        if (len <= 3) return "₹$amountStr"
+
+        result.insert(0, amountStr.substring(len - 3))
+        var remaining = amountStr.substring(0, len - 3)
+
+        // Group remaining digits in pairs (Indian system)
+        while (remaining.length > 2) {
+            result.insert(0, ",${remaining.substring(remaining.length - 2)}")
+            remaining = remaining.substring(0, remaining.length - 2)
+        }
+        if (remaining.isNotEmpty()) {
+            result.insert(0, "$remaining,")
+        }
+
+        return "₹$result"
     }
 
     /**
@@ -132,10 +177,34 @@ object PaymentManager {
      */
     fun getConnectionLimit(tier: MembershipTier): Int {
         return when (tier) {
-            MembershipTier.EXPLORER -> 3
-            MembershipTier.MEMBER -> 10
-            MembershipTier.INNER_CIRCLE -> 999
-            MembershipTier.FOUNDER -> 999
+            MembershipTier.ASTEROID -> 3
+            MembershipTier.MOON -> 10
+            MembershipTier.EARTH -> 999
+            MembershipTier.SUN -> 999
+        }
+    }
+
+    /**
+     * Returns creative description for a tier.
+     */
+    fun getTierDescription(tier: MembershipTier): String {
+        return when (tier) {
+            MembershipTier.ASTEROID -> "A small rock in the vast cosmos — but every supernova started as dust."
+            MembershipTier.MOON -> "The Moon revolves around Earth, always present, always watching. Your first leap into the cosmos."
+            MembershipTier.EARTH -> "Civilizations rise here. The blue marble where ambition meets gravity."
+            MembershipTier.SUN -> "Everything orbits the Sun. Unlimited power. Unlimited light. The ultimate COSMOS experience."
+        }
+    }
+
+    /**
+     * Returns the short cosmic metaphor word for a tier.
+     */
+    fun getTierMetaphor(tier: MembershipTier): String {
+        return when (tier) {
+            MembershipTier.ASTEROID -> "START"
+            MembershipTier.MOON -> "EXPAND"
+            MembershipTier.EARTH -> "BUILD"
+            MembershipTier.SUN -> "MASTER"
         }
     }
 }

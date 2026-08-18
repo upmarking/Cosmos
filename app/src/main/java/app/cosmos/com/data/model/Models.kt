@@ -29,7 +29,7 @@ data class Member(
     val mutualConnectionsCount: Int = 0,
     val isLinkedInConnected: Boolean = false,
     val memberSince: String = "",
-    val membershipTier: MembershipTier = MembershipTier.EXPLORER,
+    val membershipTier: MembershipTier = MembershipTier.ASTEROID,
     val connectionsCount: Int = 0,
     val followersCount: Int = 0,
     val followingCount: Int = 0,
@@ -90,14 +90,69 @@ data class EndorsedSkill(
     val endorsers: List<String> = emptyList()
 )
 
-enum class MembershipTier(val label: String, val color: Long, val tierLevel: Int) {
-    EXPLORER("Explorer", 0xFF908FA0, 0),
-    MEMBER("Member", 0xFF0566D9, 1),
-    INNER_CIRCLE("Inner Circle", 0xFF494BD6, 2),
-    FOUNDER("Founder", 0xFFC0C1FF, 3);
+enum class MembershipTier(
+    val label: String,
+    val color: Long,
+    val tierLevel: Int,
+    val lifetimePrice: Int,
+    val badge: String,
+    val tagline: String
+) {
+    ASTEROID(
+        label = "Asteroid",
+        color = 0xFF8E8E93,
+        tierLevel = 0,
+        lifetimePrice = 0,
+        badge = "Explorer",
+        tagline = "Where every journey begins"
+    ),
+    MOON(
+        label = "Moon",
+        color = 0xFFC0C0C8,
+        tierLevel = 1,
+        lifetimePrice = 49_999,
+        badge = "Lunar Member",
+        tagline = "Orbiting something greater"
+    ),
+    EARTH(
+        label = "Earth",
+        color = 0xFF34A853,
+        tierLevel = 2,
+        lifetimePrice = 99_999,
+        badge = "Earth Member",
+        tagline = "Where empires are built"
+    ),
+    SUN(
+        label = "Sun",
+        color = 0xFFFFB300,
+        tierLevel = 3,
+        lifetimePrice = 199_999,
+        badge = "Solar Elite",
+        tagline = "The center of everything"
+    );
 
     fun canUpgradeTo(target: MembershipTier): Boolean {
-        return target.tierLevel > this.tierLevel && target != FOUNDER
+        return target.tierLevel > this.tierLevel
+    }
+
+    companion object {
+        /**
+         * Maps legacy tier names from Firestore to the new cosmic tiers.
+         * EXPLORER → ASTEROID, MEMBER → MOON, INNER_CIRCLE → EARTH, FOUNDER → SUN
+         */
+        fun fromLegacyName(name: String): MembershipTier {
+            return when (name.uppercase().replace(" ", "_")) {
+                "EXPLORER" -> ASTEROID
+                "MEMBER" -> MOON
+                "INNER_CIRCLE" -> EARTH
+                "FOUNDER" -> SUN
+                "ASTEROID" -> ASTEROID
+                "MOON" -> MOON
+                "EARTH" -> EARTH
+                "SUN" -> SUN
+                else -> ASTEROID
+            }
+        }
     }
 }
 
@@ -108,18 +163,18 @@ enum class SubscriptionStatus {
 }
 
 /**
- * Represents a subscription plan with pricing and feature details.
+ * Represents a lifetime membership plan with pricing and feature details.
+ * All prices are one-time, lifetime access — no recurring billing.
  */
 data class SubscriptionPlan(
     val tier: MembershipTier,
-    val monthlyPriceInr: Double,
+    val lifetimePriceInr: Int,
     val features: List<String>,
-    val isInviteOnly: Boolean = false,
     val isPopular: Boolean = false
 )
 
 /**
- * Tracks a user's active/past subscription in Firestore.
+ * Tracks a user's lifetime membership purchase in Firestore.
  * Stored under: users/{userId}/subscriptions/{subscriptionId}
  */
 data class UserSubscription(
@@ -127,9 +182,12 @@ data class UserSubscription(
     val tier: String = "",
     val status: String = SubscriptionStatus.NONE.name,
     val startDate: Long = 0L,
-    val endDate: Long = 0L,
+    val isLifetime: Boolean = true,
     val razorpayPaymentId: String = "",
+    val razorpayOrderId: String = "",
     val amountPaid: Double = 0.0,
+    val upgradedFrom: String = "",
+    val upgradeAmountPaid: Double = 0.0,
     val createdAt: Long = 0L
 )
 
@@ -355,6 +413,6 @@ object SampleData {
         role = "",
         company = "",
         avatarUrl = "",
-        membershipTier = MembershipTier.EXPLORER
+        membershipTier = MembershipTier.ASTEROID
     )
 }

@@ -299,7 +299,7 @@ class FirestoreCircleRepository(
                                 role = if (uid == createdBy) "Organizer" else "Member",
                                 company = "",
                                 avatarUrl = "",
-                                membershipTier = MembershipTier.EXPLORER
+                                membershipTier = MembershipTier.ASTEROID
                             )
                         }
                     } catch (e: Exception) {
@@ -311,7 +311,7 @@ class FirestoreCircleRepository(
                             role = if (uid == createdBy) "Organizer" else "Member",
                             company = "",
                             avatarUrl = "",
-                            membershipTier = MembershipTier.EXPLORER
+                            membershipTier = MembershipTier.ASTEROID
                         )
                     }
                 }

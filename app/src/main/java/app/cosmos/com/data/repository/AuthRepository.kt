@@ -218,7 +218,7 @@ class FirebaseAuthRepository(
                                     company = "",
                                     avatarUrl = "",
                                     email = firebaseUser.email ?: "",
-                                    membershipTier = MembershipTier.EXPLORER,
+                                    membershipTier = MembershipTier.ASTEROID,
                                     primaryUserType = "",
                                     isProfileComplete = false,
                                     isFromCache = snapshot?.metadata?.isFromCache ?: false
@@ -301,7 +301,7 @@ class FirebaseAuthRepository(
                 "isLinkedInConnected" to false,
                 "isProfileComplete" to false,
                 "isRestricted" to false,
-                "membershipTier" to MembershipTier.EXPLORER.name,
+                "membershipTier" to MembershipTier.ASTEROID.name,
                 "connectionsCount" to 0,
                 "followersCount" to 0,
                 "followingCount" to 0,
@@ -483,8 +483,8 @@ class FirebaseAuthRepository(
     companion object {
         @Suppress("UNCHECKED_CAST")
         fun mapDocumentToMember(id: String, data: Map<String, Any>): Member {
-            val membershipTierStr = data["membershipTier"] as? String ?: MembershipTier.EXPLORER.name
-            val membershipTier = runCatching { MembershipTier.valueOf(membershipTierStr) }.getOrDefault(MembershipTier.EXPLORER)
+            val membershipTierStr = data["membershipTier"] as? String ?: MembershipTier.ASTEROID.name
+            val membershipTier = MembershipTier.fromLegacyName(membershipTierStr)
             val userRoleStr = data["userRole"] as? String ?: UserRole.USER.name
             val userRole = runCatching { UserRole.valueOf(userRoleStr) }.getOrDefault(UserRole.USER)
             

@@ -31,7 +31,7 @@ object FirestoreSeedService {
                 "tags" to listOf("ClimateTech", "Biotech", "Female Founder"),
                 "primaryUserType" to "Founder",
                 "userRole" to "ADMIN",
-                "membershipTier" to MembershipTier.FOUNDER.name,
+                "membershipTier" to MembershipTier.SUN.name,
                 "isLinkedInConnected" to true,
                 "isProfileComplete" to true,
                 "isRestricted" to false,
@@ -58,7 +58,7 @@ object FirestoreSeedService {
                 "tags" to listOf("AI/ML", "B2B SaaS", "VC"),
                 "primaryUserType" to "Investor",
                 "userRole" to "ORGANIZER",
-                "membershipTier" to MembershipTier.INNER_CIRCLE.name,
+                "membershipTier" to MembershipTier.EARTH.name,
                 "isLinkedInConnected" to true,
                 "isProfileComplete" to true,
                 "isRestricted" to false,
@@ -85,7 +85,7 @@ object FirestoreSeedService {
                 "tags" to listOf("UI/UX", "Product Design", "Creative"),
                 "primaryUserType" to "Creator",
                 "userRole" to "USER",
-                "membershipTier" to MembershipTier.MEMBER.name,
+                "membershipTier" to MembershipTier.MOON.name,
                 "isLinkedInConnected" to false,
                 "isProfileComplete" to true,
                 "isRestricted" to false,
@@ -112,7 +112,7 @@ object FirestoreSeedService {
                 "tags" to listOf("Product Management", "Growth", "Scaling"),
                 "primaryUserType" to "Startup Operator",
                 "userRole" to "USER",
-                "membershipTier" to MembershipTier.EXPLORER.name,
+                "membershipTier" to MembershipTier.ASTEROID.name,
                 "isLinkedInConnected" to false,
                 "isProfileComplete" to true,
                 "isRestricted" to false,
@@ -428,5 +428,83 @@ object FirestoreSeedService {
             }
         }
     }
+
+    /**
+     * Seeds initial Cosmic Gift Cards if the collection is empty.
+     */
+    suspend fun seedGiftCards(firestore: FirebaseFirestore) {
+        val giftCards = listOf(
+            mapOf(
+                "code" to "COSMOS-LAUNCH-10K",
+                "initialValue" to 10000,
+                "currentBalance" to 10000,
+                "currency" to "INR",
+                "status" to "ACTIVE",
+                "title" to "Early Pioneer Voucher",
+                "description" to "Enjoy ₹10,000 credit towards any lifetime membership tier.",
+                "createdAt" to System.currentTimeMillis(),
+                "expiresAt" to null,
+                "createdBy" to "COSMOS Foundation"
+            ),
+            mapOf(
+                "code" to "COSMOS-GIFT-50K",
+                "initialValue" to 49999,
+                "currentBalance" to 49999,
+                "currency" to "INR",
+                "status" to "ACTIVE",
+                "title" to "Lunar Explorer Pass",
+                "description" to "Covers the full Moon Tier lifetime membership (₹49,999 value).",
+                "createdAt" to System.currentTimeMillis(),
+                "expiresAt" to null,
+                "createdBy" to "COSMOS Foundation"
+            ),
+            mapOf(
+                "code" to "COSMOS-GIFT-100K",
+                "initialValue" to 100000,
+                "currentBalance" to 100000,
+                "currency" to "INR",
+                "status" to "ACTIVE",
+                "title" to "Cosmic Orbit Grant",
+                "description" to "₹1,00,000 credit. Covers Earth Tier or preserves remaining balance.",
+                "createdAt" to System.currentTimeMillis(),
+                "expiresAt" to null,
+                "createdBy" to "COSMOS Foundation"
+            ),
+            mapOf(
+                "code" to "COSMOS-SUPER-200K",
+                "initialValue" to 199999,
+                "currentBalance" to 199999,
+                "currency" to "INR",
+                "status" to "ACTIVE",
+                "title" to "Solar Elite Master Key",
+                "description" to "Covers the full Sun Tier lifetime membership (₹1,99,999 value).",
+                "createdAt" to System.currentTimeMillis(),
+                "expiresAt" to null,
+                "createdBy" to "COSMOS Foundation"
+            ),
+            mapOf(
+                "code" to "COSMOS-GENESIS-25K",
+                "initialValue" to 25000,
+                "currentBalance" to 25000,
+                "currency" to "INR",
+                "status" to "ACTIVE",
+                "title" to "Genesis Creator Voucher",
+                "description" to "₹25,000 stored credit with preserved multi-use balance.",
+                "createdAt" to System.currentTimeMillis(),
+                "expiresAt" to null,
+                "createdBy" to "COSMOS Foundation"
+            )
+        )
+
+        for (card in giftCards) {
+            val code = card["code"] as String
+            val docRef = firestore.collection("gift_cards").document(code)
+            val snap = docRef.get().await()
+            if (!snap.exists()) {
+                docRef.set(card).await()
+            }
+        }
+    }
 }
+
 

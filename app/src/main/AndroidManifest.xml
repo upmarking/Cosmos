@@ -57,6 +57,63 @@
             </intent-filter>
         </activity>
 
+        <!-- ── Dynamic App Icon Activity Aliases ────────────────────────── -->
+        <activity-alias
+            android:name=".MainActivityAliasAsteroid"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_asteroid"
+            android:roundIcon="@mipmap/ic_launcher_asteroid_round"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".MainActivityAliasMoon"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_moon"
+            android:roundIcon="@mipmap/ic_launcher_moon_round"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".MainActivityAliasEarth"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_earth"
+            android:roundIcon="@mipmap/ic_launcher_earth_round"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".MainActivityAliasSun"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_sun"
+            android:roundIcon="@mipmap/ic_launcher_sun_round"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
     </application>
 
 </manifest>

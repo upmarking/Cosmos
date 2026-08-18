@@ -449,7 +449,7 @@ class ChatViewModel(
                                     role = "",
                                     company = "",
                                     avatarUrl = "",
-                                    membershipTier = MembershipTier.EXPLORER
+                                    membershipTier = MembershipTier.ASTEROID
                                 )
                                 if (_activeConnection.value == null || _activeConnection.value?.id == resolvedId) {
                                     _activeConnection.value = Connection(

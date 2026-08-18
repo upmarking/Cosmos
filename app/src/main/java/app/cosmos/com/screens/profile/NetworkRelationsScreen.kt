@@ -99,7 +99,7 @@ fun NetworkRelationsScreen(
                                         role = "",
                                         company = "",
                                         avatarUrl = data["receiverAvatarUrl"] as? String ?: "",
-                                        membershipTier = MembershipTier.EXPLORER
+                                        membershipTier = MembershipTier.ASTEROID
                                     )
                                 }
 

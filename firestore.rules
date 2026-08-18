@@ -193,5 +193,23 @@ service cloud.firestore {
       allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
     }
+
+    // 12. Membership Orders collection rules (created by Cloud Functions & app checkout)
+    match /membership_orders/{orderId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create, update: if isSignedIn();
+    }
+
+    // 13. Gift Cards collection rules
+    match /gift_cards/{cardId} {
+      // Allow reading gift cards to validate balance
+      allow read: if isSignedIn();
+      // Allow initial seeding if signed in
+      allow create: if isSignedIn();
+      // Allow atomic transactions to update balance/status and append redemption logs
+      allow update: if isSignedIn();
+      allow delete: if false;
+    }
   }
 }
+

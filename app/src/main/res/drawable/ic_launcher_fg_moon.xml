@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Lunar Crescent Emblem -->
+    <path
+        android:fillColor="#E0E2EC"
+        android:pathData="M58,28 C42,28 32,40 32,54 C32,68 44,80 58,80 C48,74 44,64 44,54 C44,44 48,34 58,28 Z" />
+    <!-- Glowing Orbital Ring -->
+    <path
+        android:strokeColor="#ADC6FF"
+        android:strokeWidth="2.5"
+        android:pathData="M24,54 A30,16 35 1,1 84,54 A30,16 35 1,1 24,54" />
+    <!-- Lunar Core Gem -->
+    <path
+        android:fillColor="#6C63FF"
+        android:pathData="M60,46 A8,8 0 1,1 59.9,46 Z" />
+    <!-- Twinkle Star -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M76,28 L78,32 L82,34 L78,36 L76,40 L74,36 L70,34 L74,32 Z"/>
+</vector>

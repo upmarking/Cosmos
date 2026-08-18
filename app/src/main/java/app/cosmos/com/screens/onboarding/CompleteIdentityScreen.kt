@@ -1052,7 +1052,7 @@ fun CompleteIdentityScreen(
                                                 location = location,
                                                 email = email,
                                                 isLinkedInConnected = isLinkedInConnected,
-                                                membershipTier = MembershipTier.EXPLORER,
+                                                membershipTier = MembershipTier.ASTEROID,
                                                 primaryUserType = selectedUserType
                                             )
                                             authViewModel.saveOnboarding(member = memberData, onSuccess = onNext, imageBytes = imageBytes)
@@ -1099,7 +1099,7 @@ fun CompleteIdentityScreen(
                                                     location = location,
                                                     email = email,
                                                     isLinkedInConnected = isLinkedInConnected,
-                                                    membershipTier = MembershipTier.EXPLORER,
+                                                    membershipTier = MembershipTier.ASTEROID,
                                                     primaryUserType = selectedUserType
                                                 )
 

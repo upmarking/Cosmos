@@ -63,7 +63,7 @@ class FirestoreChatRepository(
                         role = "",
                         company = "",
                         avatarUrl = "",
-                        membershipTier = MembershipTier.EXPLORER
+                        membershipTier = MembershipTier.ASTEROID
                     )
                     
                     val lastMessageTime = when (val time = data["lastMessageTime"]) {
@@ -141,7 +141,7 @@ class FirestoreChatRepository(
                     role = "",
                     company = "",
                     avatarUrl = "",
-                    membershipTier = MembershipTier.EXPLORER
+                    membershipTier = MembershipTier.ASTEROID
                 )
 
                 trySend(

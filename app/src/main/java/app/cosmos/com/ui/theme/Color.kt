@@ -79,3 +79,17 @@ val CosmosTagAmber = Color(0xFF3A2A0A)
 // Success / Trust
 val CosmosSuccess = Color(0xFF4CAF6F)
 val CosmosLinkedIn = Color(0xFF0A66C2)
+
+// ── Cosmic Membership Tier Colors ────────────────────────────────────────────
+val CosmosAsteroidColor = Color(0xFF8E8E93)       // Grey stone
+val CosmosMoonColor = Color(0xFFC0C0C8)           // Silver
+val CosmosEarthColor = Color(0xFF34A853)           // Blue-green
+val CosmosSunColor = Color(0xFFFFB300)             // Golden
+val CosmosSunCorona = Color(0xFFFF8F00)            // Deep gold
+val CosmosSunGlow = Color(0xFFFFD54F)              // Light gold glow
+val CosmosCosmicDeep = Color(0xFF0A0A1E)           // Deep space background
+val CosmosCosmicPurple = Color(0xFF1A0A3E)         // Deep space purple
+val CosmosStarWhite = Color(0xFFE8E8F0)            // Star twinkle
+val CosmosNebulaBlue = Color(0xFF1A237E)           // Nebula accent
+val CosmosNebulaPink = Color(0xFF4A148C)           // Nebula secondary
+

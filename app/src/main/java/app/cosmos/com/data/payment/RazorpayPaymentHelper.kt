@@ -4,15 +4,9 @@ import android.app.Activity
 import android.util.Log
 import com.razorpay.Checkout
 import org.json.JSONObject
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
 
 object RazorpayPaymentHelper {
     private const val TAG = "RazorpayPaymentHelper"
-
-    // Razorpay credentials — replace with your actual keys
-    var razorpayKeyId: String = "rzp_test_YOUR_KEY_HERE"
-    var razorpayKeySecret: String = ""
 
     // Dynamic callbacks for the active UI checkout session
     var onPaymentSuccess: ((paymentId: String, orderId: String, signature: String) -> Unit)? = null
@@ -46,48 +40,89 @@ object RazorpayPaymentHelper {
     }
 
     /**
-     * Initiates Razorpay payment with enhanced configuration.
-     * Includes notes for tracking, better prefill, and retry support.
+     * Helper to start payment without an explicit orderId (for demo/fallback).
+     * In production, always use startPaymentWithOrder with a server-generated order ID.
      */
     fun startPayment(
         activity: Activity,
-        amountInInr: Double,
+        amountInInr: Int,
         tierName: String,
         userEmail: String,
         userContact: String,
         userId: String = "",
         currentTier: String = ""
     ) {
-        val amountInPaise = (amountInInr * 100).toLong()
+        // For development/demo purposes, we use a placeholder order ID.
+        // In a real production environment, you would fetch this from your backend.
+        startPaymentWithOrder(
+            activity = activity,
+            orderId = "order_demo_${System.currentTimeMillis()}",
+            amountInInr = amountInInr,
+            keyId = "rzp_test_placeholder", // Replace with your actual Razorpay Key ID
+            tierName = tierName,
+            userEmail = userEmail,
+            userContact = userContact,
+            userId = userId,
+            currentTier = currentTier
+        )
+    }
 
-        if (razorpayKeyId.isBlank() || razorpayKeyId == "rzp_test_YOUR_KEY_HERE") {
-            Log.w(TAG, "Razorpay Key ID is not configured!")
-            activity.runOnUiThread {
-                android.widget.Toast.makeText(
-                    activity,
-                    "Razorpay Key ID is not configured. Please set your key in RazorpayPaymentHelper.",
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
-            }
-            onPaymentError?.invoke(-1, "Razorpay Key ID is not configured. Please replace it in RazorpayPaymentHelper.kt.")
+    /**
+     * Initiates Razorpay payment using a server-created order.
+     * This is the SECURE flow — the order (with correct amount) is created by the
+     * Cloud Function, not by the client.
+     *
+     * @param activity The Android Activity for Razorpay SDK
+     * @param orderId The Razorpay Order ID from createMembershipOrder Cloud Function
+     * @param amountInInr The amount in INR (for display purposes only — server controls actual amount)
+     * @param keyId The Razorpay Key ID from the server
+     * @param tierName Target tier name for display
+     * @param userEmail User's email for prefill
+     * @param userContact User's contact for prefill
+     * @param userId User ID for tracking
+     * @param currentTier Current tier for tracking
+     */
+    fun startPaymentWithOrder(
+        activity: Activity,
+        orderId: String,
+        amountInInr: Int,
+        keyId: String,
+        tierName: String,
+        userEmail: String,
+        userContact: String,
+        userId: String = "",
+        currentTier: String = ""
+    ) {
+        if (keyId.isBlank()) {
+            Log.w(TAG, "Razorpay Key ID is empty!")
+            onPaymentError?.invoke(-1, "Payment configuration error. Please try again later.")
             return
         }
 
+        if (orderId.isBlank()) {
+            Log.w(TAG, "Razorpay Order ID is empty!")
+            onPaymentError?.invoke(-1, "Order creation failed. Please try again.")
+            return
+        }
+
+        val amountInPaise = amountInInr.toLong() * 100
+
         val checkout = Checkout()
-        checkout.setKeyID(razorpayKeyId)
+        checkout.setKeyID(keyId)
 
         try {
             val options = JSONObject()
-            options.put("name", "Cosmos Premium")
-            options.put("description", "$tierName Membership • Monthly")
+            options.put("name", "COSMOS")
+            options.put("description", "$tierName — Lifetime Membership")
             options.put("image", "https://s3.amazonaws.com/rzp-mobile/images/rzp.png")
             options.put("currency", "INR")
             options.put("amount", amountInPaise)
+            options.put("order_id", orderId)
 
-            // Theme customization
+            // Theme customization — cosmic dark theme
             val theme = JSONObject()
             theme.put("color", "#6C63FF")
-            theme.put("backdrop_color", "#0D0D1A")
+            theme.put("backdrop_color", "#0A0A1E")
             options.put("theme", theme)
 
             // Prefill user details
@@ -101,7 +136,7 @@ object RazorpayPaymentHelper {
             notes.put("tier_name", tierName)
             notes.put("user_id", userId)
             notes.put("upgrade_from", currentTier)
-            notes.put("plan_type", "monthly")
+            notes.put("plan_type", "lifetime")
             notes.put("source", "cosmos_android_app")
             options.put("notes", notes)
 
@@ -111,36 +146,11 @@ object RazorpayPaymentHelper {
             retry.put("max_count", 3)
             options.put("retry", retry)
 
-            Log.d(TAG, "Launching Razorpay Checkout for $tierName — ₹$amountInInr (${amountInPaise}p)")
+            Log.d(TAG, "Launching Razorpay Checkout for $tierName — ₹$amountInInr (order: $orderId)")
             checkout.open(activity, options)
         } catch (e: Exception) {
             Log.e(TAG, "Error launching Razorpay Checkout SDK", e)
             onPaymentError?.invoke(-1, e.message ?: "Failed to initialize Razorpay Checkout SDK")
         }
-    }
-
-    /**
-     * Computes the HMAC-SHA256 signature for verification.
-     */
-    fun generateSignature(orderId: String, paymentId: String, secret: String): String? {
-        return try {
-            val data = "$orderId|$paymentId"
-            val secretKeySpec = SecretKeySpec(secret.toByteArray(), "HmacSHA256")
-            val mac = Mac.getInstance("HmacSHA256")
-            mac.init(secretKeySpec)
-            val rawHmac = mac.doFinal(data.toByteArray())
-            rawHmac.joinToString("") { String.format("%02x", it) }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error generating signature", e)
-            null
-        }
-    }
-
-    /**
-     * Verifies the payment signature.
-     */
-    fun verifyPaymentSignature(orderId: String, paymentId: String, signature: String): Boolean {
-        val generatedSig = generateSignature(orderId, paymentId, razorpayKeySecret)
-        return generatedSig != null && generatedSig == signature
     }
 }

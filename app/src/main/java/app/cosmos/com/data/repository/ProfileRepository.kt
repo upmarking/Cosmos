@@ -249,7 +249,7 @@ class FirestoreProfileRepository(
             "tier" to subscription.tier,
             "status" to subscription.status,
             "startDate" to subscription.startDate,
-            "endDate" to subscription.endDate,
+            "isLifetime" to subscription.isLifetime,
             "razorpayPaymentId" to subscription.razorpayPaymentId,
             "amountPaid" to subscription.amountPaid,
             "createdAt" to FieldValue.serverTimestamp()
@@ -277,7 +277,7 @@ class FirestoreProfileRepository(
                 tier = data["tier"] as? String ?: "",
                 status = data["status"] as? String ?: "NONE",
                 startDate = data["startDate"] as? Long ?: 0L,
-                endDate = data["endDate"] as? Long ?: 0L,
+                isLifetime = (data["isLifetime"] as? Boolean) ?: true,
                 razorpayPaymentId = data["razorpayPaymentId"] as? String ?: "",
                 amountPaid = (data["amountPaid"] as? Number)?.toDouble() ?: 0.0,
                 createdAt = (data["createdAt"] as? com.google.firebase.Timestamp)?.seconds?.times(1000) ?: 0L

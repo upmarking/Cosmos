@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#111418"
+        android:pathData="M0,0h108v108h-108z"/>
+    <!-- Subtle cosmic star dots in background -->
+    <path
+        android:fillColor="#33FFFFFF"
+        android:pathData="M24,28a1.5,1.5 0 1,0 0.01,0 Z M84,32a1.2,1.2 0 1,0 0.01,0 Z M30,82a1,1 0 1,0 0.01,0 Z M76,78a1.5,1.5 0 1,0 0.01,0 Z"/>
+    <!-- Radial aura ring -->
+    <path
+        android:strokeColor="#228E8E93"
+        android:strokeWidth="1.2"
+        android:pathData="M54,16 A38,38 0 1,1 53.9,16 Z"/>
+</vector>

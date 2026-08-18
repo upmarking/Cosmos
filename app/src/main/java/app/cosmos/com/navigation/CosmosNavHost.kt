@@ -38,12 +38,13 @@ import app.cosmos.com.screens.onboarding.ResetPasswordScreen
 import app.cosmos.com.screens.onboarding.SplashScreen
 import app.cosmos.com.screens.onboarding.WelcomeScreen
 import app.cosmos.com.screens.onboarding.YourVisionScreen
-import app.cosmos.com.screens.profile.MembershipTiersScreen
+import app.cosmos.com.screens.profile.CosmicMembershipScreen
 import app.cosmos.com.screens.profile.NetworkingDashboardScreen
 import app.cosmos.com.screens.profile.NotificationsCenterScreen
 import app.cosmos.com.screens.profile.SettingsPrivacyScreen
 import app.cosmos.com.screens.profile.EditProfileScreen
 import app.cosmos.com.screens.profile.HelpSupportScreen
+import app.cosmos.com.screens.profile.ChangeAppIconScreen
 import app.cosmos.com.screens.profile.NetworkRelationsScreen
 import app.cosmos.com.screens.social.SocialFeedScreen
 import app.cosmos.com.screens.social.PostDetailScreen
@@ -465,7 +466,7 @@ fun CosmosNavHost(
             )
         }
         composable(Screen.MembershipTiers.route) {
-            MembershipTiersScreen(
+            CosmicMembershipScreen(
                 onBack = { navController.popBackStack() },
                 authViewModel = authViewModel
             )
@@ -493,6 +494,7 @@ fun CosmosNavHost(
                 onEditProfileTap = {
                     navController.navigate(Screen.EditProfile.route)
                 },
+                onNavigate = { route -> navController.navigate(route) },
                 authViewModel = authViewModel
             )
         }
@@ -504,6 +506,11 @@ fun CosmosNavHost(
         }
         composable(Screen.HelpSupport.route) {
             HelpSupportScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.ChangeAppIcon.route) {
+            ChangeAppIconScreen(
                 onBack = { navController.popBackStack() }
             )
         }

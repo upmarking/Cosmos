@@ -80,6 +80,7 @@ sealed class Screen(val route: String) {
     object Settings : Screen("settings")
     object EditProfile : Screen("edit_profile")
     object HelpSupport : Screen("help_support")
+    object ChangeAppIcon : Screen("change_app_icon")
 
     // ── Social sub-screens ───────────────────────────────────────────────────
     object SocialPostDetail : Screen("social_post_detail/{postId}") {

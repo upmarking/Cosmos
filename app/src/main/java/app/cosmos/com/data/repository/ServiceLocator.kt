@@ -31,6 +31,8 @@ object ServiceLocator {
     val introRepository: IntroRepository by lazy { FirestoreIntroRepository(firestore, profileRepository) }
     val connectionRequestRepository: ConnectionRequestRepository by lazy { FirestoreConnectionRequestRepository(firestore) }
     val socialRepository: SocialRepository by lazy { FirestoreSocialRepository(firestore) }
+    val membershipRepository: MembershipRepository by lazy { MembershipRepository() }
+    val giftCardRepository: GiftCardRepository by lazy { GiftCardRepository(firestore) }
 
     val aiSummaryService: AiSummaryService by lazy {
         GeminiAiSummaryService()
