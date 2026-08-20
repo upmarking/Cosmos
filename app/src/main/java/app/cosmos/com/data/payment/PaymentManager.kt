@@ -150,26 +150,30 @@ object PaymentManager {
      */
     fun formatIndianPrice(amount: Int): String {
         if (amount == 0) return "₹0"
-        val amountStr = amount.toString()
-        val result = StringBuilder()
-        val len = amountStr.length
+        val isNegative = amount < 0
+        val absAmount = if (isNegative) -amount else amount
+        val amountStr = absAmount.toString()
+        val prefix = if (isNegative) "-₹" else "₹"
 
-        // Last 3 digits
-        if (len <= 3) return "₹$amountStr"
+        if (amountStr.length <= 3) {
+            return "$prefix$amountStr"
+        }
 
-        result.insert(0, amountStr.substring(len - 3))
-        var remaining = amountStr.substring(0, len - 3)
+        val lastThree = amountStr.substring(amountStr.length - 3)
+        val rest = amountStr.substring(0, amountStr.length - 3)
 
-        // Group remaining digits in pairs (Indian system)
+        var remaining = rest
+        val parts = mutableListOf<String>()
         while (remaining.length > 2) {
-            result.insert(0, ",${remaining.substring(remaining.length - 2)}")
+            parts.add(0, remaining.substring(remaining.length - 2))
             remaining = remaining.substring(0, remaining.length - 2)
         }
         if (remaining.isNotEmpty()) {
-            result.insert(0, "$remaining,")
+            parts.add(0, remaining)
         }
 
-        return "₹$result"
+        val formattedRest = parts.joinToString(",")
+        return "$prefix$formattedRest,$lastThree"
     }
 
     /**

@@ -60,7 +60,7 @@
         <!-- ── Dynamic App Icon Activity Aliases ────────────────────────── -->
         <activity-alias
             android:name=".MainActivityAliasAsteroid"
-            android:enabled="true"
+            android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/ic_launcher_asteroid"
             android:roundIcon="@mipmap/ic_launcher_asteroid_round"

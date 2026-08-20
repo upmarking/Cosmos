@@ -3,10 +3,11 @@ package app.cosmos.com.screens.profile
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -22,19 +23,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Fill
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.cosmos.com.R
 import app.cosmos.com.data.util.AppIconManager
 import app.cosmos.com.data.util.CosmosAppIcon
 import app.cosmos.com.ui.theme.*
@@ -125,11 +122,13 @@ fun ChangeAppIconScreen(
                         color = Color(0xFF2E3440).copy(alpha = 0.6f),
                         shape = RoundedCornerShape(20.dp)
                     )
-                    .padding(vertical = 20.dp, horizontal = 16.dp)
+                    .padding(vertical = 20.dp, horizontal = 12.dp)
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     CosmosAppIcon.values().forEach { iconOption ->
@@ -155,9 +154,9 @@ fun ChangeAppIconScreen(
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(28.dp))
 
-            // ── Icon Name & Description ──────────────────────────────────
+            // ── Active Icon Card & Quick Reset ───────────────────────────
             AnimatedContent(
                 targetState = activeIcon,
                 transitionSpec = { fadeIn(tween(250)) togetherWith fadeOut(tween(150)) },
@@ -169,30 +168,37 @@ fun ChangeAppIconScreen(
                         .clip(RoundedCornerShape(16.dp))
                         .background(Color(0xFF181B22))
                         .border(1.dp, Color(0xFF282D37), RoundedCornerShape(16.dp))
-                        .padding(16.dp)
+                        .padding(18.dp)
                 ) {
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = selected.emoji,
-                            fontSize = 18.sp
-                        )
-                        Text(
-                            text = selected.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color(0xFFE6E8EE),
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = selected.emoji,
+                                fontSize = 20.sp
+                            )
+                            Text(
+                                text = selected.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color(0xFFE6E8EE),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(Color(0xFF283248))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
-                                text = "Active",
+                                text = if (selected == CosmosAppIcon.DEFAULT) "Default Active" else "Active",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color(0xFF8AB4F8),
                                 fontWeight = FontWeight.Bold
@@ -200,13 +206,33 @@ fun ChangeAppIconScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(8.dp))
 
                     Text(
                         text = selected.subtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF9AA0A6)
                     )
+
+                    if (selected != CosmosAppIcon.DEFAULT) {
+                        Spacer(Modifier.height(14.dp))
+                        OutlinedButton(
+                            onClick = {
+                                val success = AppIconManager.setAppIcon(context, CosmosAppIcon.DEFAULT)
+                                activeIcon = CosmosAppIcon.DEFAULT
+                                val msg = if (success) "Restored default Cosmos icon!" else "Set to Cosmos Classic"
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = CosmosPrimary
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, CosmosPrimary.copy(alpha = 0.5f))
+                        ) {
+                            Text("↺ Restore Default Cosmos Icon", fontSize = 13.sp)
+                        }
+                    }
                 }
             }
 
@@ -228,7 +254,7 @@ private fun AppIconSquircleItem(
 
     Box(
         modifier = Modifier
-            .size(68.dp)
+            .size(72.dp)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -239,19 +265,21 @@ private fun AppIconSquircleItem(
         // ── Main App Icon Squircle ───────────────────────────────────────
         Box(
             modifier = Modifier
-                .size(58.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .size(62.dp)
+                .clip(RoundedCornerShape(16.dp))
                 .background(Color(iconOption.previewBgColor))
                 .border(
-                    width = 1.dp,
-                    color = if (iconOption == CosmosAppIcon.ASTEROID) Color(0xFFD0D5DD) else Color(0xFF333842),
-                    shape = RoundedCornerShape(14.dp)
+                    width = if (isSelected) 2.dp else 1.dp,
+                    color = if (isSelected) Color(iconOption.previewBorderColor) else Color(0xFF333842),
+                    shape = RoundedCornerShape(16.dp)
                 ),
             contentAlignment = Alignment.Center
         ) {
             CosmosIconEmblemCanvas(
                 iconOption = iconOption,
-                modifier = Modifier.size(38.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(if (iconOption == CosmosAppIcon.DEFAULT) 0.dp else 6.dp)
             )
         }
 
@@ -267,10 +295,10 @@ private fun AppIconSquircleItem(
                     .offset(x = 2.dp, y = 2.dp)
                     .size(22.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF1E222B)) // dark ring border matching card
+                    .background(Color(0xFF1E222B))
                     .padding(2.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF8AB4F8)), // Google/Cosmos signature blue checkmark
+                    .background(Color(0xFF8AB4F8)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -285,142 +313,58 @@ private fun AppIconSquircleItem(
 }
 
 /**
- * Canvas drawing the authentic COSMOS "C" emblem corresponding to each style:
- * 1. ASTEROID: White squircle background with multi-color COSMOS "C" (Google icon #1 style)
- * 2. MOON: Dark slate background with vibrant multi-color COSMOS "C" (Google icon #2 style)
- * 3. EARTH: White squircle background with bold dark COSMOS "C" (Google icon #3 style)
- * 4. SUN: Stealth black background with crisp pure white COSMOS "C" (Google icon #4 style)
+ * Renders the authentic original Cosmos logo and official tier launcher icons.
  */
 @Composable
-private fun CosmosIconEmblemCanvas(
+fun CosmosIconEmblemCanvas(
     iconOption: CosmosAppIcon,
     modifier: Modifier = Modifier
 ) {
-    Canvas(modifier = modifier) {
-        val center = Offset(size.width / 2f, size.height / 2f)
-        val radius = size.width * 0.38f
-        val strokeWidth = size.width * 0.22f
-
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
         when (iconOption) {
-            // ── Style 1: Classic White with Multi-Color "C" (Google #1) ─
+            CosmosAppIcon.DEFAULT -> {
+                Image(
+                    painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+                    contentDescription = "Original Cosmos Logo",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
             CosmosAppIcon.ASTEROID -> {
-                // Red, Yellow, Green, Blue gradient sweeps
-                drawCosmosMultiColorG(center, radius, strokeWidth)
+                Image(
+                    painter = painterResource(id = R.drawable.ic_launcher_fg_asteroid),
+                    contentDescription = "Asteroid Emblem",
+                    modifier = Modifier.fillMaxSize(0.9f),
+                    contentScale = ContentScale.Fit
+                )
             }
-
-            // ── Style 2: Dark Background with Multi-Color "C" (Google #2) ──
             CosmosAppIcon.MOON -> {
-                // Dark background multi-color vibrant sweep
-                drawCosmosMultiColorG(center, radius, strokeWidth)
+                Image(
+                    painter = painterResource(id = R.drawable.ic_launcher_fg_moon),
+                    contentDescription = "Lunar Moon Emblem",
+                    modifier = Modifier.fillMaxSize(0.9f),
+                    contentScale = ContentScale.Fit
+                )
             }
-
-            // ── Style 3: Monochrome Light with Bold Black "C" (Google #3) ──
             CosmosAppIcon.EARTH -> {
-                drawCosmosSolidG(center, radius, strokeWidth, Color(0xFF1B1F27))
+                Image(
+                    painter = painterResource(id = R.drawable.ic_launcher_fg_earth),
+                    contentDescription = "Terra Earth Emblem",
+                    modifier = Modifier.fillMaxSize(0.9f),
+                    contentScale = ContentScale.Fit
+                )
             }
-
-            // ── Style 4: Stealth Dark with Crisp White "C" (Google #4) ──────
             CosmosAppIcon.SUN -> {
-                drawCosmosSolidG(center, radius, strokeWidth, Color(0xFFFFFFFF))
+                Image(
+                    painter = painterResource(id = R.drawable.ic_launcher_fg_sun),
+                    contentDescription = "Solar Sun Emblem",
+                    modifier = Modifier.fillMaxSize(0.9f),
+                    contentScale = ContentScale.Fit
+                )
             }
         }
     }
-}
-
-/**
- * Helper to draw the multi-color circular "G" / "C" emblem with horizontal crossbar.
- */
-private fun DrawScope.drawCosmosMultiColorG(
-    center: Offset,
-    radius: Float,
-    strokeWidth: Float
-) {
-    val rect = Size(radius * 2f, radius * 2f)
-    val topLeft = Offset(center.x - radius, center.y - radius)
-
-    // Red arc (top-left)
-    drawArc(
-        color = Color(0xFFEA4335),
-        startAngle = 140f,
-        sweepAngle = 100f,
-        useCenter = false,
-        topLeft = topLeft,
-        size = rect,
-        style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
-    )
-
-    // Yellow arc (bottom-left)
-    drawArc(
-        color = Color(0xFFFBBC05),
-        startAngle = 90f,
-        sweepAngle = 55f,
-        useCenter = false,
-        topLeft = topLeft,
-        size = rect,
-        style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
-    )
-
-    // Green arc (bottom)
-    drawArc(
-        color = Color(0xFF34A853),
-        startAngle = 0f,
-        sweepAngle = 95f,
-        useCenter = false,
-        topLeft = topLeft,
-        size = rect,
-        style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
-    )
-
-    // Blue arc + crossbar (right side)
-    drawArc(
-        color = Color(0xFF4285F4),
-        startAngle = 235f,
-        sweepAngle = 80f,
-        useCenter = false,
-        topLeft = topLeft,
-        size = rect,
-        style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
-    )
-
-    // Blue horizontal bar
-    drawLine(
-        color = Color(0xFF4285F4),
-        start = center,
-        end = Offset(center.x + radius + strokeWidth * 0.45f, center.y),
-        strokeWidth = strokeWidth,
-        cap = StrokeCap.Square
-    )
-}
-
-/**
- * Helper to draw monochrome solid "G" / "C" emblem.
- */
-private fun DrawScope.drawCosmosSolidG(
-    center: Offset,
-    radius: Float,
-    strokeWidth: Float,
-    color: Color
-) {
-    val rect = Size(radius * 2f, radius * 2f)
-    val topLeft = Offset(center.x - radius, center.y - radius)
-
-    // Main arc opening to the right
-    drawArc(
-        color = color,
-        startAngle = 35f,
-        sweepAngle = 290f,
-        useCenter = false,
-        topLeft = topLeft,
-        size = rect,
-        style = Stroke(width = strokeWidth, cap = StrokeCap.Square)
-    )
-
-    // Horizontal bar
-    drawLine(
-        color = color,
-        start = center,
-        end = Offset(center.x + radius + strokeWidth * 0.45f, center.y),
-        strokeWidth = strokeWidth,
-        cap = StrokeCap.Square
-    )
 }

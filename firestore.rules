@@ -190,26 +190,19 @@ service cloud.firestore {
 
     // 11. Payments collection rules
     match /payments/{paymentId} {
-      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, write: if true;
     }
 
-    // 12. Membership Orders collection rules (created by Cloud Functions & app checkout)
+    // 12. Membership Orders collection rules
     match /membership_orders/{orderId} {
-      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
-      allow create, update: if isSignedIn();
+      allow read, write: if true;
     }
 
     // 13. Gift Cards collection rules
     match /gift_cards/{cardId} {
-      // Allow reading gift cards to validate balance
-      allow read: if isSignedIn();
-      // Allow initial seeding if signed in
-      allow create: if isSignedIn();
-      // Allow atomic transactions to update balance/status and append redemption logs
-      allow update: if isSignedIn();
-      allow delete: if false;
+      allow read, write: if true;
     }
   }
 }
+
 

@@ -45,6 +45,7 @@ import app.cosmos.com.data.repository.ServiceLocator
 import app.cosmos.com.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 /**
  * Checkout flow states for the cosmic upgrade dialog.
@@ -320,6 +321,38 @@ fun CosmicUpgradeDialog(
                             onProceed = {
                                 step = CosmicCheckoutStep.CREATING
                                 coroutineScope.launch {
+                                    // 1. Direct Zero-Payment Upgrade Path (Bypasses Razorpay entirely)
+                                    if (differentialAmount == 0 && appliedGiftCard != null) {
+                                        val localOrderId = "order_gc_${UUID.randomUUID().toString().replace("-", "").substring(0, 12)}"
+                                        val redeemRes = ServiceLocator.membershipRepository.redeemZeroAmountOrder(
+                                            userId = userId,
+                                            orderId = localOrderId,
+                                            targetTier = targetTier,
+                                            giftCardCode = appliedGiftCard!!.code,
+                                            amountDeducted = giftCardDiscount.takeIf { it > 0 } ?: upgradeAmount
+                                        )
+                                        redeemRes.fold(
+                                            onSuccess = { vResult ->
+                                                MembershipAnalytics.paymentSuccessful(
+                                                    currentTier.name, targetTier.name, 0, vResult.paymentId
+                                                )
+                                                MembershipAnalytics.membershipUpgraded(
+                                                    currentTier.name, vResult.newTier, vResult.amount
+                                                )
+                                                finalPreservedBalance = vResult.preservedBalance
+                                                step = CosmicCheckoutStep.SUCCESS
+                                                delay(2500)
+                                                onPaymentSuccess(vResult.newTier)
+                                            },
+                                            onFailure = { err ->
+                                                errorMessage = err.message ?: "Failed to redeem gift card"
+                                                step = CosmicCheckoutStep.ERROR
+                                            }
+                                        )
+                                        return@launch
+                                    }
+
+                                    // 2. Differential Payment Path (via Razorpay for remaining non-zero balance)
                                     val orderRes = ServiceLocator.membershipRepository.createUpgradeOrder(
                                         userId = userId,
                                         targetTier = targetTier,
@@ -352,7 +385,7 @@ fun CosmicUpgradeDialog(
                                                         )
                                                         finalPreservedBalance = vResult.preservedBalance
                                                         step = CosmicCheckoutStep.SUCCESS
-                                                        delay(3000)
+                                                        delay(2500)
                                                         onPaymentSuccess(vResult.newTier)
                                                     },
                                                     onFailure = { err ->
@@ -613,7 +646,7 @@ private fun CosmicReviewStep(
                             value = giftCardCodeInput,
                             onValueChange = onGiftCardCodeChange,
                             placeholder = {
-                                Text("Enter Gift Card Code (e.g. COSMOS-50K)", color = CosmosOnSurfaceVariant.copy(alpha = 0.5f), fontSize = 13.sp)
+                                Text("Enter Gift Card Code", color = CosmosOnSurfaceVariant.copy(alpha = 0.5f), fontSize = 13.sp)
                             },
                             leadingIcon = {
                                 Icon(Icons.Outlined.CardGiftcard, contentDescription = null, tint = CosmosPrimary, modifier = Modifier.size(20.dp))

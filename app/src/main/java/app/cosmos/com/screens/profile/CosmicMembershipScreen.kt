@@ -1069,17 +1069,10 @@ fun CosmicGiftCardHubDialog(
     var validationError by remember { mutableStateOf<String?>(null) }
     var actionMessage by remember { mutableStateOf<String?>(null) }
 
-    val sampleDemoCards = listOf(
-        "COSMOS-LAUNCH-10K" to "₹10,000 Credit",
-        "COSMOS-GIFT-50K" to "₹49,999 (Full Moon)",
-        "COSMOS-GIFT-100K" to "₹1,00,000 (Earth)",
-        "COSMOS-SUPER-200K" to "₹1,99,999 (Full Sun)"
-    )
-
     fun checkCard(codeToCheck: String) {
         val trimmed = codeToCheck.trim().uppercase()
         if (trimmed.isBlank()) {
-            validationError = "Please enter a voucher code"
+            validationError = "Please enter a gift card code"
             return
         }
         searchCode = trimmed
@@ -1168,7 +1161,7 @@ fun CosmicGiftCardHubDialog(
                         validationError = null
                     },
                     label = { Text("Gift Card Code", color = CosmosOnSurfaceVariant) },
-                    placeholder = { Text("e.g. COSMOS-GIFT-50K", color = CosmosOnSurfaceVariant.copy(alpha = 0.4f)) },
+                    placeholder = { Text("Enter your code", color = CosmosOnSurfaceVariant.copy(alpha = 0.4f)) },
                     leadingIcon = {
                         Icon(Icons.Outlined.CardGiftcard, contentDescription = null, tint = CosmosPrimary)
                     },
@@ -1290,42 +1283,25 @@ fun CosmicGiftCardHubDialog(
                     }
                 }
 
-                // Sample Demo Codes quick picker
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        "SAMPLE TEST VOUCHERS (TAP TO LOAD)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = CosmosOnSurfaceVariant,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
-
-                    sampleDemoCards.forEach { (code, desc) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(CosmosGlass)
-                                .border(1.dp, CosmosGlassBorder, RoundedCornerShape(8.dp))
-                                .clickable {
-                                    checkCard(code)
-                                }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                code,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = CosmosPrimary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                desc,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = CosmosStarWhite.copy(alpha = 0.7f)
-                            )
-                        }
+                // Privacy info card
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(CosmosGlass)
+                        .border(1.dp, CosmosGlassBorder, RoundedCornerShape(12.dp))
+                        .padding(14.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text("🔒", fontSize = 16.sp)
+                        Text(
+                            "Gift card codes are private and confidential. Enter your unique code above to check its balance, or apply it directly during membership upgrade checkout.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = CosmosOnSurfaceVariant
+                        )
                     }
                 }
 

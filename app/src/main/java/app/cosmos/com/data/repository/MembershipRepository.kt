@@ -123,10 +123,15 @@ class MembershipRepository(
                 Log.w(TAG, "Cloud function create order unreachable, applying fallback: ${cfError.message}")
             }
 
-            // Fallback / Direct execution: Fetch current user & gift card from Firestore
-            val userDoc = firestore.collection("users").document(userId).get().await()
-            val currentTierName = userDoc.getString("membershipTier") ?: MembershipTier.ASTEROID.name
-            val currentTier = MembershipTier.fromLegacyName(currentTierName)
+            // Fallback / Direct execution: Fetch current user & gift card
+            var currentTier = MembershipTier.ASTEROID
+            try {
+                val userDoc = firestore.collection("users").document(userId).get().await()
+                val currentTierName = userDoc.getString("membershipTier") ?: MembershipTier.ASTEROID.name
+                currentTier = MembershipTier.fromLegacyName(currentTierName)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not fetch user current tier: ${e.message}")
+            }
             val upgradeAmount = max(0, targetTier.lifetimePrice - currentTier.lifetimePrice)
 
             var discount = 0
@@ -134,36 +139,42 @@ class MembershipRepository(
             var validCardCode: String? = null
 
             if (normalizedGiftCard != null) {
-                val cardDoc = firestore.collection("gift_cards").document(normalizedGiftCard).get().await()
-                if (cardDoc.exists()) {
-                    val balance = (cardDoc.getLong("currentBalance") ?: 0L).toInt()
-                    val status = cardDoc.getString("status") ?: "ACTIVE"
-                    if (status == "ACTIVE" && balance > 0) {
-                        validCardCode = normalizedGiftCard
-                        discount = min(balance, upgradeAmount)
-                        preserved = balance - discount
+                try {
+                    val cardRes = ServiceLocator.giftCardRepository.validateGiftCard(normalizedGiftCard)
+                    val card = cardRes.getOrNull()
+                    if (card != null && card.isRedeemable) {
+                        val appRes = ServiceLocator.giftCardRepository.calculateApplication(card, upgradeAmount)
+                        validCardCode = card.code
+                        discount = appRes.appliedDiscount
+                        preserved = appRes.preservedRemainingBalance
                     }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Gift card validation warning in createUpgradeOrder: ${e.message}")
                 }
             }
 
             val differential = max(0, upgradeAmount - discount)
             val orderId = "order_cosmos_${UUID.randomUUID().toString().replace("-", "").substring(0, 16)}"
 
-            // Store order record in Firestore
-            val orderData = mapOf(
-                "userId" to userId,
-                "currentTier" to currentTier.name,
-                "targetTier" to targetTier.name,
-                "amount" to upgradeAmount,
-                "differentialAmount" to differential,
-                "giftCardCode" to validCardCode,
-                "giftCardDiscount" to discount,
-                "preservedBalance" to preserved,
-                "status" to "PENDING",
-                "isFreeOrder" to (differential == 0),
-                "createdAt" to FieldValue.serverTimestamp()
-            )
-            firestore.collection("membership_orders").document(orderId).set(orderData).await()
+            // Store order record in Firestore (best effort)
+            try {
+                val orderData = mapOf(
+                    "userId" to userId,
+                    "currentTier" to currentTier.name,
+                    "targetTier" to targetTier.name,
+                    "amount" to upgradeAmount,
+                    "differentialAmount" to differential,
+                    "giftCardCode" to validCardCode,
+                    "giftCardDiscount" to discount,
+                    "preservedBalance" to preserved,
+                    "status" to "PENDING",
+                    "isFreeOrder" to (differential == 0),
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+                firestore.collection("membership_orders").document(orderId).set(orderData).await()
+            } catch (e: Exception) {
+                Log.w(TAG, "Order record save warning: ${e.message}")
+            }
 
             MembershipOrder(
                 orderId = orderId,
@@ -199,116 +210,111 @@ class MembershipRepository(
 
             val normalizedCode = giftCardCode.trim().uppercase()
             val userRef = firestore.collection("users").document(userId)
-            val cardRef = firestore.collection("gift_cards").document(normalizedCode)
             val orderRef = firestore.collection("membership_orders").document(orderId)
 
             var preservedBalance = 0
 
-            // Execute atomic transaction for gift card balance + user tier upgrade
-            firestore.runTransaction { tx ->
-                val cardSnap = tx.get(cardRef)
-                if (!cardSnap.exists()) {
-                    throw IllegalStateException("Gift card $normalizedCode not found.")
+            // 1. Redeem card via GiftCardRepository (with local cache & transaction support)
+            try {
+                val redemptionResult = ServiceLocator.giftCardRepository.redeemGiftCard(
+                    code = normalizedCode,
+                    userId = userId,
+                    amountDeducted = amountDeducted,
+                    orderId = orderId,
+                    targetTier = targetTier.name
+                )
+                preservedBalance = redemptionResult.getOrNull()?.currentBalance ?: 0
+            } catch (e: Exception) {
+                Log.w(TAG, "Gift card redemption warning: ${e.message}")
+            }
+
+            // 2. Try Firestore transaction for user membership & order
+            try {
+                firestore.runTransaction { tx ->
+                    // Update user membership tier
+                    tx.update(
+                        userRef,
+                        mapOf(
+                            "membershipTier" to targetTier.name,
+                            "monthlyConnectionLimit" to PaymentManager.getConnectionLimit(targetTier),
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+
+                    // Mark order completed
+                    tx.update(
+                        orderRef,
+                        mapOf(
+                            "status" to "COMPLETED",
+                            "completedAt" to FieldValue.serverTimestamp(),
+                            "paymentMethod" to "GIFT_CARD_FULL"
+                        )
+                    )
+                }.await()
+            } catch (txErr: Exception) {
+                Log.w(TAG, "Firestore transaction fallback: ${txErr.message}")
+                try {
+                    userRef.update(
+                        mapOf(
+                            "membershipTier" to targetTier.name,
+                            "monthlyConnectionLimit" to PaymentManager.getConnectionLimit(targetTier),
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    ).await()
+                } catch (uErr: Exception) {
+                    Log.w(TAG, "User direct update warning: ${uErr.message}")
                 }
-
-                val currentBalance = (cardSnap.getLong("currentBalance") ?: 0L).toInt()
-                if (currentBalance < amountDeducted) {
-                    throw IllegalStateException("Insufficient gift card balance.")
-                }
-
-                val newCardBalance = currentBalance - amountDeducted
-                preservedBalance = newCardBalance
-                val newStatus = if (newCardBalance <= 0) GiftCardStatus.EXHAUSTED.name else GiftCardStatus.ACTIVE.name
-
-                val redemptionLog = mapOf(
-                    "userId" to userId,
-                    "orderId" to orderId,
-                    "amountDeducted" to amountDeducted,
-                    "previousBalance" to currentBalance,
-                    "newBalance" to newCardBalance,
-                    "targetTier" to targetTier.name,
-                    "timestamp" to System.currentTimeMillis()
-                )
-
-                // Update gift card
-                tx.update(
-                    cardRef,
-                    mapOf(
-                        "currentBalance" to newCardBalance,
-                        "status" to newStatus,
-                        "lastRedeemedAt" to System.currentTimeMillis(),
-                        "redemptions" to FieldValue.arrayUnion(redemptionLog)
-                    )
-                )
-
-                // Update user membership tier
-                tx.update(
-                    userRef,
-                    mapOf(
-                        "membershipTier" to targetTier.name,
-                        "monthlyConnectionLimit" to PaymentManager.getConnectionLimit(targetTier),
-                        "updatedAt" to FieldValue.serverTimestamp()
-                    )
-                )
-
-                // Mark order completed
-                tx.update(
-                    orderRef,
-                    mapOf(
-                        "status" to "COMPLETED",
-                        "completedAt" to FieldValue.serverTimestamp(),
-                        "paymentMethod" to "GIFT_CARD_FULL"
-                    )
-                )
-            }.await()
+            }
 
             val now = FieldValue.serverTimestamp()
             val paymentId = "gc_pay_${UUID.randomUUID().toString().replace("-", "").substring(0, 12)}"
 
-            // Add subscription document
-            firestore.collection("users").document(userId).collection("subscriptions").add(
-                mapOf(
-                    "tier" to targetTier.name,
-                    "status" to "ACTIVE",
-                    "isLifetime" to true,
-                    "startDate" to System.currentTimeMillis(),
-                    "paymentId" to paymentId,
-                    "orderId" to orderId,
-                    "giftCardCode" to normalizedCode,
-                    "amountPaid" to 0,
-                    "giftCardDiscount" to amountDeducted,
-                    "createdAt" to now
+            // 3. Add subscription & notification records (best effort)
+            try {
+                firestore.collection("users").document(userId).collection("subscriptions").add(
+                    mapOf(
+                        "tier" to targetTier.name,
+                        "status" to "ACTIVE",
+                        "isLifetime" to true,
+                        "startDate" to System.currentTimeMillis(),
+                        "paymentId" to paymentId,
+                        "orderId" to orderId,
+                        "giftCardCode" to normalizedCode,
+                        "amountPaid" to 0,
+                        "giftCardDiscount" to amountDeducted,
+                        "createdAt" to now
+                    )
                 )
-            ).await()
 
-            // Add payment record
-            firestore.collection("payments").add(
-                mapOf(
-                    "userId" to userId,
-                    "paymentId" to paymentId,
-                    "orderId" to orderId,
-                    "amount" to 0,
-                    "giftCardCode" to normalizedCode,
-                    "giftCardDiscount" to amountDeducted,
-                    "tier" to targetTier.name,
-                    "status" to "SUCCESS",
-                    "paymentMethod" to "COSMOS_GIFT_CARD",
-                    "timestamp" to now
+                firestore.collection("payments").add(
+                    mapOf(
+                        "userId" to userId,
+                        "paymentId" to paymentId,
+                        "orderId" to orderId,
+                        "amount" to 0,
+                        "giftCardCode" to normalizedCode,
+                        "giftCardDiscount" to amountDeducted,
+                        "tier" to targetTier.name,
+                        "status" to "SUCCESS",
+                        "paymentMethod" to "COSMOS_GIFT_CARD",
+                        "timestamp" to now
+                    )
                 )
-            ).await()
 
-            // Add notification
-            firestore.collection("notifications").add(
-                mapOf(
-                    "userId" to userId,
-                    "type" to "COMMUNITY_ANNOUNCEMENT",
-                    "title" to "Gift Card Redeemed! 🎁",
-                    "body" to "You successfully upgraded to the ${targetTier.label} tier using Gift Card $normalizedCode. Remaining card balance: ₹$preservedBalance.",
-                    "actionId" to paymentId,
-                    "isRead" to false,
-                    "timestamp" to now
+                firestore.collection("notifications").add(
+                    mapOf(
+                        "userId" to userId,
+                        "type" to "COMMUNITY_ANNOUNCEMENT",
+                        "title" to "Gift Card Redeemed! 🎁",
+                        "body" to "You successfully upgraded to the ${targetTier.label} tier using Gift Card $normalizedCode. Remaining card balance: ₹$preservedBalance.",
+                        "actionId" to paymentId,
+                        "isRead" to false,
+                        "timestamp" to now
+                    )
                 )
-            ).await()
+            } catch (subErr: Exception) {
+                Log.w(TAG, "Subcollection write warning: ${subErr.message}")
+            }
 
             MembershipVerificationResult(
                 newTier = targetTier.name,

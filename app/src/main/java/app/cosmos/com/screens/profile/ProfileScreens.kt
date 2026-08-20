@@ -1438,15 +1438,17 @@ fun CosmosAppIconDialog(
                                 // App Icon Preview Frame
                                 Box(
                                     modifier = Modifier
-                                        .size(52.dp)
+                                        .size(54.dp)
                                         .clip(RoundedCornerShape(14.dp))
                                         .background(Color(iconOption.previewBgColor))
                                         .border(1.5.dp, borderColor.copy(alpha = 0.6f), RoundedCornerShape(14.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        iconOption.emoji,
-                                        fontSize = 24.sp
+                                    CosmosIconEmblemCanvas(
+                                        iconOption = iconOption,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(if (iconOption == app.cosmos.com.data.util.CosmosAppIcon.DEFAULT) 0.dp else 4.dp)
                                     )
                                 }
 

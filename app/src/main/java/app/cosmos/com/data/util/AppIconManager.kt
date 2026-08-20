@@ -14,56 +14,66 @@ enum class CosmosAppIcon(
     val id: String,
     val title: String,
     val subtitle: String,
-    val aliasName: String,
+    val aliasName: String?,
     val requiredTier: MembershipTier,
     val emoji: String,
     val previewBgColor: Long,
     val previewBorderColor: Long
 ) {
+    DEFAULT(
+        id = "default",
+        title = "Cosmos Classic",
+        subtitle = "Original Celestial Core (Default)",
+        aliasName = null,
+        requiredTier = MembershipTier.ASTEROID,
+        emoji = "🪐",
+        previewBgColor = 0xFF0A0A1E,
+        previewBorderColor = 0xFF8083FF
+    ),
     ASTEROID(
         id = "asteroid",
-        title = "Light Multi-Color",
-        subtitle = "Classic White & Rainbow Accent",
+        title = "Asteroid",
+        subtitle = "Electric Indigo & Orbital Ring",
         aliasName = "app.cosmos.com.MainActivityAliasAsteroid",
         requiredTier = MembershipTier.ASTEROID,
-        emoji = "✨",
-        previewBgColor = 0xFFFFFFFF,
-        previewBorderColor = 0xFFD0D5DD
+        emoji = "☄️",
+        previewBgColor = 0xFF111418,
+        previewBorderColor = 0xFF8083FF
     ),
     MOON(
         id = "moon",
-        title = "Dark Multi-Color",
-        subtitle = "Slate Dark & Rainbow Accent",
+        title = "Lunar Moon",
+        subtitle = "Crescent & Glowing Ring",
         aliasName = "app.cosmos.com.MainActivityAliasMoon",
         requiredTier = MembershipTier.ASTEROID,
         emoji = "🌙",
-        previewBgColor = 0xFF1B1E26,
-        previewBorderColor = 0xFF4A5568
+        previewBgColor = 0xFF0D111A,
+        previewBorderColor = 0xFFADC6FF
     ),
     EARTH(
         id = "earth",
-        title = "Monochrome Light",
-        subtitle = "Pure White & Obsidian Accent",
+        title = "Terra Earth",
+        subtitle = "Atmosphere & Continents",
         aliasName = "app.cosmos.com.MainActivityAliasEarth",
         requiredTier = MembershipTier.ASTEROID,
-        emoji = "⚪",
-        previewBgColor = 0xFFFFFFFF,
-        previewBorderColor = 0xFFD0D5DD
+        emoji = "🌍",
+        previewBgColor = 0xFF08101A,
+        previewBorderColor = 0xFF34A853
     ),
     SUN(
         id = "sun",
-        title = "Stealth Dark",
-        subtitle = "OLED Black & Crisp White",
+        title = "Solar Sun",
+        subtitle = "Radiant Corona & Amber Core",
         aliasName = "app.cosmos.com.MainActivityAliasSun",
         requiredTier = MembershipTier.ASTEROID,
-        emoji = "⚫",
-        previewBgColor = 0xFF0B0C10,
-        previewBorderColor = 0xFF333842
+        emoji = "☀️",
+        previewBgColor = 0xFF0D0B08,
+        previewBorderColor = 0xFFFFB300
     );
 
     companion object {
         fun fromId(id: String): CosmosAppIcon {
-            return values().firstOrNull { it.id.equals(id, ignoreCase = true) } ?: ASTEROID
+            return values().firstOrNull { it.id.equals(id, ignoreCase = true) } ?: DEFAULT
         }
     }
 }
@@ -81,7 +91,7 @@ object AppIconManager {
      */
     fun getActiveIcon(context: Context): CosmosAppIcon {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val savedId = prefs.getString(KEY_ACTIVE_ICON, CosmosAppIcon.ASTEROID.id) ?: CosmosAppIcon.ASTEROID.id
+        val savedId = prefs.getString(KEY_ACTIVE_ICON, CosmosAppIcon.DEFAULT.id) ?: CosmosAppIcon.DEFAULT.id
         return CosmosAppIcon.fromId(savedId)
     }
 
@@ -93,37 +103,60 @@ object AppIconManager {
         return try {
             val pm = context.packageManager
             val packageName = context.packageName
+            val defaultActivity = ComponentName(packageName, "app.cosmos.com.MainActivity")
 
-            // Enable target icon alias
-            val targetComponent = ComponentName(packageName, newIcon.aliasName)
-            pm.setComponentEnabledSetting(
-                targetComponent,
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                PackageManager.DONT_KILL_APP
-            )
+            if (newIcon.aliasName == null) {
+                // ── Switch back to DEFAULT (normal app logo) ────────────────
+                // 1. Enable MainActivity
+                pm.setComponentEnabledSetting(
+                    defaultActivity,
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    PackageManager.DONT_KILL_APP
+                )
 
-            // Disable all other icon aliases
-            CosmosAppIcon.values().forEach { icon ->
-                if (icon != newIcon) {
-                    val comp = ComponentName(packageName, icon.aliasName)
+                // 2. Disable all activity aliases
+                CosmosAppIcon.values().forEach { icon ->
+                    icon.aliasName?.let { alias ->
+                        val comp = ComponentName(packageName, alias)
+                        pm.setComponentEnabledSetting(
+                            comp,
+                            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                            PackageManager.DONT_KILL_APP
+                        )
+                    }
+                }
+            } else {
+                // ── Switch to selected Alias ─────────────────────────────────
+                // 1. Enable target icon alias
+                val targetComponent = ComponentName(packageName, newIcon.aliasName)
+                pm.setComponentEnabledSetting(
+                    targetComponent,
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    PackageManager.DONT_KILL_APP
+                )
+
+                // 2. Disable all other icon aliases
+                CosmosAppIcon.values().forEach { icon ->
+                    if (icon != newIcon && icon.aliasName != null) {
+                        val comp = ComponentName(packageName, icon.aliasName)
+                        pm.setComponentEnabledSetting(
+                            comp,
+                            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                            PackageManager.DONT_KILL_APP
+                        )
+                    }
+                }
+
+                // 3. Disable the default unaliased MainActivity launcher to avoid duplicates
+                try {
                     pm.setComponentEnabledSetting(
-                        comp,
+                        defaultActivity,
                         PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                         PackageManager.DONT_KILL_APP
                     )
+                } catch (e: Exception) {
+                    Log.d(TAG, "Default activity already disabled: ${e.message}")
                 }
-            }
-
-            // Also disable the default unaliased MainActivity launcher if alias is active
-            val defaultActivity = ComponentName(packageName, "app.cosmos.com.MainActivity")
-            try {
-                pm.setComponentEnabledSetting(
-                    defaultActivity,
-                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                    PackageManager.DONT_KILL_APP
-                )
-            } catch (e: Exception) {
-                Log.d(TAG, "Default activity already handled: ${e.message}")
             }
 
             // Persist choice

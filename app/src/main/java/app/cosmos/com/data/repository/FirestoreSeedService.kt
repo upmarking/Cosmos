@@ -430,18 +430,31 @@ object FirestoreSeedService {
     }
 
     /**
-     * Seeds initial Cosmic Gift Cards if the collection is empty.
+     * Seeds initial Cosmic Gift Cards for all membership plans and tiers.
      */
     suspend fun seedGiftCards(firestore: FirebaseFirestore) {
         val giftCards = listOf(
+            // ── Moon Tier Plans (₹49,999) ──────────────────────────────────
             mapOf(
-                "code" to "COSMOS-LAUNCH-10K",
-                "initialValue" to 10000,
-                "currentBalance" to 10000,
+                "code" to "COSMOS-MOON-PASS",
+                "initialValue" to 49999,
+                "currentBalance" to 49999,
                 "currency" to "INR",
                 "status" to "ACTIVE",
-                "title" to "Early Pioneer Voucher",
-                "description" to "Enjoy ₹10,000 credit towards any lifetime membership tier.",
+                "title" to "Lunar Explorer Pass",
+                "description" to "100% full coverage for COSMOS Moon Tier Lifetime Membership.",
+                "createdAt" to System.currentTimeMillis(),
+                "expiresAt" to null,
+                "createdBy" to "COSMOS Foundation"
+            ),
+            mapOf(
+                "code" to "MOON-LUNAR-2026",
+                "initialValue" to 49999,
+                "currentBalance" to 49999,
+                "currency" to "INR",
+                "status" to "ACTIVE",
+                "title" to "Lunar Access Key",
+                "description" to "Direct unlock code for Moon Lifetime Tier.",
                 "createdAt" to System.currentTimeMillis(),
                 "expiresAt" to null,
                 "createdBy" to "COSMOS Foundation"
@@ -452,8 +465,34 @@ object FirestoreSeedService {
                 "currentBalance" to 49999,
                 "currency" to "INR",
                 "status" to "ACTIVE",
-                "title" to "Lunar Explorer Pass",
-                "description" to "Covers the full Moon Tier lifetime membership (₹49,999 value).",
+                "title" to "Lunar Voucher",
+                "description" to "₹49,999 gift card credit towards COSMOS membership.",
+                "createdAt" to System.currentTimeMillis(),
+                "expiresAt" to null,
+                "createdBy" to "COSMOS Foundation"
+            ),
+
+            // ── Earth Tier Plans (₹99,999) ─────────────────────────────────
+            mapOf(
+                "code" to "COSMOS-EARTH-ACCESS",
+                "initialValue" to 99999,
+                "currentBalance" to 99999,
+                "currency" to "INR",
+                "status" to "ACTIVE",
+                "title" to "Earth Tier Master Key",
+                "description" to "100% full coverage for COSMOS Earth Tier Lifetime Membership.",
+                "createdAt" to System.currentTimeMillis(),
+                "expiresAt" to null,
+                "createdBy" to "COSMOS Foundation"
+            ),
+            mapOf(
+                "code" to "EARTH-EMPIRE-2026",
+                "initialValue" to 99999,
+                "currentBalance" to 99999,
+                "currency" to "INR",
+                "status" to "ACTIVE",
+                "title" to "Earth Empire Pass",
+                "description" to "Direct unlock code for Earth Lifetime Tier.",
                 "createdAt" to System.currentTimeMillis(),
                 "expiresAt" to null,
                 "createdBy" to "COSMOS Foundation"
@@ -465,7 +504,33 @@ object FirestoreSeedService {
                 "currency" to "INR",
                 "status" to "ACTIVE",
                 "title" to "Cosmic Orbit Grant",
-                "description" to "₹1,00,000 credit. Covers Earth Tier or preserves remaining balance.",
+                "description" to "₹1,00,000 credit. Covers Earth Tier with preserved remainder.",
+                "createdAt" to System.currentTimeMillis(),
+                "expiresAt" to null,
+                "createdBy" to "COSMOS Foundation"
+            ),
+
+            // ── Sun Tier Plans (₹1,99,999) ─────────────────────────────────
+            mapOf(
+                "code" to "COSMOS-SUN-MASTER",
+                "initialValue" to 199999,
+                "currentBalance" to 199999,
+                "currency" to "INR",
+                "status" to "ACTIVE",
+                "title" to "Solar Elite Master Key",
+                "description" to "100% full coverage for COSMOS Sun Tier Lifetime Membership.",
+                "createdAt" to System.currentTimeMillis(),
+                "expiresAt" to null,
+                "createdBy" to "COSMOS Foundation"
+            ),
+            mapOf(
+                "code" to "SUN-SOLAR-ELITE",
+                "initialValue" to 199999,
+                "currentBalance" to 199999,
+                "currency" to "INR",
+                "status" to "ACTIVE",
+                "title" to "Solar Founder Key",
+                "description" to "Direct unlock code for Sun Lifetime Tier.",
                 "createdAt" to System.currentTimeMillis(),
                 "expiresAt" to null,
                 "createdBy" to "COSMOS Foundation"
@@ -476,8 +541,22 @@ object FirestoreSeedService {
                 "currentBalance" to 199999,
                 "currency" to "INR",
                 "status" to "ACTIVE",
-                "title" to "Solar Elite Master Key",
-                "description" to "Covers the full Sun Tier lifetime membership (₹1,99,999 value).",
+                "title" to "Cosmic Super Pass",
+                "description" to "₹1,99,999 full access code for Sun Tier.",
+                "createdAt" to System.currentTimeMillis(),
+                "expiresAt" to null,
+                "createdBy" to "COSMOS Foundation"
+            ),
+
+            // ── Flexible Multi-Use Credits (Any Tier) ──────────────────────
+            mapOf(
+                "code" to "COSMOS-LAUNCH-10K",
+                "initialValue" to 10000,
+                "currentBalance" to 10000,
+                "currency" to "INR",
+                "status" to "ACTIVE",
+                "title" to "Early Pioneer Voucher",
+                "description" to "₹10,000 credit towards any lifetime membership tier.",
                 "createdAt" to System.currentTimeMillis(),
                 "expiresAt" to null,
                 "createdBy" to "COSMOS Foundation"
@@ -490,6 +569,30 @@ object FirestoreSeedService {
                 "status" to "ACTIVE",
                 "title" to "Genesis Creator Voucher",
                 "description" to "₹25,000 stored credit with preserved multi-use balance.",
+                "createdAt" to System.currentTimeMillis(),
+                "expiresAt" to null,
+                "createdBy" to "COSMOS Foundation"
+            ),
+            mapOf(
+                "code" to "COSMOS-CREDIT-75K",
+                "initialValue" to 75000,
+                "currentBalance" to 75000,
+                "currency" to "INR",
+                "status" to "ACTIVE",
+                "title" to "Nebula Grant Voucher",
+                "description" to "₹75,000 stored credit with preserved balance.",
+                "createdAt" to System.currentTimeMillis(),
+                "expiresAt" to null,
+                "createdBy" to "COSMOS Foundation"
+            ),
+            mapOf(
+                "code" to "COSMOS-VIP-150K",
+                "initialValue" to 150000,
+                "currentBalance" to 150000,
+                "currency" to "INR",
+                "status" to "ACTIVE",
+                "title" to "VIP Expansion Key",
+                "description" to "₹1,50,000 stored credit towards high-tier memberships.",
                 "createdAt" to System.currentTimeMillis(),
                 "expiresAt" to null,
                 "createdBy" to "COSMOS Foundation"
