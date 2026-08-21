@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +18,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.cosmos.com.ui.components.*
 import app.cosmos.com.ui.theme.*
 import app.cosmos.com.ui.viewmodel.AuthViewModel
@@ -34,13 +37,20 @@ fun EventLobbyScreen(
         eventViewModel.selectEvent(eventId)
         eventViewModel.loadEventParticipants(eventId)
         eventViewModel.loadEventRounds(eventId)
+        eventViewModel.loadEventRegistrants(eventId)
     }
 
     val eventState by eventViewModel.activeEvent.collectAsState()
     val participants by eventViewModel.eventParticipants.collectAsState()
     val eventRounds by eventViewModel.eventRounds.collectAsState()
+    val eventRegistrants by eventViewModel.eventRegistrants.collectAsState()
     val currentUserState by authViewModel.currentUser.collectAsState()
     val currentUserId = currentUserState?.id
+
+    // Registration dialog state
+    var showRegistrationDialog by remember { mutableStateOf(false) }
+    var registrationName by remember(currentUserState) { mutableStateOf(currentUserState?.name ?: "") }
+    var registrationEmail by remember(currentUserState) { mutableStateOf(currentUserState?.email ?: "") }
 
     if (eventState == null) {
         CosmosAmbientBackground {
@@ -52,6 +62,7 @@ fun EventLobbyScreen(
     }
 
     val event = eventState!!
+    val isCreator = event.createdBy == currentUserId
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("Overview", "Participants", "Schedule", "My Meetings")
 
@@ -119,9 +130,9 @@ fun EventLobbyScreen(
                     }
                     Spacer(Modifier.height(20.dp))
                     CosmosButton(
-                        text = if (event.isRegistered) "✓ Registered" else "Register Now",
-                        onClick = { eventViewModel.register(eventId) },
-                        enabled = !event.isRegistered
+                        text = if (isCreator) "✓ Hosting" else if (event.isRegistered) "✓ Participating" else "Participate",
+                        onClick = { showRegistrationDialog = true },
+                        enabled = !event.isRegistered && !isCreator
                     )
                 }
             }
@@ -173,29 +184,115 @@ fun EventLobbyScreen(
                         }
                     }
                     1 -> {
-                        val isCreator = event.createdBy == currentUserId
+                        // Participants tab — host sees registrant name + email
                         if (!isCreator) {
                             item {
                                 CosmosGlassCard(showTopGradientBorder = false) {
                                     Text("Only the event organizer can view the participant list.", color = CosmosOnSurfaceVariant)
                                 }
                             }
-                        } else if (participants.isEmpty()) {
+                        } else if (eventRegistrants.isEmpty()) {
                             item {
                                 CosmosGlassCard(showTopGradientBorder = false) {
-                                    Text("No participants registered yet.", color = CosmosOnSurfaceVariant)
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text("📭", style = MaterialTheme.typography.displaySmall)
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(
+                                            "No participants yet",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = CosmosOnBackground
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            "Share your event to get participants!",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = CosmosOnSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         } else {
-                            items(participants) { member ->
-                                CosmosGlassCard(showTopGradientBorder = false) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        CosmosAvatar(avatarUrl = member.avatarUrl, name = member.name, modifier = Modifier, size = 44.dp, isLinkedInConnected = member.isLinkedInConnected)
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(member.name, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground)
-                                            Text(member.headline, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, maxLines = 1)
+                            // Summary header
+                            item {
+                                CosmosGlassCard(showTopGradientBorder = true) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            "Registered Participants",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = CosmosOnBackground
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(CosmosPrimary.copy(alpha = 0.15f))
+                                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                        ) {
+                                            Text(
+                                                "${eventRegistrants.size}",
+                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = CosmosPrimary
+                                            )
                                         }
-                                        CosmosTagChip(text = member.tags.firstOrNull() ?: "")
+                                    }
+                                }
+                            }
+                            items(eventRegistrants) { registrant ->
+                                CosmosGlassCard(showTopGradientBorder = false) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        // Avatar with initial
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                                .background(
+                                                    Brush.linearGradient(
+                                                        listOf(CosmosGradientStart, CosmosGradientEnd)
+                                                    )
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = registrant.name.firstOrNull()?.uppercase() ?: "?",
+                                                color = Color.White,
+                                                fontSize = 18.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                registrant.name,
+                                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                                color = CosmosOnBackground
+                                            )
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Email,
+                                                    contentDescription = null,
+                                                    tint = CosmosOnSurfaceVariant,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Text(
+                                                    registrant.email,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = CosmosOnSurfaceVariant,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -244,7 +341,7 @@ fun EventLobbyScreen(
                     }
                     3 -> {
                         item {
-                            if (!event.isRegistered) {
+                            if (!event.isRegistered && !isCreator) {
                                 CosmosGlassCard(showTopGradientBorder = false) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                                         Text("🔒", style = MaterialTheme.typography.displayLarge)
@@ -291,5 +388,118 @@ fun EventLobbyScreen(
                 item { Spacer(Modifier.height(80.dp)) }
             }
         }
+    }
+
+    // ── Registration Dialog ─────────────────────────────────────────────────
+    if (showRegistrationDialog) {
+        AlertDialog(
+            onDismissRequest = { showRegistrationDialog = false },
+            containerColor = Color(0xFF1A1D24),
+            titleContentColor = CosmosOnBackground,
+            textContentColor = CosmosOnSurfaceVariant,
+            shape = RoundedCornerShape(20.dp),
+            title = {
+                Column {
+                    Text(
+                        "Participate in Event",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        event.title,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CosmosPrimary
+                    )
+                }
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        "Please confirm your details to register.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CosmosOnSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = registrationName,
+                        onValueChange = { registrationName = it },
+                        label = { Text("Full Name") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = null,
+                                tint = CosmosPrimary
+                            )
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CosmosPrimary,
+                            unfocusedBorderColor = CosmosOutlineVariant,
+                            focusedLabelColor = CosmosPrimary,
+                            unfocusedLabelColor = CosmosOnSurfaceVariant,
+                            cursorColor = CosmosPrimary,
+                            focusedTextColor = CosmosOnBackground,
+                            unfocusedTextColor = CosmosOnBackground
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = registrationEmail,
+                        onValueChange = { registrationEmail = it },
+                        label = { Text("Email Address") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Email,
+                                contentDescription = null,
+                                tint = CosmosPrimary
+                            )
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CosmosPrimary,
+                            unfocusedBorderColor = CosmosOutlineVariant,
+                            focusedLabelColor = CosmosPrimary,
+                            unfocusedLabelColor = CosmosOnSurfaceVariant,
+                            cursorColor = CosmosPrimary,
+                            focusedTextColor = CosmosOnBackground,
+                            unfocusedTextColor = CosmosOnBackground
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                val isValid = registrationName.isNotBlank() && registrationEmail.isNotBlank() && registrationEmail.contains("@")
+                Button(
+                    onClick = {
+                        eventViewModel.register(eventId, registrationName.trim(), registrationEmail.trim())
+                        showRegistrationDialog = false
+                    },
+                    enabled = isValid,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CosmosPrimary,
+                        contentColor = CosmosBackground,
+                        disabledContainerColor = CosmosPrimary.copy(alpha = 0.3f),
+                        disabledContentColor = CosmosBackground.copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Participate", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showRegistrationDialog = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = CosmosOnSurfaceVariant)
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

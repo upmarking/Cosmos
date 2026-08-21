@@ -295,6 +295,13 @@ data class EventFeedback(
     val timestamp: Long = 0L
 )
 
+data class EventRegistrant(
+    val userId: String,
+    val name: String,
+    val email: String,
+    val registeredAt: Long = 0L
+)
+
 data class Circle(
     val id: String,
     val name: String,

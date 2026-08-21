@@ -145,7 +145,7 @@ fun EventsListScreen(
                         }
                     }
 
-                    val registeredEvents = events.filter { it.isRegistered }
+                    val registeredEvents = events.filter { it.isRegistered || (currentUser != null && it.createdBy == currentUser?.id) }
                     if (registeredEvents.isEmpty()) {
                         item {
                             YourEventsEmptyCard()

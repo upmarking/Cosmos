@@ -1,5 +1,6 @@
 package app.cosmos.com.data.repository
 
+import app.cosmos.com.data.model.EventRegistrant
 import app.cosmos.com.data.model.EventRound
 import app.cosmos.com.data.model.EventType
 import app.cosmos.com.data.model.Member
@@ -20,13 +21,14 @@ import java.util.Calendar
 import java.util.Locale
 
 interface EventRepository {
-    fun getEvents(): Flow<List<NetworkEvent>>
+    fun getEvents(currentUserId: String? = null): Flow<List<NetworkEvent>>
     fun getEvent(eventId: String, currentUserId: String): Flow<NetworkEvent?>
-    suspend fun registerForEvent(eventId: String, userId: String): Result<Unit>
+    suspend fun registerForEvent(eventId: String, userId: String, name: String, email: String): Result<Unit>
     suspend fun unregisterFromEvent(eventId: String, userId: String): Result<Unit>
     fun getEventRounds(eventId: String): Flow<List<EventRound>>
     suspend fun submitRoundFeedback(eventId: String, roundId: String, raterId: String, rateeId: String, rating: Int, feedbackText: String): Result<Unit>
     fun getEventParticipants(eventId: String): Flow<List<Member>>
+    fun getEventRegistrants(eventId: String): Flow<List<EventRegistrant>>
     suspend fun createEvent(event: NetworkEvent, creatorId: String): Result<String>
     suspend fun updateEvent(eventId: String, updates: Map<String, Any>): Result<Unit>
     suspend fun deleteEvent(eventId: String): Result<Unit>
@@ -89,7 +91,7 @@ class FirestoreEventRepository(
         return eventCal.before(today)
     }
 
-    override fun getEvents(): Flow<List<NetworkEvent>> = callbackFlow {
+    override fun getEvents(currentUserId: String?): Flow<List<NetworkEvent>> = callbackFlow {
         val registration = firestore.collection("events")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
@@ -101,10 +103,26 @@ class FirestoreEventRepository(
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
-                val events = snapshot.documents.map { doc ->
-                    mapDocumentToEvent(doc.id, doc.data ?: emptyMap())
-                }.filter { !isEventExpired(it.date) }
-                trySend(events)
+                launch {
+                    val deferredEvents = snapshot.documents.map { doc ->
+                        async {
+                            val event = mapDocumentToEvent(doc.id, doc.data ?: emptyMap())
+                            var isRegistered = false
+                            if (currentUserId != null) {
+                                try {
+                                    val registrantDoc = firestore.collection("events").document(doc.id)
+                                        .collection("registrants").document(currentUserId).get().await()
+                                    isRegistered = registrantDoc.exists()
+                                } catch (e: Exception) {
+                                    // ignore
+                                }
+                            }
+                            event.copy(isRegistered = isRegistered)
+                        }
+                    }
+                    val events = deferredEvents.awaitAll().filter { !isEventExpired(it.date) }
+                    trySend(events)
+                }
             }
         awaitClose {
             registration.remove()
@@ -155,7 +173,7 @@ class FirestoreEventRepository(
         }
     }
 
-    override suspend fun registerForEvent(eventId: String, userId: String): Result<Unit> = runCatching {
+    override suspend fun registerForEvent(eventId: String, userId: String, name: String, email: String): Result<Unit> = runCatching {
         firestore.runTransaction { transaction ->
             val eventRef = firestore.collection("events").document(eventId)
             val eventDoc = transaction.get(eventRef)
@@ -167,11 +185,16 @@ class FirestoreEventRepository(
             }
 
             val registrantRef = eventRef.collection("registrants").document(userId)
-            transaction.set(registrantRef, mapOf("registeredAt" to FieldValue.serverTimestamp()))
+            transaction.set(registrantRef, mapOf(
+                "userId" to userId,
+                "name" to name,
+                "email" to email,
+                "registeredAt" to FieldValue.serverTimestamp()
+            ))
             transaction.update(eventRef, "participantCount", currentCount + 1)
         }.await()
 
-        // Send notification
+        // Send notification to the participant
         val eventDoc = firestore.collection("events").document(eventId).get().await()
         val eventTitle = eventDoc.getString("title") ?: "Event"
         val notifData = mapOf(
@@ -184,6 +207,21 @@ class FirestoreEventRepository(
             "actionId" to eventId
         )
         firestore.collection("notifications").add(notifData).await()
+
+        // Send notification to the event host
+        val hostId = eventDoc.getString("createdBy") ?: ""
+        if (hostId.isNotEmpty() && hostId != userId) {
+            val hostNotifData = mapOf(
+                "userId" to hostId,
+                "type" to "EVENT_REGISTRATION",
+                "title" to "New Participant: $name",
+                "body" to "$name ($email) registered for $eventTitle.",
+                "timestamp" to FieldValue.serverTimestamp(),
+                "isRead" to false,
+                "actionId" to eventId
+            )
+            firestore.collection("notifications").add(hostNotifData).await()
+        }
         Unit
     }
 
@@ -300,6 +338,35 @@ class FirestoreEventRepository(
                     val members = deferredMembers.awaitAll().filterNotNull()
                     trySend(members)
                 }
+            }
+        awaitClose {
+            registration.remove()
+        }
+    }
+
+    override fun getEventRegistrants(eventId: String): Flow<List<EventRegistrant>> = callbackFlow {
+        val registration = firestore.collection("events").document(eventId)
+            .collection("registrants")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    android.util.Log.e("EventRepository", "Error fetching event registrants: ${error.message}", error)
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                if (snapshot == null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                val registrants = snapshot.documents.mapNotNull { doc ->
+                    val data = doc.data ?: return@mapNotNull null
+                    EventRegistrant(
+                        userId = doc.id,
+                        name = data["name"] as? String ?: "",
+                        email = data["email"] as? String ?: "",
+                        registeredAt = (data["registeredAt"] as? com.google.firebase.Timestamp)?.seconds ?: 0L
+                    )
+                }
+                trySend(registrants)
             }
         awaitClose {
             registration.remove()

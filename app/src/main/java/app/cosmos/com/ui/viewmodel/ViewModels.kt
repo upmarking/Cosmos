@@ -9,6 +9,7 @@ import app.cosmos.com.data.model.ConnectionStatus
 import app.cosmos.com.data.model.ConnectionProfileStatus
 import app.cosmos.com.data.model.ConnectionRequest
 import app.cosmos.com.data.model.ConnectionRequestStatus
+import app.cosmos.com.data.model.EventRegistrant
 import app.cosmos.com.data.model.EventRound
 import kotlinx.coroutines.Job
 import app.cosmos.com.data.model.EventType
@@ -536,6 +537,9 @@ class EventViewModel(
     private val _isCreatingEvent = MutableStateFlow(false)
     val isCreatingEvent: StateFlow<Boolean> = _isCreatingEvent.asStateFlow()
 
+    private val _eventRegistrants = MutableStateFlow<List<EventRegistrant>>(emptyList())
+    val eventRegistrants: StateFlow<List<EventRegistrant>> = _eventRegistrants.asStateFlow()
+
     // ── Filter state ─────────────────────────────────────────────────────────
     private val _selectedEventTypes = MutableStateFlow<Set<EventType>>(emptySet())
     val selectedEventTypes: StateFlow<Set<EventType>> = _selectedEventTypes.asStateFlow()
@@ -565,7 +569,8 @@ class EventViewModel(
                 PricingFilter.ALL -> { /* no-op */ }
             }
             if (_showRegisteredOnly.value) {
-                result = result.filter { it.isRegistered }
+                val uid = authRepo.currentUserId
+                result = result.filter { it.isRegistered || (uid != null && it.createdBy == uid) }
             }
             return result
         }
@@ -596,8 +601,10 @@ class EventViewModel(
 
     fun loadEvents() {
         viewModelScope.launch {
-            eventRepo.getEvents().collectLatest { list ->
-                _events.value = list
+            authRepo.currentUser.collectLatest { user ->
+                eventRepo.getEvents(user?.id).collect { list ->
+                    _events.value = list
+                }
             }
         }
     }
@@ -611,10 +618,18 @@ class EventViewModel(
         }
     }
 
-    fun register(eventId: String) {
+    fun register(eventId: String, name: String, email: String) {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch {
-            eventRepo.registerForEvent(eventId, uid)
+            eventRepo.registerForEvent(eventId, uid, name, email)
+        }
+    }
+
+    fun loadEventRegistrants(eventId: String) {
+        viewModelScope.launch {
+            eventRepo.getEventRegistrants(eventId).collectLatest { list ->
+                _eventRegistrants.value = list
+            }
         }
     }
 

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Cosmos professional networking platform",
   "scripts": {
+    "dev": "node server.js",
     "build": "node build.js"
   },
   "private": true

@@ -1,9 +1,17 @@
 package app.cosmos.com.data.repository
 
+import android.util.Log
+import app.cosmos.com.BuildConfig
 import app.cosmos.com.data.model.ChatMessage
 import com.google.ai.client.generativeai.GenerativeModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URL
 
 interface AiSummaryService {
     suspend fun generateMeetingSummary(transcript: String, apiKey: String? = null): Result<String>
@@ -13,20 +21,62 @@ interface AiSummaryService {
 
 class GeminiAiSummaryService : AiSummaryService {
 
-    override suspend fun generateMeetingSummary(transcript: String, apiKey: String?): Result<String> = withContext(Dispatchers.IO) {
-        runCatching {
-            val key = apiKey?.takeIf { it.isNotBlank() } ?: System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() } ?: "AQ.Ab8RN6IM7MIRYJclXQQn3oPb_EB6JQc9tXDkBC7A43Xqe2DjtA"
-            
-            if (key.isNullOrBlank()) {
-                // Fallback to high-quality rule-based simulator
-                return@runCatching simulateMeetingSummary(transcript)
+    private fun postJson(urlStr: String, body: JSONObject): JSONObject {
+        val url = URL(urlStr)
+        val connection = url.openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+            connection.connectTimeout = 15000
+            connection.readTimeout = 30000
+
+            OutputStreamWriter(connection.outputStream).use { writer ->
+                writer.write(body.toString())
+                writer.flush()
             }
 
-            val model = GenerativeModel(
-                modelName = "gemini-2.5-flash-lite",
-                apiKey = key
-            )
+            val responseCode = connection.responseCode
+            val stream = if (responseCode in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream
+            }
 
+            val responseText = BufferedReader(InputStreamReader(stream)).use { reader ->
+                reader.readText()
+            }
+
+            if (responseCode !in 200..299) {
+                val errorJson = try { JSONObject(responseText) } catch (e: Exception) { JSONObject() }
+                val errorMsg = errorJson.optString("error", "Server error (HTTP $responseCode)")
+                throw Exception(errorMsg)
+            }
+
+            return JSONObject(responseText)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private suspend fun callCloudAi(action: String, prompt: String): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val url = "https://us-central1-cosmos-app-42ed2.cloudfunctions.net/generateAiContent"
+            val body = JSONObject().apply {
+                put("action", action)
+                put("prompt", prompt)
+            }
+            val response = postJson(url, body)
+            if (response.optBoolean("success", false)) {
+                response.getString("text")
+            } else {
+                throw Exception(response.optString("error", "Failed to generate content"))
+            }
+        }
+    }
+
+    override suspend fun generateMeetingSummary(transcript: String, apiKey: String?): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
             val prompt = """
                 You are the AI Assistant for Cosmos, a digital private member's club.
                 Summarize the following professional networking meeting transcript.
@@ -41,8 +91,24 @@ class GeminiAiSummaryService : AiSummaryService {
                 $transcript
             """.trimIndent()
 
-            val response = model.generateContent(prompt)
-            response.text ?: throw IllegalStateException("Empty response from Gemini")
+            val key = apiKey?.takeIf { it.isNotBlank() }
+                ?: BuildConfig.GEMINI_API_KEY.takeIf { it.isNotBlank() }
+
+            if (!key.isNullOrBlank()) {
+                Log.d("GeminiAiSummaryService", "Calling live Gemini SDK locally...")
+                val model = GenerativeModel(
+                    modelName = "gemini-2.5-flash-lite",
+                    apiKey = key
+                )
+                val response = model.generateContent(prompt)
+                return@runCatching response.text ?: throw IllegalStateException("Empty response from Gemini")
+            }
+
+            // Secure production path: Cloud Function with Secret Manager
+            callCloudAi("meetingSummary", prompt).getOrElse { error ->
+                Log.w("GeminiAiSummaryService", "Cloud AI generation failed: ${error.message}. Falling back to simulation.")
+                simulateMeetingSummary(transcript)
+            }
         }
     }
 
@@ -52,20 +118,7 @@ class GeminiAiSummaryService : AiSummaryService {
         apiKey: String?
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            val key = apiKey?.takeIf { it.isNotBlank() } ?: System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() } ?: "AQ.Ab8RN6IM7MIRYJclXQQn3oPb_EB6JQc9tXDkBC7A43Xqe2DjtA"
-            
-            if (key.isNullOrBlank()) {
-                // Fallback to high-quality CRM simulator
-                return@runCatching simulateCrmSummary(messages, privateGoal)
-            }
-
             val chatHistory = messages.joinToString("\n") { "${if (it.isOwn) "Me" else "Them"}: ${it.text}" }
-
-            val model = GenerativeModel(
-                modelName = "gemini-2.5-flash-lite",
-                apiKey = key
-            )
-
             val prompt = """
                 You are the AI Relationship CRM Assistant for Cosmos.
                 Analyze this professional chat history and private relationship goal:
@@ -78,8 +131,24 @@ class GeminiAiSummaryService : AiSummaryService {
                 Keep it extremely brief and easy to read.
             """.trimIndent()
 
-            val response = model.generateContent(prompt)
-            response.text ?: throw IllegalStateException("Empty response from Gemini")
+            val key = apiKey?.takeIf { it.isNotBlank() }
+                ?: BuildConfig.GEMINI_API_KEY.takeIf { it.isNotBlank() }
+
+            if (!key.isNullOrBlank()) {
+                Log.d("GeminiAiSummaryService", "Calling live Gemini SDK locally...")
+                val model = GenerativeModel(
+                    modelName = "gemini-2.5-flash-lite",
+                    apiKey = key
+                )
+                val response = model.generateContent(prompt)
+                return@runCatching response.text ?: throw IllegalStateException("Empty response from Gemini")
+            }
+
+            // Secure production path: Cloud Function with Secret Manager
+            callCloudAi("chatCrmSummary", prompt).getOrElse { error ->
+                Log.w("GeminiAiSummaryService", "Cloud AI CRM summary failed: ${error.message}. Falling back to simulation.")
+                simulateCrmSummary(messages, privateGoal)
+            }
         }
     }
 
@@ -90,17 +159,6 @@ class GeminiAiSummaryService : AiSummaryService {
         apiKey: String?
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            val key = apiKey?.takeIf { it.isNotBlank() } ?: System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() } ?: "AQ.Ab8RN6IM7MIRYJclXQQn3oPb_EB6JQc9tXDkBC7A43Xqe2DjtA"
-            
-            if (key.isNullOrBlank()) {
-                return@runCatching simulateEventDescription(title, location, details)
-            }
-
-            val model = GenerativeModel(
-                modelName = "gemini-2.5-flash-lite",
-                apiKey = key
-            )
-
             val prompt = """
                 You are the AI Event Planner for Cosmos, a digital private member's club.
                 Generate a professional, engaging, and premium event description based on:
@@ -111,8 +169,24 @@ class GeminiAiSummaryService : AiSummaryService {
                 The description should be concise (1-3 sentences or a short paragraph), inviting, and focus on high-value networking and collaboration. Do not include any intro, outro, placeholders, or quotes. Just output the final description text directly.
             """.trimIndent()
 
-            val response = model.generateContent(prompt)
-            response.text ?: throw IllegalStateException("Empty response from Gemini")
+            val key = apiKey?.takeIf { it.isNotBlank() }
+                ?: BuildConfig.GEMINI_API_KEY.takeIf { it.isNotBlank() }
+
+            if (!key.isNullOrBlank()) {
+                Log.d("GeminiAiSummaryService", "Calling live Gemini SDK locally...")
+                val model = GenerativeModel(
+                    modelName = "gemini-2.5-flash-lite",
+                    apiKey = key
+                )
+                val response = model.generateContent(prompt)
+                return@runCatching response.text ?: throw IllegalStateException("Empty response from Gemini")
+            }
+
+            // Secure production path: Cloud Function with Secret Manager
+            callCloudAi("eventDescription", prompt).getOrElse { error ->
+                Log.w("GeminiAiSummaryService", "Cloud AI event description failed: ${error.message}. Falling back to simulation.")
+                simulateEventDescription(title, location, details)
+            }
         }
     }
 

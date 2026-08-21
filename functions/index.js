@@ -612,3 +612,109 @@ function getBadgeName(tier) {
   return badges[tier] || tier;
 }
 
+/**
+ * generateAiContent
+ *
+ * Securely calls the Gemini API on the backend using the GEMINI_API_KEY from Google Cloud Secret Manager.
+ *
+ * Input: { action, prompt }
+ * Output: { success, text }
+ */
+exports.generateAiContent = functions
+  .runWith({ secrets: ['GEMINI_API_KEY'] })
+  .https.onRequest((req, res) => {
+  return cors(req, res, async () => {
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    try {
+      const { action, prompt } = req.body;
+
+      if (!action) {
+        res.status(400).json({ error: 'Missing action parameter.' });
+        return;
+      }
+      if (!prompt) {
+        res.status(400).json({ error: 'Missing prompt parameter.' });
+        return;
+      }
+
+      const apiKey = process.env.GEMINI_API_KEY;
+
+      if (!apiKey || apiKey.trim() === '') {
+        console.warn('GEMINI_API_KEY is not configured in Cloud Secrets. Using simulation fallback.');
+        const simulatedText = simulateAiContent(action, prompt);
+        res.status(200).json({ success: true, text: simulatedText, simulated: true });
+        return;
+      }
+
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
+      const payload = {
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt
+              }
+            ]
+          }
+        ]
+      };
+
+      const apiResponse = await axios.post(url, payload, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const text = apiResponse.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) {
+        throw new Error('Invalid response structure from Gemini API');
+      }
+
+      res.status(200).json({ success: true, text: text });
+
+    } catch (error) {
+      console.error('generateAiContent error:', error.response ? error.response.data : error.message);
+      res.status(500).json({ 
+        error: 'Failed to generate AI content.', 
+        details: error.response ? JSON.stringify(error.response.data) : error.message 
+      });
+    }
+  });
+});
+
+function simulateAiContent(action, prompt) {
+  if (action === 'meetingSummary') {
+    return `✦ AI Meeting Summary (Simulated) ✦
+• Discussed: Enterprise scaling strategy, NexusAI seed round closing, and target customer profiles.
+• Decisions Made: To run a pilot validation test on Sequoia's portfolio network.
+• Next Steps: Schedule a 30-minute intro call this week. Follow up with pitch deck details.
+• Open Questions: Target MRR benchmarks, fundraising timelines, and valuation caps.`;
+  } else if (action === 'chatCrmSummary') {
+    return `✦ AI Relationship Summary (Simulated) ✦
+• Private Goal: Explore professional collaboration
+• Next Step: Schedule follow-up call
+• Recommended Follow-up: "Hi, let's connect for 15 minutes to align on the project goals we discussed."`;
+  } else {
+    // Event description fallback: try to pull event info from prompt if possible
+    let detailMsg = "Join us for our upcoming Cosmos event. Connect with top members of the community for an evening of high-value networking, knowledge sharing, and collaborative opportunities. We look forward to seeing you there!";
+    if (prompt.includes("Title:")) {
+      try {
+        const titleMatch = prompt.match(/Title:\s*(.+)/);
+        const locMatch = prompt.match(/Location:\s*(.+)/);
+        if (titleMatch) {
+          const title = titleMatch[1].trim();
+          const loc = locMatch ? locMatch[1].trim() : "Virtual";
+          detailMsg = `Join us for our upcoming '${title}' in ${loc}. Connect with top members of the Cosmos community for an evening of high-value networking, knowledge sharing, and collaborative opportunities. We look forward to seeing you there!`;
+        }
+      } catch (e) {
+        // use default
+      }
+    }
+    return detailMsg;
+  }
+}
+

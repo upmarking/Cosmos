@@ -2,7 +2,7 @@
    Cosmos PWA — Events Page
    ============================================================ */
 
-import { auth, db, collection, onSnapshot, doc, getDoc, setDoc, updateDoc, increment, serverTimestamp } from '../firebase-config.js';
+import { auth, db, collection, onSnapshot, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, increment, serverTimestamp } from '../firebase-config.js';
 import { showToast } from '../app.js';
 
 const tabs = ['All Events', 'Speed Networking', 'Curated Meetup', 'Invite Only', 'Industry Round'];
@@ -129,8 +129,8 @@ function updateEventsDisplay(outlet, currentUserId) {
 
   const filtered = getFilteredEvents();
 
-  // 1. Render Your Events
-  const registered = eventsList.filter(e => registrationsMap.get(e.id) === true);
+  // 1. Render Your Events (both registered and hosted)
+  const registered = eventsList.filter(e => registrationsMap.get(e.id) === true || (currentUserId && e.createdBy === currentUserId));
   if (registered.length === 0) {
     yourEventsContainer.innerHTML = `
       <div class="your-events-empty-card">
@@ -340,97 +340,272 @@ function attachEventCardListeners(outlet, currentUserId) {
   });
 }
 
-function showEventDetailsModal(outlet, event, currentUserId) {
+async function showEventDetailsModal(outlet, event, currentUserId) {
   let modal = document.getElementById('event-details-modal');
   if (!modal) {
     modal = document.createElement('div');
     modal.className = 'modal-overlay hidden';
     modal.id = 'event-details-modal';
+    modal.style.zIndex = '99999';
     document.body.appendChild(modal);
   }
+
   const spotsLeft = event.maxParticipants - event.participantCount;
   const isJoined = registrationsMap.get(event.id) || false;
+  const isHost = currentUserId && event.createdBy === currentUserId;
+
+  const defaultName = window.cosmosApp?.userProfile?.name || auth.currentUser?.displayName || '';
+  const defaultEmail = auth.currentUser?.email || window.cosmosApp?.userProfile?.email || '';
 
   modal.innerHTML = `
-    <div class="modal-card" style="max-width:440px; position:relative; overflow:hidden;">
-      <button class="modal-close" id="btn-close-details-modal" style="position:absolute; right:12px; top:12px; border:none; background:rgba(0,0,0,0.5); border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:white; cursor:pointer; z-index:10;">✕</button>
+    <div class="modal-card" style="max-width:480px; position:relative; overflow:hidden;">
+      <button class="modal-close" id="btn-close-details-modal" aria-label="Close modal" style="position:absolute; right:12px; top:12px; border:none; background:rgba(0,0,0,0.6); border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; color:white; cursor:pointer; z-index:10; transition:all 0.2s;">✕</button>
       
       <div class="event-card-cover" style="height: 160px; margin: -1.5rem -1.5rem 1.25rem -1.5rem; overflow: hidden; ${(event.coverUrl || 'gradient:cosmos-glow').startsWith('gradient:') ? `background: ${getGradientCss(event.coverUrl)};` : ''}">
-        ${(event.coverUrl || 'gradient:cosmos-glow').startsWith('gradient:') ? '' : `<img src="${event.coverUrl}" style="width: 100%; height: 100%; object-fit: cover;" alt="${event.title}" />`}
+        ${(event.coverUrl || 'gradient:cosmos-glow').startsWith('gradient:') ? '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:3rem;">📅</div>' : `<img src="${event.coverUrl}" style="width: 100%; height: 100%; object-fit: cover;" alt="${event.title}" />`}
       </div>
       
-      <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1.25rem;">
-        <div class="event-host-badge" data-creator-id="${event.createdBy}">
-          <div class="host-avatar-placeholder"><div class="host-avatar-initial">${event.title.charAt(0)}</div></div>
-          <span class="host-name">Cosmos Member</span>
+      <div class="event-modal-content" style="max-height: calc(85vh - 180px); overflow-y: auto; padding-right: 4px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+          <div class="event-host-badge" data-creator-id="${event.createdBy}">
+            <div class="host-avatar-placeholder"><div class="host-avatar-initial">${event.title.charAt(0)}</div></div>
+            <span class="host-name">Cosmos Member</span>
+          </div>
+          ${isHost ? '<span class="event-status-pill hosting">👑 Hosted by You</span>' : (isJoined ? '<span class="event-status-pill joined">✓ Participating</span>' : '')}
         </div>
-        <h3 style="font-family:var(--font-display); font-size:1.25rem; font-weight:800; color:white; margin:0;">${event.title}</h3>
+
+        <h3 style="font-family:var(--font-display); font-size:1.35rem; font-weight:800; color:white; margin:0.25rem 0 0 0;">${event.title}</h3>
         
-        <div class="luma-card-meta" style="margin-top:0.25rem;">
-          <svg class="luma-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          <span>${event.date}</span>
+        <div style="display:flex; flex-direction:column; gap:0.4rem; margin-top:0.25rem;">
+          <div class="luma-card-meta">
+            <svg class="luma-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span style="color:var(--text-primary); font-weight:600;">${event.date}</span>
+          </div>
+          <div class="luma-card-meta">
+            <svg class="luma-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span class="luma-time-text">${event.time}</span>
+          </div>
+          <div class="luma-card-meta">
+            <svg class="luma-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <span>${event.location}</span>
+          </div>
+          <div class="luma-card-meta">
+            <svg class="luma-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            <span>${spotsLeft > 0 ? `${spotsLeft} spots remaining` : 'Sold out'} (${event.participantCount} registered)</span>
+          </div>
         </div>
-        <div class="luma-card-meta">
-          <svg class="luma-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span class="luma-time-text">${event.time}</span>
+        
+        <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); border-radius:12px; padding:0.85rem; margin-top:0.25rem;">
+          <h5 style="margin:0 0 0.4rem 0; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted);">About Event</h5>
+          <p style="font-size:0.88rem; color:var(--text-secondary); line-height:1.6; margin:0; white-space:pre-wrap;">${event.description || 'No description provided.'}</p>
         </div>
-        <div class="luma-card-meta">
-          <svg class="luma-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-          <span>${event.location}</span>
-        </div>
-        <div class="luma-card-meta">
-          <svg class="luma-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-          <span>${spotsLeft > 0 ? `${spotsLeft} spots left` : 'Sold out'} (${event.participantCount} going)</span>
-        </div>
+
+        ${isHost ? `
+          <!-- HOST VIEW: PARTICIPANTS ROSTER -->
+          <div class="event-host-admin-panel" id="host-registrants-panel">
+            <div class="event-host-admin-header">
+              <span class="event-host-admin-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Registered Participants
+              </span>
+              <span class="event-registrant-badge" id="host-registrant-count">Loading...</span>
+            </div>
+            <div class="event-registrants-list" id="host-registrants-list">
+              <div style="text-align:center; padding:1rem; color:var(--text-muted); font-size:0.82rem;">
+                <div class="loading-spinner" style="width:20px;height:20px;margin:0 auto 0.5rem auto;display:block;"></div>
+                Loading participant details...
+              </div>
+            </div>
+          </div>
+        ` : (isJoined ? `
+          <!-- ALREADY REGISTERED VIEW -->
+          <div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.25); border-radius:14px; padding:1rem; text-align:center; margin-top:0.5rem;">
+            <div style="font-size:1.5rem; margin-bottom:0.25rem;">🎉</div>
+            <h4 style="margin:0; font-size:0.95rem; color:#34d399; font-weight:700;">You're on the Guest List</h4>
+            <p style="margin:0.25rem 0 0 0; font-size:0.8rem; color:var(--text-secondary);">We'll notify you when the session begins.</p>
+          </div>
+        ` : (spotsLeft <= 0 ? `
+          <!-- FULL VIEW -->
+          <div style="background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25); border-radius:14px; padding:1rem; text-align:center; margin-top:0.5rem;">
+            <h4 style="margin:0; font-size:0.95rem; color:var(--red); font-weight:700;">Event is Full</h4>
+            <p style="margin:0.25rem 0 0 0; font-size:0.8rem; color:var(--text-secondary);">All available participant slots have been claimed.</p>
+          </div>
+        ` : `
+          <!-- PARTICIPATION FORM -->
+          <form class="event-participate-form" id="event-participate-form">
+            <h4 class="event-participate-title">Participate in this Event</h4>
+            <p class="event-participate-subtitle">Confirm your name and email to join the attendee list.</p>
+            
+            <div class="form-group" style="margin-bottom:0.4rem;">
+              <label class="form-label" for="participate-name" style="font-size:0.78rem;">Full Name *</label>
+              <input class="form-input" type="text" id="participate-name" value="${defaultName}" required placeholder="Your full name" style="padding:0.65rem 0.85rem; font-size:0.88rem;" />
+            </div>
+
+            <div class="form-group" style="margin-bottom:0.75rem;">
+              <label class="form-label" for="participate-email" style="font-size:0.78rem;">Email Address *</label>
+              <input class="form-input" type="email" id="participate-email" value="${defaultEmail}" required placeholder="name@example.com" style="padding:0.65rem 0.85rem; font-size:0.88rem;" />
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="btn-submit-participate" style="width:100%; py:12px; font-weight:700; font-size:0.92rem;">
+              Confirm Participation 🚀
+            </button>
+          </form>
+        `))}
       </div>
-      
-      <div style="max-height: 180px; overflow-y: auto; margin-bottom: 1.5rem; padding-right: 4px;">
-        <p style="font-size:0.88rem; color:var(--text-secondary); line-height:1.6; margin:0; white-space:pre-wrap;">${event.description}</p>
-      </div>
-      
-      <button class="btn ${isJoined ? 'btn-success' : 'btn-primary'} event-join-btn-modal" style="width:100%; py:10px; font-weight:700;" data-event-id="${event.id}" ${isJoined || spotsLeft <= 0 ? 'disabled' : ''}>
-        ${isJoined ? 'Joined! ✓' : (spotsLeft <= 0 ? 'Full' : 'Join Event')}
-      </button>
     </div>
   `;
 
   resolveHostProfiles(modal);
-  modal.classList.remove('hidden');
-  modal.offsetHeight; // trigger reflow
-  modal.classList.add('active');
 
-  const closeDetailsModal = () => {
+  // Open modal with smooth transition
+  modal.classList.remove('hidden');
+  modal.offsetHeight; // force reflow for CSS transition
+  modal.classList.add('active');
+  document.body.style.overflow = 'hidden';
+
+  const closeModal = () => {
     modal.classList.remove('active');
     setTimeout(() => {
       if (!modal.classList.contains('active')) {
         modal.classList.add('hidden');
       }
     }, 300);
+    document.body.style.overflow = '';
   };
 
-  modal.querySelector('#btn-close-details-modal').onclick = closeDetailsModal;
+  const btnClose = modal.querySelector('#btn-close-details-modal');
+  if (btnClose) btnClose.onclick = closeModal;
+
   modal.onclick = (e) => {
-    if (e.target === modal) {
-      closeDetailsModal();
-    }
+    if (e.target === modal) closeModal();
   };
 
-  const joinBtn = modal.querySelector('.event-join-btn-modal');
-  if (joinBtn && !isJoined && spotsLeft > 0) {
-    joinBtn.addEventListener('click', async () => {
-      joinBtn.disabled = true;
-      joinBtn.textContent = 'Joining...';
+  // If host is viewing, load real-time participants
+  if (isHost) {
+    try {
+      const regSnap = await getDocs(collection(db, 'events', event.id, 'registrants'));
+      const countEl = modal.querySelector('#host-registrant-count');
+      const listEl = modal.querySelector('#host-registrants-list');
+
+      if (countEl && listEl) {
+        const registrants = [];
+        regSnap.forEach(d => {
+          const data = d.data() || {};
+          registrants.push({
+            id: d.id,
+            name: data.name || 'Anonymous Member',
+            email: data.email || 'No email provided',
+            registeredAt: data.registeredAt?.toDate ? data.registeredAt.toDate() : null
+          });
+        });
+
+        countEl.textContent = `${registrants.length} ${registrants.length === 1 ? 'Person' : 'People'}`;
+
+        if (registrants.length === 0) {
+          listEl.innerHTML = `
+            <div style="text-align:center; padding:1.25rem; color:var(--text-secondary); font-size:0.85rem;">
+              <div style="font-size:1.75rem; margin-bottom:0.25rem;">📭</div>
+              <strong>No participants yet</strong>
+              <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.2rem;">Share your event to get attendees registered!</div>
+            </div>
+          `;
+        } else {
+          listEl.innerHTML = registrants.map(r => {
+            const initial = (r.name || 'M').charAt(0).toUpperCase();
+            const dateStr = r.registeredAt ? r.registeredAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recently';
+            return `
+              <div class="event-registrant-item">
+                <div class="event-registrant-avatar">${initial}</div>
+                <div class="event-registrant-info">
+                  <div class="event-registrant-name">${r.name}</div>
+                  <div class="event-registrant-email">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    <a href="mailto:${r.email}" style="color:var(--text-secondary); text-decoration:none;" onclick="event.stopPropagation();">${r.email}</a>
+                  </div>
+                </div>
+                <div style="font-size:0.72rem; color:var(--text-muted); text-align:right;">${dateStr}</div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+    } catch (err) {
+      console.error('[Cosmos Events] Error fetching registrants for host:', err);
+    }
+  }
+
+  // Handle Participation Form Submission
+  const participateForm = modal.querySelector('#event-participate-form');
+  if (participateForm) {
+    participateForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const nameInput = modal.querySelector('#participate-name');
+      const emailInput = modal.querySelector('#participate-email');
+      const submitBtn = modal.querySelector('#btn-submit-participate');
+
+      const name = nameInput.value.trim();
+      const email = emailInput.value.trim();
+
+      if (!name) {
+        showToast('Please enter your full name.', 'error');
+        nameInput.focus();
+        return;
+      }
+      if (!email || !email.includes('@')) {
+        showToast('Please enter a valid email address.', 'error');
+        emailInput.focus();
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Registering...';
+
       try {
-        await setDoc(doc(db, 'events', event.id, 'registrants', currentUserId), { registeredAt: serverTimestamp() });
-        await updateDoc(doc(db, 'events', event.id), { participantCount: increment(1) });
+        await setDoc(doc(db, 'events', event.id, 'registrants', currentUserId), {
+          userId: currentUserId,
+          name: name,
+          email: email,
+          registeredAt: serverTimestamp()
+        });
+
+        await updateDoc(doc(db, 'events', event.id), {
+          participantCount: increment(1)
+        });
+
+        await addDoc(collection(db, 'notifications'), {
+          userId: currentUserId,
+          type: 'EVENT_REMINDER',
+          title: `Registered for ${event.title}`,
+          body: "You're all set! We'll remind you when the session starts.",
+          timestamp: serverTimestamp(),
+          isRead: false,
+          actionId: event.id
+        });
+
+        if (event.createdBy && event.createdBy !== currentUserId) {
+          await addDoc(collection(db, 'notifications'), {
+            userId: event.createdBy,
+            type: 'EVENT_REGISTRATION',
+            title: `New Participant: ${name}`,
+            body: `${name} (${email}) registered for ${event.title}.`,
+            timestamp: serverTimestamp(),
+            isRead: false,
+            actionId: event.id
+          });
+        }
+
         registrationsMap.set(event.id, true);
-        showToast(`Joined ${event.title}!`, 'success');
-        closeDetailsModal();
+        event.participantCount += 1;
+
+        showToast(`🎉 You're participating in ${event.title}!`, 'success');
+        
+        showEventDetailsModal(outlet, event, currentUserId);
         updateEventsDisplay(outlet, currentUserId);
       } catch (err) {
-        showToast('Failed to join', 'error');
-        joinBtn.disabled = false;
-        joinBtn.textContent = 'Join Event';
+        console.error('[Cosmos Events] Registration error:', err);
+        showToast('Failed to register: ' + (err.message || 'Unknown error'), 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Confirm Participation 🚀';
       }
     });
   }
