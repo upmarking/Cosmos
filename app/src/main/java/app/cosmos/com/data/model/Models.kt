@@ -260,6 +260,11 @@ data class NetworkEvent(
     val maxParticipants: Int,
     val isPaid: Boolean = false,
     val price: String = "",
+    val currency: String = "INR",
+    val priceAmount: Double = 0.0,
+    val paymentUpiId: String = "",
+    val paymentAccountName: String = "",
+    val paymentInstructions: String = "",
     val coverUrl: String = "",
     val tags: List<String> = emptyList(),
     val isRegistered: Boolean = false,
@@ -269,6 +274,9 @@ data class NetworkEvent(
 ) {
     val isFull: Boolean get() = participantCount >= maxParticipants
     val spotsRemaining: Int get() = (maxParticipants - participantCount).coerceAtLeast(0)
+    val currencySymbol: String get() = when (currency) {
+        "USD" -> "$"; "INR" -> "₹"; "EUR" -> "€"; "GBP" -> "£"; else -> "$"
+    }
 }
 
 enum class EventType(val label: String) {
@@ -295,11 +303,40 @@ data class EventFeedback(
     val timestamp: Long = 0L
 )
 
+/** Payment status for a paid event registration */
+enum class EventPaymentStatus {
+    PENDING, CONFIRMED, REJECTED
+}
+
+/**
+ * Tracks a participant's payment for a paid event.
+ * Stored under: events/{eventId}/payments/{userId}
+ */
+data class EventPaymentRecord(
+    val participantId: String = "",
+    val participantName: String = "",
+    val participantEmail: String = "",
+    val eventId: String = "",
+    val eventTitle: String = "",
+    val amount: Double = 0.0,
+    val currency: String = "INR",
+    val paymentMethod: String = "UPI",
+    val transactionId: String = "",
+    val paymentStatus: String = EventPaymentStatus.PENDING.name,
+    val paidAt: Long = 0L,
+    val receiptId: String = "",
+    val organizerUpiId: String = "",
+    val organizerName: String = ""
+)
+
 data class EventRegistrant(
     val userId: String,
     val name: String,
     val email: String,
-    val registeredAt: Long = 0L
+    val registeredAt: Long = 0L,
+    val paymentStatus: String = "",
+    val transactionId: String = "",
+    val amountPaid: Double = 0.0
 )
 
 data class Circle(

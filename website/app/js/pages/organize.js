@@ -3,7 +3,7 @@
    Maps to the 'O' in COSMOS navigation
    ============================================================ */
 
-import { auth, db, collection, query, onSnapshot, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, increment, serverTimestamp, storage, ref, uploadBytes, getDownloadURL } from '../firebase-config.js';
+import { auth, db, collection, query, onSnapshot, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, increment, serverTimestamp, storage, ref, uploadBytes, getDownloadURL } from '../firebase-config.js';
 import { showToast } from '../app.js';
 
 const tabs = ['All Events', 'Speed Networking', 'Curated Meetup', 'Invite Only', 'Industry Round'];
@@ -363,9 +363,59 @@ export async function renderOrganize(outlet) {
     setStep(currentStep - 1);
   });
 
+  let editingEvent = null;
+  const modalTitleEl = modal.querySelector('.modal-header-top h3');
+
   // Toggle modal visibility
   const openModal = () => {
     try {
+      editingEvent = null;
+      if (modalTitleEl) modalTitleEl.textContent = 'Create New Event';
+      if (btnSubmit) btnSubmit.textContent = 'Post Event';
+
+      createForm.reset();
+      priceGroup.classList.add('hidden');
+      
+      // Reset image upload preview
+      selectedImageFile = null;
+      const uploadPreview = modal.querySelector('#upload-preview');
+      const uploadPlaceholder = modal.querySelector('#upload-placeholder');
+      const previewImg = modal.querySelector('#preview-img');
+      const inputImage = modal.querySelector('#event-image');
+      if (uploadPreview) uploadPreview.style.display = 'none';
+      if (uploadPlaceholder) uploadPlaceholder.style.display = 'flex';
+      if (previewImg) {
+        previewImg.src = '';
+        previewImg.style.transform = 'scale(1) translateY(0px)';
+      }
+      if (inputImage) inputImage.value = '';
+
+      // Reset default covers selector
+      selectedDefaultGradient = 'gradient:cosmos-glow';
+      const defaultCovers = modal.querySelectorAll('.default-cover-option');
+      defaultCovers.forEach(o => {
+        o.classList.toggle('active', o.dataset.gradient === 'gradient:cosmos-glow');
+      });
+
+      const coverZoom = modal.querySelector('#cover-zoom');
+      const coverPanY = modal.querySelector('#cover-pan-y');
+      const zoomVal = modal.querySelector('#zoom-val');
+      const panVal = modal.querySelector('#pan-val');
+      if (coverZoom) coverZoom.value = 100;
+      if (coverPanY) coverPanY.value = 0;
+      if (zoomVal) zoomVal.textContent = '100%';
+      if (panVal) panVal.textContent = '0px';
+
+      const mapPreview = modal.querySelector('#location-map-preview');
+      const mapIframe = modal.querySelector('#location-map-iframe');
+      const suggestionsBox = modal.querySelector('#location-suggestions');
+      if (mapPreview) mapPreview.style.display = 'none';
+      if (mapIframe) mapIframe.src = '';
+      if (suggestionsBox) {
+        suggestionsBox.style.display = 'none';
+        suggestionsBox.innerHTML = '';
+      }
+
       modal.classList.remove('hidden');
       // Trigger a reflow to start the transition
       modal.offsetHeight;
@@ -376,6 +426,90 @@ export async function renderOrganize(outlet) {
       console.error('[Cosmos] Error opening modal:', err);
     }
   };
+
+  const openEditModal = (event) => {
+    try {
+      editingEvent = event;
+      if (modalTitleEl) modalTitleEl.textContent = 'Edit Event';
+      if (btnSubmit) btnSubmit.textContent = 'Save Changes';
+
+      createForm.reset();
+
+      // Prefill details step
+      modal.querySelector('#event-title').value = event.title || '';
+      modal.querySelector('#event-desc').value = event.description || '';
+      modal.querySelector('#event-type').value = event.type || 'OPEN_NETWORKING';
+      modal.querySelector('#event-max-participants').value = event.maxParticipants || 50;
+      modal.querySelector('#event-tags').value = (event.tags || []).join(', ');
+
+      // Prefill schedule step
+      modal.querySelector('#event-date').value = dateToInputFormat(event.date);
+      modal.querySelector('#event-time').value = timeToInputFormat(event.time);
+      modal.querySelector('#event-location').value = event.location || '';
+
+      const mapPreview = modal.querySelector('#location-map-preview');
+      const mapIframe = modal.querySelector('#location-map-iframe');
+      if (event.location && !event.location.toLowerCase().includes('zoom') && !event.location.toLowerCase().includes('meet.google') && !event.location.toLowerCase().includes('http')) {
+        if (mapPreview && mapIframe) {
+          mapPreview.style.display = 'block';
+          mapIframe.src = `https://maps.google.com/maps?q=${encodeURIComponent(event.location)}&t=&z=13&ie=UTF8&iwloc=&output=embed`;
+        }
+      } else if (mapPreview) {
+        mapPreview.style.display = 'none';
+      }
+
+      // Prefill paid step
+      checkboxIsPaid.checked = !!event.isPaid;
+      if (event.isPaid) {
+        priceGroup.classList.remove('hidden');
+        modal.querySelector('#event-price').value = event.price || '';
+        modal.querySelector('#event-price').setAttribute('required', 'true');
+      } else {
+        priceGroup.classList.add('hidden');
+        modal.querySelector('#event-price').value = '';
+        modal.querySelector('#event-price').removeAttribute('required');
+      }
+
+      // Prefill cover
+      selectedImageFile = null;
+      const defaultCovers = modal.querySelectorAll('.default-cover-option');
+      const uploadPreview = modal.querySelector('#upload-preview');
+      const uploadPlaceholder = modal.querySelector('#upload-placeholder');
+      const previewImg = modal.querySelector('#preview-img');
+      const inputImage = modal.querySelector('#event-image');
+      if (inputImage) inputImage.value = '';
+
+      const coverUrl = event.coverUrl || 'gradient:cosmos-glow';
+      if (coverUrl.startsWith('gradient:')) {
+        selectedDefaultGradient = coverUrl;
+        defaultCovers.forEach(o => {
+          o.classList.toggle('active', o.dataset.gradient === coverUrl);
+        });
+        if (uploadPreview) uploadPreview.style.display = 'none';
+        if (uploadPlaceholder) uploadPlaceholder.style.display = 'flex';
+        if (previewImg) previewImg.src = '';
+      } else if (coverUrl) {
+        selectedDefaultGradient = '';
+        defaultCovers.forEach(o => o.classList.remove('active'));
+        if (previewImg) {
+          previewImg.src = coverUrl;
+          previewImg.style.transform = 'scale(1) translateY(0px)';
+        }
+        if (uploadPlaceholder) uploadPlaceholder.style.display = 'none';
+        if (uploadPreview) uploadPreview.style.display = 'block';
+      }
+
+      modal.classList.remove('hidden');
+      modal.offsetHeight;
+      modal.classList.add('active');
+      document.body.style.overflow = 'hidden';
+      setStep(1);
+    } catch (err) {
+      console.error('[Cosmos Organize] Error opening edit modal:', err);
+    }
+  };
+
+  window.cosmosOpenEditEvent = openEditModal;
 
   const closeModal = () => {
     modal.classList.remove('active');
@@ -389,6 +523,9 @@ export async function renderOrganize(outlet) {
     createForm.reset();
     priceGroup.classList.add('hidden');
     setStep(1);
+    editingEvent = null;
+    if (modalTitleEl) modalTitleEl.textContent = 'Create New Event';
+    if (btnSubmit) btnSubmit.textContent = 'Post Event';
     
     // Reset image upload preview
     selectedImageFile = null;
@@ -665,7 +802,7 @@ export async function renderOrganize(outlet) {
     return `${hours}:${minutes} ${ampm} IST`; // Matches existing events format
   }
 
-  // Handle Event form submit
+  // Handle Event form submit (Create or Edit)
   createForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
@@ -693,10 +830,10 @@ export async function renderOrganize(outlet) {
     }
 
     btnSubmit.disabled = true;
-    btnSubmit.textContent = 'Posting...';
+    btnSubmit.textContent = editingEvent ? 'Saving...' : 'Posting...';
 
     try {
-      let coverUrl = selectedDefaultGradient;
+      let coverUrl = selectedDefaultGradient || (editingEvent ? editingEvent.coverUrl : 'gradient:cosmos-glow');
       if (selectedImageFile) {
         btnSubmit.textContent = 'Processing Image...';
         const zoomPercent = parseFloat(coverZoom.value);
@@ -709,36 +846,73 @@ export async function renderOrganize(outlet) {
         const storageRef = ref(storage, `events/${Date.now()}_cropped.jpg`);
         const uploadResult = await uploadBytes(storageRef, croppedBlob);
         coverUrl = await getDownloadURL(uploadResult.ref);
+      } else if (editingEvent && !selectedDefaultGradient && previewImg.src && !previewImg.src.startsWith('data:')) {
+        coverUrl = editingEvent.coverUrl;
       }
 
-      const eventData = {
-        title,
-        description,
-        date: formatEventDate(rawDate),
-        time: formatEventTime(rawTime),
-        location,
-        type,
-        participantCount: 0,
-        maxParticipants,
-        isPaid,
-        price,
-        coverUrl,
-        tags,
-        createdBy: user.uid,
-        createdAt: serverTimestamp()
-      };
+      if (editingEvent) {
+        // UPDATE EXISTING EVENT
+        await updateDoc(doc(db, 'events', editingEvent.id), {
+          title,
+          description,
+          date: formatEventDate(rawDate),
+          time: formatEventTime(rawTime),
+          location,
+          type,
+          maxParticipants,
+          isPaid,
+          price,
+          coverUrl,
+          tags,
+          updatedAt: serverTimestamp()
+        });
 
-      await addDoc(collection(db, 'events'), eventData);
-      
-      showToast('Event posted successfully! 📅', 'success');
+        // Update local object
+        editingEvent.title = title;
+        editingEvent.description = description;
+        editingEvent.date = formatEventDate(rawDate);
+        editingEvent.time = formatEventTime(rawTime);
+        editingEvent.location = location;
+        editingEvent.type = type;
+        editingEvent.maxParticipants = maxParticipants;
+        editingEvent.isPaid = isPaid;
+        editingEvent.price = price;
+        editingEvent.coverUrl = coverUrl;
+        editingEvent.tags = tags;
+
+        showToast('Event updated successfully! ✏️', 'success');
+        editingEvent = null;
+      } else {
+        // CREATE NEW EVENT
+        const eventData = {
+          title,
+          description,
+          date: formatEventDate(rawDate),
+          time: formatEventTime(rawTime),
+          location,
+          type,
+          participantCount: 0,
+          maxParticipants,
+          isPaid,
+          price,
+          coverUrl,
+          tags,
+          createdBy: user.uid,
+          createdAt: serverTimestamp()
+        };
+
+        await addDoc(collection(db, 'events'), eventData);
+        showToast('Event posted successfully! 📅', 'success');
+      }
+
       selectedImageFile = null;
       closeModal();
     } catch (err) {
-      console.error('[Cosmos Organize] Create event error:', err);
-      showToast('Failed to create event: ' + err.message, 'error');
+      console.error('[Cosmos Organize] Save event error:', err);
+      showToast('Failed to save event: ' + err.message, 'error');
     } finally {
       btnSubmit.disabled = false;
-      btnSubmit.textContent = 'Post Event';
+      btnSubmit.textContent = editingEvent ? 'Save Changes' : 'Post Event';
     }
   });
 
@@ -758,10 +932,13 @@ export async function renderOrganize(outlet) {
       unsubEvents();
       unsubEvents = null;
     }
+    delete window.cosmosOpenEditEvent;
     const createModal = document.getElementById('create-event-modal');
     if (createModal) createModal.remove();
     const detailsModal = document.getElementById('event-details-modal');
     if (detailsModal) detailsModal.remove();
+    const confirmModal = document.getElementById('delete-event-confirm-modal');
+    if (confirmModal) confirmModal.remove();
   };
 }
 
@@ -772,6 +949,32 @@ function parseEventDate(dateStr) {
     .trim();
   const d = new Date(cleanDate);
   return isNaN(d.getTime()) ? null : d;
+}
+
+function dateToInputFormat(dateStr) {
+  if (!dateStr) return '';
+  const d = parseEventDate(dateStr);
+  if (!d || isNaN(d.getTime())) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function timeToInputFormat(timeStr) {
+  if (!timeStr) return '';
+  const clean = timeStr.replace(/\s*IST\s*$/i, '').trim();
+  if (/^\d{2}:\d{2}$/.test(clean)) return clean;
+  const match = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (match) {
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const ampm = (match[3] || '').toUpperCase();
+    if (ampm === 'PM' && hours < 12) hours += 12;
+    if (ampm === 'AM' && hours === 12) hours = 0;
+    return `${String(hours).padStart(2, '0')}:${minutes}`;
+  }
+  return '';
 }
 
 function groupEventsByDay(events) {
@@ -1133,7 +1336,7 @@ async function showEventDetailsModal(outlet, event, currentUserId) {
         </div>
 
         ${isHost ? `
-          <!-- HOST VIEW: PARTICIPANTS ROSTER -->
+          <!-- HOST VIEW: PARTICIPANTS ROSTER & ACTIONS -->
           <div class="event-host-admin-panel" id="host-registrants-panel">
             <div class="event-host-admin-header">
               <span class="event-host-admin-title">
@@ -1147,6 +1350,17 @@ async function showEventDetailsModal(outlet, event, currentUserId) {
                 <div class="loading-spinner" style="width:20px;height:20px;margin:0 auto 0.5rem auto;display:block;"></div>
                 Loading participant details...
               </div>
+            </div>
+            
+            <div class="event-host-actions">
+              <button class="btn-event-action btn-event-edit" id="btn-edit-event" data-event-id="${event.id}">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Edit Event
+              </button>
+              <button class="btn-event-action btn-event-delete" id="btn-delete-event" data-event-id="${event.id}">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                Delete Event
+              </button>
             </div>
           </div>
         ` : (isJoined ? `
@@ -1213,8 +1427,26 @@ async function showEventDetailsModal(outlet, event, currentUserId) {
     if (e.target === modal) closeModal();
   };
 
-  // If host is viewing, load real-time participants
+  // If host is viewing, load real-time participants and wire edit/delete actions
   if (isHost) {
+    const btnEditEvent = modal.querySelector('#btn-edit-event');
+    const btnDeleteEvent = modal.querySelector('#btn-delete-event');
+
+    if (btnEditEvent) {
+      btnEditEvent.addEventListener('click', () => {
+        closeModal();
+        if (window.cosmosOpenEditEvent) {
+          window.cosmosOpenEditEvent(event);
+        }
+      });
+    }
+
+    if (btnDeleteEvent) {
+      btnDeleteEvent.addEventListener('click', () => {
+        showDeleteEventConfirmation(event, closeModal);
+      });
+    }
+
     try {
       const regSnap = await getDocs(collection(db, 'events', event.id, 'registrants'));
       const countEl = modal.querySelector('#host-registrant-count');
@@ -1347,6 +1579,78 @@ async function showEventDetailsModal(outlet, event, currentUserId) {
         submitBtn.textContent = 'Confirm Participation 🚀';
       }
     });
+  }
+}
+
+function showDeleteEventConfirmation(event, closeDetailsModal) {
+  let confirmModal = document.getElementById('delete-event-confirm-modal');
+  if (!confirmModal) {
+    confirmModal = document.createElement('div');
+    confirmModal.className = 'modal-overlay hidden';
+    confirmModal.id = 'delete-event-confirm-modal';
+    confirmModal.style.zIndex = '100001';
+    document.body.appendChild(confirmModal);
+  }
+
+  confirmModal.innerHTML = `
+    <div class="modal-card event-confirm-dialog anim-scale-in">
+      <div class="event-confirm-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+      </div>
+      <h3 class="event-confirm-title">Delete Event?</h3>
+      <p class="event-confirm-desc">
+        Are you sure you want to delete <strong style="color:var(--text-primary);">"${event.title}"</strong>? This will permanently remove the event and all participant registrations.
+      </p>
+      <div class="event-confirm-actions">
+        <button class="btn btn-secondary" id="btn-cancel-delete-event">Cancel</button>
+        <button class="btn btn-danger" id="btn-confirm-delete-event" style="background:var(--gradient-danger);color:#fff;border:none;">Delete Event</button>
+      </div>
+    </div>
+  `;
+
+  confirmModal.classList.remove('hidden');
+  confirmModal.offsetHeight;
+  confirmModal.classList.add('active');
+
+  const closeConfirmModal = () => {
+    confirmModal.classList.remove('active');
+    setTimeout(() => {
+      if (!confirmModal.classList.contains('active')) {
+        confirmModal.classList.add('hidden');
+      }
+    }, 300);
+  };
+
+  const btnCancel = confirmModal.querySelector('#btn-cancel-delete-event');
+  const btnConfirm = confirmModal.querySelector('#btn-confirm-delete-event');
+
+  if (btnCancel) btnCancel.onclick = closeConfirmModal;
+
+  confirmModal.onclick = (e) => {
+    if (e.target === confirmModal) closeConfirmModal();
+  };
+
+  if (btnConfirm) {
+    btnConfirm.onclick = async () => {
+      btnConfirm.disabled = true;
+      btnConfirm.textContent = 'Deleting...';
+      if (btnCancel) btnCancel.disabled = true;
+
+      try {
+        await deleteDoc(doc(db, 'events', event.id));
+        showToast(`Event "${event.title}" deleted 🗑️`, 'info');
+        closeConfirmModal();
+        if (typeof closeDetailsModal === 'function') {
+          closeDetailsModal();
+        }
+      } catch (err) {
+        console.error('[Cosmos Organize] Delete event error:', err);
+        showToast('Failed to delete event: ' + err.message, 'error');
+        btnConfirm.disabled = false;
+        btnConfirm.textContent = 'Delete Event';
+        if (btnCancel) btnCancel.disabled = false;
+      }
+    };
   }
 }
 

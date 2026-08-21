@@ -2,7 +2,7 @@
    Cosmos PWA — Events Page
    ============================================================ */
 
-import { auth, db, collection, onSnapshot, doc, getDoc, getDocs, setDoc, updateDoc, addDoc, increment, serverTimestamp } from '../firebase-config.js';
+import { auth, db, collection, onSnapshot, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, increment, serverTimestamp } from '../firebase-config.js';
 import { showToast } from '../app.js';
 
 const tabs = ['All Events', 'Speed Networking', 'Curated Meetup', 'Invite Only', 'Industry Round'];
@@ -401,7 +401,7 @@ async function showEventDetailsModal(outlet, event, currentUserId) {
         </div>
 
         ${isHost ? `
-          <!-- HOST VIEW: PARTICIPANTS ROSTER -->
+          <!-- HOST VIEW: PARTICIPANTS ROSTER & ACTIONS -->
           <div class="event-host-admin-panel" id="host-registrants-panel">
             <div class="event-host-admin-header">
               <span class="event-host-admin-title">
@@ -415,6 +415,17 @@ async function showEventDetailsModal(outlet, event, currentUserId) {
                 <div class="loading-spinner" style="width:20px;height:20px;margin:0 auto 0.5rem auto;display:block;"></div>
                 Loading participant details...
               </div>
+            </div>
+            
+            <div class="event-host-actions">
+              <button class="btn-event-action btn-event-edit" id="btn-edit-event" data-event-id="${event.id}">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Edit Event
+              </button>
+              <button class="btn-event-action btn-event-delete" id="btn-delete-event" data-event-id="${event.id}">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                Delete Event
+              </button>
             </div>
           </div>
         ` : (isJoined ? `
@@ -480,8 +491,28 @@ async function showEventDetailsModal(outlet, event, currentUserId) {
     if (e.target === modal) closeModal();
   };
 
-  // If host is viewing, load real-time participants
+  // If host is viewing, load real-time participants and wire edit/delete actions
   if (isHost) {
+    const btnEditEvent = modal.querySelector('#btn-edit-event');
+    const btnDeleteEvent = modal.querySelector('#btn-delete-event');
+
+    if (btnEditEvent) {
+      btnEditEvent.addEventListener('click', () => {
+        closeModal();
+        if (window.cosmosOpenEditEvent) {
+          window.cosmosOpenEditEvent(event);
+        } else {
+          window.location.hash = '#/organize';
+        }
+      });
+    }
+
+    if (btnDeleteEvent) {
+      btnDeleteEvent.addEventListener('click', () => {
+        showDeleteEventConfirmationInEvents(event, closeModal);
+      });
+    }
+
     try {
       const regSnap = await getDocs(collection(db, 'events', event.id, 'registrants'));
       const countEl = modal.querySelector('#host-registrant-count');
@@ -620,5 +651,77 @@ function getGradientCss(coverUrl) {
     case 'gradient:deep-space': return 'linear-gradient(135deg, #030712 0%, #1e1b4b 40%, #db2777 100%)';
     case 'gradient:emerald-matrix': return 'linear-gradient(135deg, #022c22 0%, #065f46 50%, #10b981 100%)';
     default: return 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #581c87 100%)';
+  }
+}
+
+function showDeleteEventConfirmationInEvents(event, closeDetailsModal) {
+  let confirmModal = document.getElementById('delete-event-confirm-modal');
+  if (!confirmModal) {
+    confirmModal = document.createElement('div');
+    confirmModal.className = 'modal-overlay hidden';
+    confirmModal.id = 'delete-event-confirm-modal';
+    confirmModal.style.zIndex = '100001';
+    document.body.appendChild(confirmModal);
+  }
+
+  confirmModal.innerHTML = `
+    <div class="modal-card event-confirm-dialog anim-scale-in">
+      <div class="event-confirm-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+      </div>
+      <h3 class="event-confirm-title">Delete Event?</h3>
+      <p class="event-confirm-desc">
+        Are you sure you want to delete <strong style="color:var(--text-primary);">"${event.title}"</strong>? This will permanently remove the event and all participant registrations.
+      </p>
+      <div class="event-confirm-actions">
+        <button class="btn btn-secondary" id="btn-cancel-delete-event">Cancel</button>
+        <button class="btn btn-danger" id="btn-confirm-delete-event" style="background:var(--gradient-danger);color:#fff;border:none;">Delete Event</button>
+      </div>
+    </div>
+  `;
+
+  confirmModal.classList.remove('hidden');
+  confirmModal.offsetHeight;
+  confirmModal.classList.add('active');
+
+  const closeConfirmModal = () => {
+    confirmModal.classList.remove('active');
+    setTimeout(() => {
+      if (!confirmModal.classList.contains('active')) {
+        confirmModal.classList.add('hidden');
+      }
+    }, 300);
+  };
+
+  const btnCancel = confirmModal.querySelector('#btn-cancel-delete-event');
+  const btnConfirm = confirmModal.querySelector('#btn-confirm-delete-event');
+
+  if (btnCancel) btnCancel.onclick = closeConfirmModal;
+
+  confirmModal.onclick = (e) => {
+    if (e.target === confirmModal) closeConfirmModal();
+  };
+
+  if (btnConfirm) {
+    btnConfirm.onclick = async () => {
+      btnConfirm.disabled = true;
+      btnConfirm.textContent = 'Deleting...';
+      if (btnCancel) btnCancel.disabled = true;
+
+      try {
+        await deleteDoc(doc(db, 'events', event.id));
+        showToast(`Event "${event.title}" deleted 🗑️`, 'info');
+        closeConfirmModal();
+        if (typeof closeDetailsModal === 'function') {
+          closeDetailsModal();
+        }
+      } catch (err) {
+        console.error('[Cosmos Events] Delete event error:', err);
+        showToast('Failed to delete event: ' + err.message, 'error');
+        btnConfirm.disabled = false;
+        btnConfirm.textContent = 'Delete Event';
+        if (btnCancel) btnCancel.disabled = false;
+      }
+    };
   }
 }

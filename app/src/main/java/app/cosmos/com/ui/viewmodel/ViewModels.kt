@@ -715,6 +715,61 @@ class EventViewModel(
                 .onFailure { onError(it.message ?: "Failed to generate event description") }
         }
     }
+
+    // ── Paid Event Registration ──────────────────────────────────────────────
+
+    private val _isRegisteringPaid = MutableStateFlow(false)
+    val isRegisteringPaid: StateFlow<Boolean> = _isRegisteringPaid.asStateFlow()
+
+    private val _paymentRecord = MutableStateFlow<app.cosmos.com.data.model.EventPaymentRecord?>(null)
+    val paymentRecord: StateFlow<app.cosmos.com.data.model.EventPaymentRecord?> = _paymentRecord.asStateFlow()
+
+    fun registerWithPayment(
+        eventId: String,
+        name: String,
+        email: String,
+        transactionId: String,
+        amount: Double,
+        currency: String,
+        paymentMethod: String = "UPI",
+        onSuccess: (app.cosmos.com.data.model.EventPaymentRecord) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            _isRegisteringPaid.value = true
+            eventRepo.registerForPaidEvent(eventId, uid, name, email, transactionId, amount, currency, paymentMethod)
+                .onSuccess { record ->
+                    _isRegisteringPaid.value = false
+                    _paymentRecord.value = record
+                    onSuccess(record)
+                }
+                .onFailure { error ->
+                    _isRegisteringPaid.value = false
+                    onError(error.message ?: "Registration failed")
+                }
+        }
+    }
+
+    fun clearPaymentRecord() {
+        _paymentRecord.value = null
+    }
+
+    fun updateEvent(eventId: String, updates: Map<String, Any>, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            eventRepo.updateEvent(eventId, updates)
+                .onSuccess { onSuccess() }
+                .onFailure { error -> onError(error.message ?: "Failed to update event") }
+        }
+    }
+
+    fun deleteEvent(eventId: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            eventRepo.deleteEvent(eventId)
+                .onSuccess { onSuccess() }
+                .onFailure { error -> onError(error.message ?: "Failed to delete event") }
+        }
+    }
 }
 
 // ── CommunityViewModel ───────────────────────────────────────────────────────

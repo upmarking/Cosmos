@@ -1,14 +1,15 @@
 package app.cosmos.com.screens.events
 
+import android.widget.Toast
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,13 +17,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.cosmos.com.data.model.EventPaymentRecord
 import app.cosmos.com.ui.components.*
 import app.cosmos.com.ui.theme.*
 import app.cosmos.com.ui.viewmodel.AuthViewModel
 import app.cosmos.com.ui.viewmodel.EventViewModel
+import app.cosmos.com.navigation.Screen
 import coil.compose.AsyncImage
 
 @Composable
@@ -47,10 +51,20 @@ fun EventLobbyScreen(
     val currentUserState by authViewModel.currentUser.collectAsState()
     val currentUserId = currentUserState?.id
 
-    // Registration dialog state
+    val context = LocalContext.current
+    val isRegisteringPaid by eventViewModel.isRegisteringPaid.collectAsState()
+    val latestPaymentRecord by eventViewModel.paymentRecord.collectAsState()
+
+    // Registration dialog state (for free events)
     var showRegistrationDialog by remember { mutableStateOf(false) }
     var registrationName by remember(currentUserState) { mutableStateOf(currentUserState?.name ?: "") }
     var registrationEmail by remember(currentUserState) { mutableStateOf(currentUserState?.email ?: "") }
+
+    // Paid event flow state
+    var showPaidSheet by remember { mutableStateOf(false) }
+    var showSuccessOverlay by remember { mutableStateOf(false) }
+    var successPaymentRecord by remember { mutableStateOf<EventPaymentRecord?>(null) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     if (eventState == null) {
         CosmosAmbientBackground {
@@ -98,24 +112,45 @@ fun EventLobbyScreen(
                         )
                 )
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.Default.ArrowBack, "Back", tint = CosmosBackground)
+                            Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
                         }
-                        if (event.isPaid) {
-                            Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(CosmosBackground.copy(alpha = 0.3f)).padding(horizontal = 12.dp, vertical = 6.dp)) {
-                                Text(event.price, style = MaterialTheme.typography.titleSmall, color = CosmosBackground, fontWeight = FontWeight.Bold)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (event.isPaid) {
+                                Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.2f)).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                                    Text(event.price, style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            if (isCreator) {
+                                IconButton(onClick = {
+                                    onNavigate(Screen.PostEvent.createRoute(event.id))
+                                }) {
+                                    Icon(Icons.Default.Edit, "Edit Event", tint = Color.White)
+                                }
+                                IconButton(onClick = {
+                                    showDeleteConfirmation = true
+                                }) {
+                                    Icon(Icons.Default.Delete, "Delete Event", tint = Color.White)
+                                }
                             }
                         }
                     }
                     Spacer(Modifier.height(16.dp))
-                    CosmosTagChip(text = event.type.label, backgroundColor = CosmosBackground.copy(alpha = 0.25f), textColor = CosmosBackground)
+                    CosmosTagChip(text = event.type.label, backgroundColor = Color.White.copy(alpha = 0.2f), textColor = Color.White)
                     Spacer(Modifier.height(8.dp))
-                    Text(event.title, style = MaterialTheme.typography.headlineMedium, color = CosmosBackground, fontWeight = FontWeight.Bold)
+                    Text(event.title, style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("📅 ${event.date}", style = MaterialTheme.typography.bodySmall, color = CosmosBackground.copy(alpha = 0.85f))
-                        Text("📍 ${event.location}", style = MaterialTheme.typography.bodySmall, color = CosmosBackground.copy(alpha = 0.85f))
+                        Text("📅 ${event.date}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
+                        Text("📍 ${event.location}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
                     }
                     Spacer(Modifier.height(16.dp))
                     // Progress
@@ -123,15 +158,21 @@ fun EventLobbyScreen(
                         LinearProgressIndicator(
                             progress = { event.participantCount.toFloat() / event.maxParticipants },
                             modifier = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)),
-                            color = CosmosBackground,
-                            trackColor = CosmosBackground.copy(alpha = 0.3f)
+                            color = Color.White,
+                            trackColor = Color.White.copy(alpha = 0.3f)
                         )
-                        Text("${event.participantCount}/${event.maxParticipants}", style = MaterialTheme.typography.labelMedium, color = CosmosBackground)
+                        Text("${event.participantCount}/${event.maxParticipants}", style = MaterialTheme.typography.labelMedium, color = Color.White)
                     }
                     Spacer(Modifier.height(20.dp))
                     CosmosButton(
-                        text = if (isCreator) "✓ Hosting" else if (event.isRegistered) "✓ Participating" else "Participate",
-                        onClick = { showRegistrationDialog = true },
+                        text = if (isCreator) "✓ Hosting" else if (event.isRegistered) "✓ Participating" else if (event.isPaid) "Pay & Participate" else "Participate",
+                        onClick = {
+                            if (event.isPaid) {
+                                showPaidSheet = true
+                            } else {
+                                showRegistrationDialog = true
+                            }
+                        },
                         enabled = !event.isRegistered && !isCreator
                     )
                 }
@@ -291,6 +332,48 @@ fun EventLobbyScreen(
                                                     color = CosmosOnSurfaceVariant,
                                                     maxLines = 1
                                                 )
+                                            }
+                                            // Payment status for paid events
+                                            if (event.isPaid && registrant.paymentStatus.isNotBlank()) {
+                                                Spacer(Modifier.height(4.dp))
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    val isPaid = registrant.paymentStatus == "CONFIRMED"
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(6.dp))
+                                                            .background(
+                                                                if (isPaid) CosmosSuccess.copy(alpha = 0.12f)
+                                                                else Color(0xFFFF9800).copy(alpha = 0.12f)
+                                                            )
+                                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                                    ) {
+                                                        Text(
+                                                            if (isPaid) "✓ Paid" else "⏳ Pending",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = if (isPaid) CosmosSuccess else Color(0xFFFF9800),
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                    if (registrant.amountPaid > 0) {
+                                                        Text(
+                                                            "${event.currencySymbol}${registrant.amountPaid.toLong()}",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = CosmosOnSurfaceVariant,
+                                                            fontWeight = FontWeight.Medium
+                                                        )
+                                                    }
+                                                    if (registrant.transactionId.isNotBlank()) {
+                                                        Text(
+                                                            "Txn: ${registrant.transactionId}",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = CosmosOnSurfaceVariant.copy(alpha = 0.6f),
+                                                            maxLines = 1
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -495,6 +578,103 @@ fun EventLobbyScreen(
             dismissButton = {
                 TextButton(
                     onClick = { showRegistrationDialog = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = CosmosOnSurfaceVariant)
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    // ── Paid Event Payment Sheet ───────────────────────────────────────────────
+    if (showPaidSheet && event.isPaid) {
+        PaidEventRegistrationSheet(
+            event = event,
+            userName = registrationName,
+            userEmail = registrationEmail,
+            isRegistering = isRegisteringPaid,
+            onRegisterWithPayment = { transactionId ->
+                eventViewModel.registerWithPayment(
+                    eventId = eventId,
+                    name = registrationName.trim(),
+                    email = registrationEmail.trim(),
+                    transactionId = transactionId.trim(),
+                    amount = event.priceAmount,
+                    currency = event.currency,
+                    onSuccess = { record ->
+                        showPaidSheet = false
+                        successPaymentRecord = record
+                        showSuccessOverlay = true
+                    },
+                    onError = { errorMsg ->
+                        Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                    }
+                )
+            },
+            onDismiss = { showPaidSheet = false }
+        )
+    }
+
+    // ── Payment Success Overlay ────────────────────────────────────────────────
+    if (showSuccessOverlay && successPaymentRecord != null) {
+        EventPaymentSuccessOverlay(
+            event = event,
+            paymentRecord = successPaymentRecord!!,
+            onDismiss = {
+                showSuccessOverlay = false
+                successPaymentRecord = null
+                eventViewModel.clearPaymentRecord()
+            }
+        )
+    }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            containerColor = Color(0xFF1A1D24),
+            titleContentColor = CosmosOnBackground,
+            textContentColor = CosmosOnSurfaceVariant,
+            shape = RoundedCornerShape(20.dp),
+            title = {
+                Text(
+                    "Delete Event",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                Text(
+                    "Are you sure you want to delete \"${event.title}\"? This will permanently remove the event and all participant registrations.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = CosmosOnSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        eventViewModel.deleteEvent(
+                            eventId = event.id,
+                            onSuccess = {
+                                Toast.makeText(context, "Event deleted successfully 🗑️", Toast.LENGTH_SHORT).show()
+                                showDeleteConfirmation = false
+                                onBack()
+                            },
+                            onError = { errorMsg ->
+                                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                                showDeleteConfirmation = false
+                            }
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CosmosError,
+                        contentColor = CosmosOnError
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Delete", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirmation = false },
                     colors = ButtonDefaults.textButtonColors(contentColor = CosmosOnSurfaceVariant)
                 ) {
                     Text("Cancel")

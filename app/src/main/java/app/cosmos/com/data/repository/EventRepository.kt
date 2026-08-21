@@ -1,5 +1,7 @@
 package app.cosmos.com.data.repository
 
+import app.cosmos.com.data.model.EventPaymentRecord
+import app.cosmos.com.data.model.EventPaymentStatus
 import app.cosmos.com.data.model.EventRegistrant
 import app.cosmos.com.data.model.EventRound
 import app.cosmos.com.data.model.EventType
@@ -19,11 +21,13 @@ import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.UUID
 
 interface EventRepository {
     fun getEvents(currentUserId: String? = null): Flow<List<NetworkEvent>>
     fun getEvent(eventId: String, currentUserId: String): Flow<NetworkEvent?>
     suspend fun registerForEvent(eventId: String, userId: String, name: String, email: String): Result<Unit>
+    suspend fun registerForPaidEvent(eventId: String, userId: String, name: String, email: String, transactionId: String, amount: Double, currency: String, paymentMethod: String): Result<EventPaymentRecord>
     suspend fun unregisterFromEvent(eventId: String, userId: String): Result<Unit>
     fun getEventRounds(eventId: String): Flow<List<EventRound>>
     suspend fun submitRoundFeedback(eventId: String, roundId: String, raterId: String, rateeId: String, rating: Int, feedbackText: String): Result<Unit>
@@ -363,7 +367,10 @@ class FirestoreEventRepository(
                         userId = doc.id,
                         name = data["name"] as? String ?: "",
                         email = data["email"] as? String ?: "",
-                        registeredAt = (data["registeredAt"] as? com.google.firebase.Timestamp)?.seconds ?: 0L
+                        registeredAt = (data["registeredAt"] as? com.google.firebase.Timestamp)?.seconds ?: 0L,
+                        paymentStatus = data["paymentStatus"] as? String ?: "",
+                        transactionId = data["transactionId"] as? String ?: "",
+                        amountPaid = (data["amountPaid"] as? Number)?.toDouble() ?: 0.0
                     )
                 }
                 trySend(registrants)
@@ -374,7 +381,7 @@ class FirestoreEventRepository(
     }
 
     override suspend fun createEvent(event: NetworkEvent, creatorId: String): Result<String> = runCatching {
-        val eventMap = mapOf(
+        val eventMap = mutableMapOf<String, Any>(
             "title" to event.title,
             "description" to event.description,
             "date" to event.date,
@@ -385,11 +392,19 @@ class FirestoreEventRepository(
             "maxParticipants" to event.maxParticipants,
             "isPaid" to event.isPaid,
             "price" to event.price,
+            "currency" to event.currency,
+            "priceAmount" to event.priceAmount,
             "coverUrl" to event.coverUrl,
             "tags" to event.tags,
             "createdBy" to creatorId,
             "createdAt" to FieldValue.serverTimestamp()
         )
+        // Add payment collection details for paid events
+        if (event.isPaid) {
+            eventMap["paymentUpiId"] = event.paymentUpiId
+            eventMap["paymentAccountName"] = event.paymentAccountName
+            eventMap["paymentInstructions"] = event.paymentInstructions
+        }
         val docRef = firestore.collection("events").add(eventMap).await()
         docRef.id
     }
@@ -440,6 +455,113 @@ class FirestoreEventRepository(
             }
     }
 
+    override suspend fun registerForPaidEvent(
+        eventId: String,
+        userId: String,
+        name: String,
+        email: String,
+        transactionId: String,
+        amount: Double,
+        currency: String,
+        paymentMethod: String
+    ): Result<EventPaymentRecord> = runCatching {
+        val receiptId = "COSMOS-${System.currentTimeMillis().toString(36).uppercase()}-${UUID.randomUUID().toString().take(4).uppercase()}"
+
+        // Get event details for the payment record
+        val eventDoc = firestore.collection("events").document(eventId).get().await()
+        val eventTitle = eventDoc.getString("title") ?: "Event"
+        val organizerUpiId = eventDoc.getString("paymentUpiId") ?: ""
+        val organizerName = eventDoc.getString("paymentAccountName") ?: ""
+
+        firestore.runTransaction { transaction ->
+            val eventRef = firestore.collection("events").document(eventId)
+            val eventSnap = transaction.get(eventRef)
+            val currentCount = eventSnap.getLong("participantCount") ?: 0
+            val maxCount = eventSnap.getLong("maxParticipants") ?: 100
+
+            if (currentCount >= maxCount) {
+                throw IllegalStateException("Event is full")
+            }
+
+            // Register the user
+            val registrantRef = eventRef.collection("registrants").document(userId)
+            transaction.set(registrantRef, mapOf(
+                "userId" to userId,
+                "name" to name,
+                "email" to email,
+                "registeredAt" to FieldValue.serverTimestamp(),
+                "paymentStatus" to EventPaymentStatus.CONFIRMED.name,
+                "transactionId" to transactionId,
+                "amountPaid" to amount
+            ))
+
+            // Record the payment
+            val paymentRef = eventRef.collection("payments").document(userId)
+            transaction.set(paymentRef, mapOf(
+                "participantId" to userId,
+                "participantName" to name,
+                "participantEmail" to email,
+                "eventId" to eventId,
+                "eventTitle" to eventTitle,
+                "amount" to amount,
+                "currency" to currency,
+                "paymentMethod" to paymentMethod,
+                "transactionId" to transactionId,
+                "paymentStatus" to EventPaymentStatus.CONFIRMED.name,
+                "paidAt" to FieldValue.serverTimestamp(),
+                "receiptId" to receiptId,
+                "organizerUpiId" to organizerUpiId,
+                "organizerName" to organizerName
+            ))
+
+            transaction.update(eventRef, "participantCount", currentCount + 1)
+        }.await()
+
+        // Send notification to participant
+        val notifData = mapOf(
+            "userId" to userId,
+            "type" to "EVENT_REMINDER",
+            "title" to "Payment Confirmed — $eventTitle",
+            "body" to "Your payment of $currency $amount has been recorded. Receipt: $receiptId",
+            "timestamp" to FieldValue.serverTimestamp(),
+            "isRead" to false,
+            "actionId" to eventId
+        )
+        firestore.collection("notifications").add(notifData).await()
+
+        // Notify organizer
+        val hostId = eventDoc.getString("createdBy") ?: ""
+        if (hostId.isNotEmpty() && hostId != userId) {
+            val hostNotifData = mapOf(
+                "userId" to hostId,
+                "type" to "EVENT_REGISTRATION",
+                "title" to "💰 Paid Registration: $name",
+                "body" to "$name paid $currency $amount for $eventTitle. Txn: $transactionId",
+                "timestamp" to FieldValue.serverTimestamp(),
+                "isRead" to false,
+                "actionId" to eventId
+            )
+            firestore.collection("notifications").add(hostNotifData).await()
+        }
+
+        EventPaymentRecord(
+            participantId = userId,
+            participantName = name,
+            participantEmail = email,
+            eventId = eventId,
+            eventTitle = eventTitle,
+            amount = amount,
+            currency = currency,
+            paymentMethod = paymentMethod,
+            transactionId = transactionId,
+            paymentStatus = EventPaymentStatus.CONFIRMED.name,
+            paidAt = System.currentTimeMillis(),
+            receiptId = receiptId,
+            organizerUpiId = organizerUpiId,
+            organizerName = organizerName
+        )
+    }
+
     companion object {
         fun mapDocumentToEvent(id: String, data: Map<String, Any>): NetworkEvent {
             val typeStr = data["type"] as? String ?: EventType.OPEN_NETWORKING.name
@@ -457,6 +579,11 @@ class FirestoreEventRepository(
                 maxParticipants = (data["maxParticipants"] as? Number)?.toInt() ?: 0,
                 isPaid = data["isPaid"] as? Boolean ?: false,
                 price = data["price"] as? String ?: "",
+                currency = data["currency"] as? String ?: "INR",
+                priceAmount = (data["priceAmount"] as? Number)?.toDouble() ?: 0.0,
+                paymentUpiId = data["paymentUpiId"] as? String ?: "",
+                paymentAccountName = data["paymentAccountName"] as? String ?: "",
+                paymentInstructions = data["paymentInstructions"] as? String ?: "",
                 coverUrl = data["coverUrl"] as? String ?: "",
                 tags = (data["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
                 createdBy = data["createdBy"] as? String ?: "",

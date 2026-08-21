@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.sp
 import app.cosmos.com.ui.components.*
 import app.cosmos.com.ui.theme.*
 import app.cosmos.com.ui.viewmodel.EventViewModel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import coil.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -44,6 +46,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PostEventScreen(
+    eventId: String? = null,
     onBack: () -> Unit,
     onEventPosted: () -> Unit,
     eventViewModel: EventViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
@@ -72,6 +75,9 @@ fun PostEventScreen(
     var isPaid by remember { mutableStateOf(false) }
     var price by remember { mutableStateOf("") }
     var selectedCurrency by remember { mutableStateOf("USD") }
+    var upiId by remember { mutableStateOf("") }
+    var accountName by remember { mutableStateOf("") }
+    var paymentInstructions by remember { mutableStateOf("") }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -83,6 +89,38 @@ fun PostEventScreen(
     var showAiDialog by remember { mutableStateOf(false) }
     var aiPromptInput by remember { mutableStateOf("") }
     var isGeneratingDescription by remember { mutableStateOf(false) }
+
+    val activeEvent by eventViewModel.activeEvent.collectAsState()
+    var isSavingChanges by remember { mutableStateOf(false) }
+    var isExistingCoverRemoved by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(eventId) {
+        if (eventId != null) {
+            eventViewModel.selectEvent(eventId)
+        }
+    }
+
+    LaunchedEffect(activeEvent) {
+        val event = activeEvent
+        if (eventId != null && event != null) {
+            title = event.title
+            description = event.description
+            date = event.date
+            time = event.time
+            location = event.location
+            maxParticipants = event.maxParticipants
+            isPaid = event.isPaid
+            price = if (event.isPaid) event.price.replace(Regex("[^0-9.]"), "") else ""
+            selectedCurrency = event.currency
+            upiId = event.paymentUpiId
+            accountName = event.paymentAccountName
+            paymentInstructions = event.paymentInstructions
+            if (event.coverUrl.startsWith("gradient:")) {
+                selectedGradient = EventGradient.fromId(event.coverUrl)
+            }
+        }
+    }
 
     // Shimmer animation for placeholder
     val infiniteTransition = rememberInfiniteTransition(label = "HeaderShimmer")
@@ -99,7 +137,7 @@ fun PostEventScreen(
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             CosmosTopBar(
-                title = "Create Event",
+                title = if (eventId != null) "Edit Event" else "Create Event",
                 onBack = onBack
             )
 
@@ -202,7 +240,8 @@ fun PostEventScreen(
                                 }
                             }
 
-                            if (selectedImageUri != null) {
+                            val hasExistingCover = eventId != null && activeEvent?.coverUrl?.let { it.isNotBlank() && !it.startsWith("gradient:") } == true && !isExistingCoverRemoved
+                            if (selectedImageUri != null || hasExistingCover) {
                                 // Image Preview
                                 BoxWithConstraints(
                                     modifier = Modifier
@@ -214,7 +253,7 @@ fun PostEventScreen(
                                 ) {
                                     val containerHeightPx = with(androidx.compose.ui.platform.LocalDensity.current) { maxHeight.toPx() }
                                     AsyncImage(
-                                        model = selectedImageUri,
+                                        model = selectedImageUri ?: activeEvent?.coverUrl,
                                         contentDescription = "Cover Image Preview",
                                         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                                         modifier = Modifier
@@ -230,6 +269,9 @@ fun PostEventScreen(
                                             selectedImageUri = null
                                             imageZoom = 1f
                                             imagePanFraction = 0f
+                                            if (eventId != null) {
+                                                isExistingCoverRemoved = true
+                                            }
                                         },
                                         modifier = Modifier
                                             .align(Alignment.TopEnd)
@@ -873,6 +915,182 @@ fun PostEventScreen(
                                             )
                                         }
                                     }
+
+                                    HorizontalDivider(color = CosmosOutlineVariant.copy(alpha = 0.15f))
+
+                                    // ── Payment Collection Section ──
+                                    Text(
+                                        "PAYMENT COLLECTION",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = CosmosPrimary,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Text(
+                                        "Where should participants send payment?",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = CosmosOnSurfaceVariant.copy(alpha = 0.6f)
+                                    )
+
+                                    // UPI ID
+                                    OutlinedTextField(
+                                        value = upiId,
+                                        onValueChange = { upiId = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        label = { Text("UPI ID") },
+                                        placeholder = { Text("yourname@upi", color = CosmosOnSurfaceVariant.copy(alpha = 0.4f)) },
+                                        leadingIcon = {
+                                            Text(
+                                                "\uD83D\uDCF1",
+                                                modifier = Modifier.padding(start = 12.dp),
+                                                fontSize = 18.sp
+                                            )
+                                        },
+                                        supportingText = {
+                                            if (upiId.isNotBlank() && !upiId.contains("@")) {
+                                                Text("Enter a valid UPI ID (e.g. name@upi)", color = CosmosError)
+                                            }
+                                        },
+                                        isError = upiId.isNotBlank() && !upiId.contains("@"),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = CosmosPrimary,
+                                            unfocusedBorderColor = CosmosOutlineVariant.copy(alpha = 0.5f),
+                                            focusedTextColor = CosmosOnBackground,
+                                            unfocusedTextColor = CosmosOnBackground,
+                                            cursorColor = CosmosPrimary,
+                                            focusedLabelColor = CosmosPrimary,
+                                            unfocusedLabelColor = CosmosOnSurfaceVariant,
+                                            focusedContainerColor = CosmosSurfaceContainerLowest,
+                                            unfocusedContainerColor = CosmosSurfaceContainerLowest
+                                        ),
+                                        singleLine = true
+                                    )
+
+                                    // Account Holder Name
+                                    OutlinedTextField(
+                                        value = accountName,
+                                        onValueChange = { accountName = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        label = { Text("Account Holder Name") },
+                                        placeholder = { Text("Name on UPI account", color = CosmosOnSurfaceVariant.copy(alpha = 0.4f)) },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.Person, null, tint = CosmosPrimary, modifier = Modifier.padding(start = 4.dp))
+                                        },
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = CosmosPrimary,
+                                            unfocusedBorderColor = CosmosOutlineVariant.copy(alpha = 0.5f),
+                                            focusedTextColor = CosmosOnBackground,
+                                            unfocusedTextColor = CosmosOnBackground,
+                                            cursorColor = CosmosPrimary,
+                                            focusedLabelColor = CosmosPrimary,
+                                            unfocusedLabelColor = CosmosOnSurfaceVariant,
+                                            focusedContainerColor = CosmosSurfaceContainerLowest,
+                                            unfocusedContainerColor = CosmosSurfaceContainerLowest
+                                        ),
+                                        singleLine = true
+                                    )
+
+                                    // Payment Instructions (optional)
+                                    OutlinedTextField(
+                                        value = paymentInstructions,
+                                        onValueChange = { paymentInstructions = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        label = { Text("Payment Instructions (optional)") },
+                                        placeholder = { Text("e.g. Pay before event date", color = CosmosOnSurfaceVariant.copy(alpha = 0.4f)) },
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = CosmosPrimary,
+                                            unfocusedBorderColor = CosmosOutlineVariant.copy(alpha = 0.5f),
+                                            focusedTextColor = CosmosOnBackground,
+                                            unfocusedTextColor = CosmosOnBackground,
+                                            cursorColor = CosmosPrimary,
+                                            focusedLabelColor = CosmosPrimary,
+                                            unfocusedLabelColor = CosmosOnSurfaceVariant,
+                                            focusedContainerColor = CosmosSurfaceContainerLowest,
+                                            unfocusedContainerColor = CosmosSurfaceContainerLowest
+                                        ),
+                                        singleLine = false,
+                                        minLines = 2
+                                    )
+
+                                    // ── Participant Preview Card ──
+                                    val priceFilled = price.isNotBlank()
+                                    val upiFilled = upiId.isNotBlank() && upiId.contains("@")
+                                    if (priceFilled && upiFilled) {
+                                        val previewCurrencySymbol = when (selectedCurrency) { "USD" -> "$"; "INR" -> "\u20B9"; "EUR" -> "\u20AC"; "GBP" -> "\u00A3"; else -> "$" }
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(14.dp))
+                                                .background(
+                                                    Brush.linearGradient(
+                                                        listOf(
+                                                            CosmosGradientStart.copy(alpha = 0.10f),
+                                                            CosmosGradientEnd.copy(alpha = 0.05f)
+                                                        )
+                                                    )
+                                                )
+                                                .border(
+                                                    width = 1.dp,
+                                                    brush = Brush.horizontalGradient(
+                                                        listOf(CosmosPrimary.copy(alpha = 0.3f), CosmosGradientEnd.copy(alpha = 0.15f))
+                                                    ),
+                                                    shape = RoundedCornerShape(14.dp)
+                                                )
+                                                .padding(14.dp)
+                                        ) {
+                                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Visibility, null, tint = CosmosPrimary.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                                                    Text(
+                                                        "PARTICIPANT VIEW",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = CosmosPrimary.copy(alpha = 0.7f),
+                                                        fontWeight = FontWeight.Bold,
+                                                        letterSpacing = 0.8.sp
+                                                    )
+                                                }
+                                                Text(
+                                                    "Pay $previewCurrencySymbol$price",
+                                                    style = MaterialTheme.typography.titleLarge,
+                                                    color = CosmosOnBackground,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Text("\uD83D\uDCF1", fontSize = 14.sp)
+                                                    Text(
+                                                        upiId,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = CosmosPrimary,
+                                                        fontWeight = FontWeight.Medium
+                                                    )
+                                                }
+                                                if (accountName.isNotBlank()) {
+                                                    Text(
+                                                        "Account: $accountName",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = CosmosOnSurfaceVariant
+                                                    )
+                                                }
+                                                if (paymentInstructions.isNotBlank()) {
+                                                    Text(
+                                                        "\u201C$paymentInstructions\u201D",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = CosmosOnSurfaceVariant.copy(alpha = 0.7f),
+                                                        fontWeight = FontWeight.Light
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -959,39 +1177,96 @@ fun PostEventScreen(
                         }
 
                         CosmosButton(
-                            text = if (isCreating) "Launching..." else "Launch Event \uD83D\uDE80",
+                            text = if (isCreating || isSavingChanges) "Saving..." else if (eventId != null) "Save Changes" else "Launch Event \uD83D\uDE80",
                             onClick = {
                                 val imageBytes = selectedImageUri?.let { uri ->
                                     cropEventBitmap(context, uri, imageZoom, imagePanFraction)
                                 }
                                 val currencySymbol = when (selectedCurrency) { "USD" -> "$"; "INR" -> "\u20B9"; "EUR" -> "\u20AC"; "GBP" -> "\u00A3"; else -> "$" }
-                                val event = app.cosmos.com.data.model.NetworkEvent(
-                                    id = "",
-                                    title = title,
-                                    description = description,
-                                    date = date,
-                                    time = time,
-                                    location = location,
-                                    type = app.cosmos.com.data.model.EventType.OPEN_NETWORKING,
-                                    participantCount = 0,
-                                    maxParticipants = maxParticipants,
-                                    isPaid = isPaid,
-                                    price = if (isPaid) "$currencySymbol$price" else "",
-                                    coverUrl = if (selectedImageUri != null) "" else selectedGradient.id,
-                                    tags = listOf("Networking"),
-                                    createdBy = "",
-                                    createdAt = 0L
-                                )
-                                eventViewModel.createEventWithImage(
-                                    event = event,
-                                    imageBytes = imageBytes,
-                                    onSuccess = onEventPosted,
-                                    onError = { errorMsg ->
-                                        Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                                val parsedPrice = price.toDoubleOrNull() ?: 0.0
+                                
+                                if (eventId != null) {
+                                    isSavingChanges = true
+                                    val updates = mutableMapOf<String, Any>(
+                                        "title" to title,
+                                        "description" to description,
+                                        "date" to date,
+                                        "time" to time,
+                                        "location" to location,
+                                        "maxParticipants" to maxParticipants,
+                                        "isPaid" to isPaid,
+                                        "price" to (if (isPaid) "$currencySymbol$price" else ""),
+                                        "currency" to selectedCurrency,
+                                        "priceAmount" to (if (isPaid) parsedPrice else 0.0),
+                                        "paymentUpiId" to (if (isPaid) upiId.trim() else ""),
+                                        "paymentAccountName" to (if (isPaid) accountName.trim() else ""),
+                                        "paymentInstructions" to (if (isPaid) paymentInstructions.trim() else "")
+                                    )
+
+                                    scope.launch {
+                                        try {
+                                            if (selectedImageUri != null && imageBytes != null) {
+                                                val tempId = java.util.UUID.randomUUID().toString()
+                                                val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance().reference.child("events/$tempId.jpg")
+                                                storageRef.putBytes(imageBytes).await()
+                                                val downloadUrl = storageRef.downloadUrl.await().toString()
+                                                updates["coverUrl"] = downloadUrl
+                                            } else if (isExistingCoverRemoved || activeEvent?.coverUrl?.startsWith("gradient:") == true || activeEvent?.coverUrl.isNullOrBlank()) {
+                                                updates["coverUrl"] = selectedGradient.id
+                                            }
+
+                                            eventViewModel.updateEvent(
+                                                eventId = eventId,
+                                                updates = updates,
+                                                onSuccess = {
+                                                    isSavingChanges = false
+                                                    Toast.makeText(context, "Event updated successfully ✏️", Toast.LENGTH_SHORT).show()
+                                                    onEventPosted()
+                                                },
+                                                onError = { errorMsg ->
+                                                    isSavingChanges = false
+                                                    Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                                                }
+                                            )
+                                        } catch (e: Exception) {
+                                            isSavingChanges = false
+                                            Toast.makeText(context, e.message ?: "Failed to upload cover image", Toast.LENGTH_LONG).show()
+                                        }
                                     }
-                                )
+                                } else {
+                                    val event = app.cosmos.com.data.model.NetworkEvent(
+                                        id = "",
+                                        title = title,
+                                        description = description,
+                                        date = date,
+                                        time = time,
+                                        location = location,
+                                        type = app.cosmos.com.data.model.EventType.OPEN_NETWORKING,
+                                        participantCount = 0,
+                                        maxParticipants = maxParticipants,
+                                        isPaid = isPaid,
+                                        price = if (isPaid) "$currencySymbol$price" else "",
+                                        currency = selectedCurrency,
+                                        priceAmount = if (isPaid) parsedPrice else 0.0,
+                                        paymentUpiId = if (isPaid) upiId.trim() else "",
+                                        paymentAccountName = if (isPaid) accountName.trim() else "",
+                                        paymentInstructions = if (isPaid) paymentInstructions.trim() else "",
+                                        coverUrl = if (selectedImageUri != null) "" else selectedGradient.id,
+                                        tags = listOf("Networking"),
+                                        createdBy = "",
+                                        createdAt = 0L
+                                    )
+                                    eventViewModel.createEventWithImage(
+                                        event = event,
+                                        imageBytes = imageBytes,
+                                        onSuccess = onEventPosted,
+                                        onError = { errorMsg ->
+                                            Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                                        }
+                                    )
+                                }
                             },
-                            enabled = title.isNotBlank() && date.isNotBlank() && time.isNotBlank() && !isCreating,
+                            enabled = title.isNotBlank() && date.isNotBlank() && time.isNotBlank() && !isCreating && !isSavingChanges,
                             modifier = Modifier.fillMaxWidth()
                         )
 

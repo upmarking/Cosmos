@@ -5902,5 +5902,109 @@ select.form-input option {
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
+/* Event Host Actions */
+.event-host-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.btn-event-action {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.btn-event-edit {
+  background: rgba(167, 139, 250, 0.1);
+  color: var(--purple-l);
+  border: 1px solid rgba(167, 139, 250, 0.25);
+}
+.btn-event-edit:hover {
+  background: rgba(167, 139, 250, 0.2);
+  border-color: rgba(167, 139, 250, 0.45);
+  transform: translateY(-1px);
+}
+.btn-event-edit:active {
+  transform: translateY(0);
+}
+
+.btn-event-delete {
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--red);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+}
+.btn-event-delete:hover {
+  background: rgba(248, 113, 113, 0.2);
+  border-color: rgba(248, 113, 113, 0.45);
+  transform: translateY(-1px);
+}
+.btn-event-delete:active {
+  transform: translateY(0);
+}
+
+.event-confirm-dialog {
+  max-width: 380px !important;
+  text-align: center;
+  padding: 1.75rem 1.5rem !important;
+  border-radius: 20px !important;
+  background: var(--bg-secondary) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6) !important;
+}
+
+.event-confirm-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 0.85rem auto;
+  color: var(--red);
+}
+
+.event-confirm-title {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 0.4rem 0;
+}
+
+.event-confirm-desc {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 1.25rem 0;
+}
+
+.event-confirm-actions {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.event-confirm-actions .btn {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 10px;
+}
+
+
 
 
