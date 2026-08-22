@@ -241,162 +241,223 @@ ul, ol { list-style: none; }
   box-shadow: 0 2px 8px rgba(248,113,113,0.5);
 }
 
-/* ===================== SIDEBAR NAVIGATION (C·O·S·M·O·S) ===================== */
+/* ===================== BOTTOM DOCK NAVIGATION (C·O·S·M·O·S) ===================== */
+.bottom-nav,
 .side-nav {
   position: fixed;
-  top: 0;
-  left: 0;
   bottom: 0;
-  z-index: 200;
-  width: 230px;
-  background: #0a0d1a;
-  border-right: 1px solid rgba(255,255,255,0.06);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* Subtle gradient glow at the top of sidebar */
-.side-nav::before {
-  content: '';
-  position: absolute;
-  top: 0;
   left: 0;
   right: 0;
-  height: 120px;
-  background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(167,139,250,0.08) 0%, transparent 70%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* ── Logo Section ── */
-.side-nav-logo {
-  position: relative;
-  z-index: 1;
-  padding: 1.125rem 1.25rem;
-  flex-shrink: 0;
-}
-.side-nav-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  text-decoration: none;
-}
-.side-nav-brand-text {
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-  font-weight: 800;
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  white-space: nowrap;
-}
-
-/* ── Nav Links ── */
-.side-nav-links {
-  position: relative;
-  z-index: 1;
-  flex: 1;
+  width: 100%;
+  height: auto;
+  z-index: 200;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 0.5rem 0.75rem;
-  overflow-y: auto;
-  scrollbar-width: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1.25rem calc(16px + var(--safe-bottom));
+  pointer-events: none;
+  border: none;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  overflow: visible;
 }
-.side-nav-links::-webkit-scrollbar { display: none; }
 
-/* ── Bottom Section (Settings) ── */
-.side-nav-bottom {
+/* ── The Floating Glass Dock Pill Container ── */
+.bottom-nav-inner,
+.side-nav-links {
   position: relative;
-  z-index: 1;
-  padding: 0.5rem 0.75rem 1rem;
-  border-top: 1px solid rgba(255,255,255,0.05);
-  flex-shrink: 0;
-}
-
-/* ── Nav Tab — Sidebar Style ── */
-.nav-tab {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0.875rem;
-  border-radius: 10px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  transition: color 0.2s var(--ease), background 0.2s var(--ease);
-  -webkit-tap-highlight-color: transparent;
-  position: relative;
-  white-space: nowrap;
-  text-decoration: none;
-}
-.nav-tab svg {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  transition: color 0.2s var(--ease), filter 0.2s var(--ease);
-}
-.nav-tab:hover {
-  color: var(--text-secondary);
-  background: rgba(255,255,255,0.04);
-}
-.nav-tab.active {
-  color: var(--purple-l);
-  background: rgba(167,139,250,0.08);
-}
-.nav-tab.active svg {
-  filter: drop-shadow(0 0 6px rgba(167,139,250,0.4));
-}
-/* Active left accent bar */
-.nav-tab.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 20px;
-  border-radius: 0 4px 4px 0;
-  background: var(--gradient-primary);
+  justify-content: space-evenly;
+  width: 100%;
+  max-width: 600px;
+  height: 68px;
+  padding: 0 12px;
+  background: rgba(20, 24, 34, 0.84);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border-radius: 36px;
+  pointer-events: auto;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.55),
+    0 0 28px rgba(167, 139, 250, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  overflow: visible;
 }
 
-/* ── COSMOS First-Letter Accent ── */
+/* Gradient shimmer border overlay */
+.bottom-nav-inner::before,
+.side-nav-links::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 36px;
+  padding: 1.2px;
+  background: linear-gradient(135deg,
+    rgba(255, 255, 255, 0.25) 0%,
+    rgba(255, 255, 255, 0.04) 40%,
+    rgba(192, 193, 255, 0.12) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Top glint line */
+.bottom-nav-inner::after,
+.side-nav-links::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.20) 30%,
+    rgba(255, 255, 255, 0.40) 50%,
+    rgba(255, 255, 255, 0.20) 70%,
+    transparent 100%
+  );
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ── Nav Tab Items Inside Dock ── */
+.nav-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 6px;
+  border-radius: 14px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: rgba(148, 163, 184, 0.9);
+  text-decoration: none;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: transparent !important;
+  transition: transform 0.28s var(--ease-spring), color 0.2s var(--ease);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+.nav-tab svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  color: rgba(148, 163, 184, 0.9);
+  transition: color 0.2s var(--ease), filter 0.2s var(--ease), transform 0.28s var(--ease-spring);
+  position: relative;
+  z-index: 2;
+}
+.nav-tab:hover {
+  color: var(--text-primary);
+}
+.nav-tab:hover svg {
+  color: var(--text-primary);
+  transform: translateY(-2px);
+}
+
+/* Tab label */
 .nav-tab-label {
-  font-size: 0.875rem;
+  font-size: 0.68rem;
   font-weight: 500;
   letter-spacing: 0.01em;
+  transition: color 0.2s var(--ease), font-weight 0.2s var(--ease);
+  position: relative;
+  z-index: 2;
   white-space: nowrap;
 }
+/* COSMOS first-letter accent */
 .nav-tab-label .cosmos-letter {
   font-style: normal;
   font-weight: 700;
-  font-size: 0.9rem;
-  color: rgba(165,176,208,0.9);
-  transition: color 0.2s var(--ease);
+  font-size: 0.74rem;
+  color: rgba(165, 176, 208, 0.9);
+  transition: color 0.25s var(--ease), text-shadow 0.25s var(--ease);
+}
+
+/* ── Active Tab ── */
+.nav-tab.active {
+  color: var(--purple-l);
+  transform: scale(1.08);
+}
+.nav-tab.active svg {
+  color: #C0C1FF;
+  filter: drop-shadow(0 0 8px rgba(192, 193, 255, 0.45));
 }
 .nav-tab.active .nav-tab-label {
   font-weight: 600;
+  color: #C0C1FF;
 }
 .nav-tab.active .nav-tab-label .cosmos-letter {
-  color: #ffd54f;
-  text-shadow: 0 0 6px rgba(255,213,79,0.25);
+  color: #FFD54F !important;
+  text-shadow: 0 0 8px rgba(255, 213, 79, 0.35);
+  font-weight: 700;
 }
 
-/* ===================== TOP BAR — Offset for Sidebar ===================== */
+/* Active indicator — Radial glow pill behind icon */
+.nav-tab.active::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    rgba(192, 193, 255, 0.22) 0%,
+    rgba(192, 193, 255, 0.06) 60%,
+    transparent 100%
+  );
+  z-index: 0;
+  animation: navGlowIn 0.35s var(--ease-spring) both;
+}
+
+.nav-tab:active {
+  transform: scale(0.94);
+  transition: transform 0.08s ease;
+}
+.nav-tab.active:active {
+  transform: scale(1.02);
+}
+
+/* ── Notification Badge inside Dock ── */
+.nav-tab .notif-badge {
+  position: absolute;
+  top: 2px;
+  right: calc(50% - 18px);
+  animation: badgePulse 2s ease-in-out infinite;
+}
+
+/* ===================== TOP BAR (Full Width) ===================== */
 .top-bar {
-  left: 230px;
+  left: 0;
+  right: 0;
+  width: 100%;
 }
-/* On desktop, hide top-bar logo since sidebar has one */
-.top-bar-logo { display: none; }
+.top-bar-logo {
+  display: flex;
+}
 
-/* ===================== MAIN CONTENT AREA ===================== */
+/* ===================== MAIN CONTENT AREA (Full Width) ===================== */
 .app-content {
   padding-top: calc(var(--top-bar-h) + var(--safe-top));
-  padding-bottom: 1rem;
-  margin-left: 230px;
+  padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 36px);
+  margin-left: 0;
+  width: 100%;
   min-height: 100vh;
   min-height: 100dvh;
 }
@@ -2824,38 +2885,6 @@ textarea.form-input {
 
 /* ===================== RESPONSIVE ===================== */
 @media (min-width: 768px) {
-  .bottom-nav {
-    top: 0;
-    left: 0;
-    right: auto;
-    bottom: 0;
-    width: 72px;
-    height: auto;
-    flex-direction: column;
-    justify-content: flex-start;
-    padding: calc(var(--top-bar-h) + 1rem) 0.5rem 1rem;
-    border-top: none;
-    border-right: 1px solid var(--border);
-  }
-  .nav-tab {
-    width: 56px;
-    height: 52px;
-    padding: 6px;
-    border-radius: 14px;
-  }
-  .nav-tab span {
-    font-size: 0.6rem;
-  }
-
-  .top-bar-inner {
-    padding-left: 84px;
-  }
-
-  .app-content {
-    padding-left: 72px;
-    padding-bottom: 16px;
-  }
-
   .swipe-area {
     max-height: 600px;
   }
@@ -2908,10 +2937,10 @@ body.sub-page-mode .app-content {
 /* ===================== PWA INSTALL PROMPT ===================== */
 .install-prompt {
   position: fixed;
-  bottom: 20px;
-  left: calc(230px + 1rem);
+  bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 24px);
+  left: 1rem;
   right: 1rem;
-  max-width: 420px;
+  max-width: 440px;
   margin: 0 auto;
   background: rgba(12,16,32,0.95);
   backdrop-filter: blur(20px);
@@ -3164,6 +3193,216 @@ body.sub-page-mode .app-content {
   flex-shrink: 0;
 }
 
+/* ===================== SETTINGS & CONTROL CENTER ===================== */
+.settings-page {
+  max-width: 900px;
+  margin: 0 auto;
+  min-height: 100%;
+  padding: 0.5rem 0.5rem calc(var(--bottom-nav-h) + var(--safe-bottom) + 36px);
+}
+
+.settings-header-banner {
+  padding: 0.5rem 0.5rem 1.25rem;
+}
+
+/* ── Profile Summary Hero Card (Android Parity) ── */
+.settings-hero-card {
+  position: relative;
+  border-radius: 22px;
+  background: rgba(22, 26, 38, 0.85);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 24px rgba(167, 139, 250, 0.08);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+.settings-hero-bg {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 100% 0%, rgba(167, 139, 250, 0.15) 0%, transparent 60%),
+              radial-gradient(circle at 0% 100%, rgba(59, 130, 246, 0.1) 0%, transparent 60%);
+  pointer-events: none;
+}
+.settings-hero-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 1.15rem;
+  flex-wrap: wrap;
+}
+.settings-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.settings-avatar {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 2px solid var(--purple);
+  box-shadow: 0 0 16px rgba(167, 139, 250, 0.35);
+  font-size: 1.35rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.settings-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.settings-verified-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #0a66c2;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #060811;
+}
+.settings-hero-info {
+  flex: 1;
+  min-width: 200px;
+}
+.settings-hero-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.settings-hero-name {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-family: var(--font-display);
+}
+.settings-tier-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s var(--ease);
+  background: rgba(255, 255, 255, 0.06);
+}
+.settings-tier-pill:hover {
+  transform: scale(1.04);
+}
+.tier-badge-explorer {
+  color: var(--blue);
+  background: rgba(96, 165, 250, 0.12);
+  border-color: rgba(96, 165, 250, 0.3);
+}
+.tier-badge-member {
+  color: var(--green);
+  background: rgba(52, 211, 153, 0.12);
+  border-color: rgba(52, 211, 153, 0.3);
+}
+.tier-badge-inner {
+  color: var(--purple-l);
+  background: rgba(167, 139, 250, 0.15);
+  border-color: rgba(167, 139, 250, 0.4);
+  box-shadow: 0 0 10px rgba(167, 139, 250, 0.2);
+}
+.tier-badge-founder {
+  color: #fbbf24;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(245, 158, 11, 0.1) 100%);
+  border-color: rgba(251, 191, 36, 0.5);
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.25);
+}
+.settings-hero-headline {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin: 0.2rem 0 0.4rem;
+}
+.settings-hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.settings-meta-item {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.settings-hero-action {
+  flex-shrink: 0;
+}
+
+/* ── Monthly Introduction Progress Card ── */
+.settings-progress-card {
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 1rem 1.15rem;
+}
+.settings-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+.settings-progress-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.settings-progress-count {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--purple-l);
+}
+.settings-progress-bar-wrap {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+.settings-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--gradient-primary);
+  transition: width 0.5s var(--ease-spring);
+}
+.settings-progress-desc {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* ── 6-Tile Stats Grid ── */
+.settings-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.65rem;
+}
+@media (max-width: 480px) {
+  .settings-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.45rem;
+  }
+}
+
+/* ── Section & Card Base ── */
 .settings-section-title {
   font-size: 0.78rem;
   font-weight: 700;
@@ -3171,23 +3410,18 @@ body.sub-page-mode .app-content {
   letter-spacing: 1px;
   text-transform: uppercase;
   display: block;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.65rem;
 }
 
 .settings-card {
   background: var(--bg-glass);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 18px;
   overflow: hidden;
 }
 
-.settings-page {
-  min-height: 100%;
-  padding-bottom: calc(1.5rem + var(--safe-bottom));
-}
-
 .settings-section {
-  padding: 0 1rem;
+  padding: 0 0.5rem;
 }
 
 .settings-section + .settings-section {
@@ -3197,8 +3431,8 @@ body.sub-page-mode .app-content {
 .settings-item {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
+  gap: 0.88rem;
+  padding: 0.95rem 1.15rem;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: background 0.2s var(--ease);
@@ -3221,6 +3455,7 @@ body.sub-page-mode .app-content {
 .settings-item-label {
   flex: 1;
   font-weight: 500;
+  font-size: 0.9rem;
 }
 
 .settings-item-value {
@@ -3248,23 +3483,17 @@ body.sub-page-mode .app-content {
 
 .settings-toggle-title {
   font-weight: 500;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
 }
 
 .settings-toggle-desc {
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   color: var(--text-muted);
   margin-top: 0.15rem;
 }
 
 .settings-card-padded {
-  padding: 0.5rem 1.25rem;
-}
-
-.settings-dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
+  padding: 0.4rem 1.15rem;
 }
 
 .dashboard-tile {
@@ -3273,7 +3502,7 @@ body.sub-page-mode .app-content {
   background: var(--bg-glass);
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 1.25rem 0.5rem;
+  padding: 1rem 0.5rem;
   transition: transform 0.2s var(--ease), border-color 0.2s var(--ease);
 }
 
@@ -3283,13 +3512,13 @@ body.sub-page-mode .app-content {
 }
 
 .dashboard-tile-value {
-  font-size: 1.5rem;
+  font-size: 1.45rem;
   font-weight: 700;
   line-height: 1.2;
 }
 
 .dashboard-tile-label {
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   margin-top: 0.25rem;
 }
@@ -3300,6 +3529,88 @@ body.sub-page-mode .app-content {
 
 .settings-item-danger .settings-item-icon {
   color: var(--red);
+}
+
+/* ── Membership Tiers Modal ── */
+.membership-modal-card {
+  max-width: 680px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.membership-tiers-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+@media (max-width: 600px) {
+  .membership-tiers-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.membership-tier-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: all 0.25s var(--ease);
+}
+.membership-tier-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--purple);
+}
+.membership-tier-card.active-tier {
+  border-color: var(--purple-l);
+  box-shadow: 0 0 20px rgba(167, 139, 250, 0.15);
+}
+.membership-tier-header {
+  margin-bottom: 0.75rem;
+}
+.tier-icon {
+  font-size: 1.8rem;
+  margin-bottom: 0.25rem;
+}
+.tier-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-family: var(--font-display);
+}
+.tier-price {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+}
+.tier-price span {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.tier-perks {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.25rem 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.tier-perks li {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.tier-badge-current {
+  display: block;
+  text-align: center;
+  padding: 0.4rem;
+  background: rgba(167, 139, 250, 0.15);
+  color: var(--purple-l);
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 /* Toggle switch */
@@ -4159,95 +4470,281 @@ select.form-input option {
 }
 
 
+/* ===================== MOBILE ANDROID-NATIVE EXPERIENCE ===================== */
+/* Matches the Android CosmosBottomNavBar.kt glassmorphic floating pill design */
 
-/* ===================== RESPONSIVE — Mobile: Bottom Nav ===================== */
+/* ── Mobile Global Touch & Gesture Optimizations ── */
 @media (max-width: 768px) {
-  .side-nav {
-    top: auto;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    width: 100%;
-    height: var(--bottom-nav-h);
-    flex-direction: row;
-    border-right: none;
-    border-top: 1px solid rgba(255,255,255,0.06);
-    background: rgba(10, 13, 26, 0.92);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    z-index: 100;
-    padding-bottom: var(--safe-bottom);
+
+  /* Prevent browser pull-to-refresh and overscroll bounce — feels native */
+  html {
+    overscroll-behavior: contain;
+    overscroll-behavior-y: contain;
   }
-  .side-nav::before { display: none; }
+  body {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    /* Prevent double-tap zoom */
+    touch-action: manipulation;
+  }
 
-  .side-nav-logo { display: none; }
-  .side-nav-bottom { border-top: none; padding: 0; }
+  /* Hide scrollbars on mobile for native app feel */
+  ::-webkit-scrollbar { display: none; }
+  * { scrollbar-width: none; }
 
+  /* ── Ripple Effect — Android Material Ripple ── */
+  .btn,
+  .card,
+  .top-bar-btn,
+  .google-btn,
+  .event-tab,
+  .settings-item,
+  .connection-card,
+  .social-post-card,
+  .orbit-card,
+  .messenger-item {
+    position: relative;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn::after,
+  .card::after,
+  .google-btn::after,
+  .event-tab::after,
+  .settings-item::after,
+  .connection-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at var(--ripple-x, 50%) var(--ripple-y, 50%),
+      rgba(192, 193, 255, 0.15) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+    border-radius: inherit;
+  }
+  .btn:active::after,
+  .card:active::after,
+  .google-btn:active::after,
+  .event-tab:active::after,
+  .settings-item:active::after,
+  .connection-card:active::after {
+    opacity: 1;
+    transition: opacity 0.05s ease;
+  }
+
+  /* ── Active Press Feedback — Android-like Scale ── */
+  .btn:active {
+    transform: scale(0.96) !important;
+    transition: transform 0.1s ease !important;
+  }
+  .card:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+  .top-bar-btn:active {
+    transform: scale(0.88);
+    transition: transform 0.1s ease;
+  }
+
+  /* ── Top Bar — Material 3 Glass App Bar ── */
+  .top-bar {
+    left: 0;
+    background: rgba(17, 20, 23, 0.88);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border-bottom: none;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.04),
+      0 4px 20px rgba(0,0,0,0.3);
+  }
+  .top-bar-logo { display: flex; }
+
+  /* ── Page Transitions — Smoother Android Container Transform ── */
+  .page-exit {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+    transition: all 0.12s cubic-bezier(0.4, 0, 1, 1);
+  }
+  .page-enter {
+    animation: mobilePageEnter 0.28s cubic-bezier(0, 0, 0.2, 1) both;
+  }
+
+  /* ── Main Content Area ── */
+  .app-content {
+    margin-left: 0;
+    /* Extra bottom padding for floating pill nav + safe area */
+    padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 40px);
+  }
+
+  /* ── Cards — Material 3 Elevation for Mobile ── */
+  .card {
+    background: rgba(25, 28, 31, 0.85);
+    border-color: rgba(255,255,255,0.06);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.2s ease,
+                border-color 0.25s ease;
+  }
+
+  /* ── Chat View Height ── */
+  .chat-view {
+    height: calc(100vh - var(--top-bar-h) - var(--bottom-nav-h) - 40px);
+    height: calc(100dvh - var(--top-bar-h) - var(--bottom-nav-h) - 40px);
+  }
+
+  /* ── Install Prompt Position ── */
+  .install-prompt {
+    bottom: calc(var(--bottom-nav-h) + 44px);
+    left: 1rem;
+    right: 1rem;
+  }
+
+  /* ── Auth/Sub-page Content Reset ── */
+  body.auth-mode .app-content,
+  body.sub-page-mode .app-content { margin-left: 0; }
+
+  /* ====================================================================
+     MOBILE BOTTOM DOCK NAVIGATION ADJUSTMENTS
+     ==================================================================== */
+  .bottom-nav,
+  .side-nav {
+    padding: 0 12px calc(12px + var(--safe-bottom));
+  }
+
+  .bottom-nav-inner,
   .side-nav-links {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-around;
-    padding: 0;
-    flex: 1;
-    gap: 0;
+    max-width: 100%;
+    height: 64px;
+    padding: 0 6px;
+    border-radius: 32px;
   }
 
   .nav-tab {
-    flex-direction: column;
+    padding: 4px 2px;
     gap: 2px;
-    padding: 6px 6px;
-    font-size: 0.62rem;
-    border-radius: 12px;
-    background: none !important;
   }
-  .nav-tab svg { width: 22px; height: 22px; }
-  .nav-tab-label { font-size: 0.62rem; }
-  .nav-tab-label .cosmos-letter { font-size: 0.68rem; }
+  .nav-tab svg {
+    width: 20px;
+    height: 20px;
+  }
+  .nav-tab-label {
+    font-size: 0.58rem;
+  }
+  .nav-tab-label .cosmos-letter {
+    font-size: 0.64rem;
+  }
 
   .nav-tab.active::before {
-    left: 50%;
-    top: 2px;
-    transform: translateX(-50%);
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(167,139,250,0.18) 0%, rgba(167,139,250,0.04) 60%, transparent 100%);
+    top: 3px;
+    width: 32px;
+    height: 32px;
   }
 
-  .top-bar { left: 0; }
-  .top-bar-logo { display: flex; }
-  .app-content {
-    margin-left: 0;
-    padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 8px);
-  }
-  .chat-view {
-    height: calc(100vh - var(--top-bar-h) - var(--bottom-nav-h));
-    height: calc(100dvh - var(--top-bar-h) - var(--bottom-nav-h));
-  }
-  .install-prompt { bottom: calc(var(--bottom-nav-h) + 12px); left: 1rem; }
+  /* ====================================================================
+     MOBILE PAGE-SPECIFIC ADJUSTMENTS
+     Account for the floating pill nav height and improve mobile UX
+     ==================================================================== */
 
-  body.auth-mode .app-content,
-  body.sub-page-mode .app-content { margin-left: 0; }
+  /* ── Connect / Swipe Page ── */
+  .connect-page {
+    min-height: calc(100vh - var(--top-bar-h) - var(--bottom-nav-h) - 60px);
+    min-height: calc(100dvh - var(--top-bar-h) - var(--bottom-nav-h) - 60px);
+    padding: 1rem 0.75rem;
+  }
+  .swipe-area {
+    height: min(480px, calc(100vh - 300px));
+    height: min(480px, calc(100dvh - 300px));
+  }
+
+  /* ── Profile Card — Touch Optimized ── */
+  .profile-card {
+    border-radius: 24px;
+    touch-action: pan-y;
+  }
+
+  /* ── Page Container ── */
+  .page {
+    padding: 0.875rem;
+  }
+  .page-title {
+    font-size: 1.5rem;
+  }
+
+  /* ── Settings Items — Larger Touch Targets ── */
+  .settings-item {
+    min-height: 52px;
+    padding: 0.875rem 1rem;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s ease;
+  }
+  .settings-item:active {
+    background: rgba(192, 193, 255, 0.06);
+  }
+
+  /* ── Toggle Switch — Larger for Mobile Touch ── */
+  .toggle-track {
+    min-width: 48px;
+    height: 26px;
+  }
+
+  /* ── Modal / Dialog — Mobile Full Width ── */
+  .modal-content {
+    margin: auto 0.75rem;
+    max-height: calc(100vh - 120px);
+    max-height: calc(100dvh - 120px);
+    border-radius: 20px;
+  }
+
+  /* ── Toast — Position Above Floating Pill ── */
+  .toast-container {
+    top: calc(var(--top-bar-h) + 8px);
+  }
+
+  /* ── Messenger Items — Touch Targets ── */
+  .conversation-item {
+    padding: 0.875rem 1rem;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ── Empty State — Compact Mobile ── */
+  .empty-state {
+    padding: 2rem 1.25rem;
+  }
+
+  /* ── Events Grid — Single Column on Small Screens ── */
+  .events-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Social Feed — Edge-to-Edge Cards ── */
+  .social-post-card {
+    border-radius: 16px;
+    margin-left: -0.125rem;
+    margin-right: -0.125rem;
+  }
+
+  /* ── Auth Page — Better Mobile Spacing ── */
+  .auth-page {
+    padding: 1.5rem 1rem;
+  }
+  .auth-card {
+    padding: 1.5rem;
+  }
 }
 
-/* ===================== RESPONSIVE — Tablet: Icon-only Sidebar ===================== */
-@media (min-width: 769px) and (max-width: 1024px) {
-  .side-nav { width: 68px; }
-  .side-nav-brand-text,
-  .nav-tab-label { display: none; }
-  .side-nav-logo { padding: 1rem 0; }
-  .side-nav-brand { justify-content: center; }
-  .side-nav-links { padding: 0.5rem 0.5rem; align-items: center; }
-  .side-nav-bottom { padding: 0.5rem; }
-  .nav-tab { justify-content: center; padding: 0.625rem; }
-  .nav-tab.active::before { left: 0; }
-
-  .top-bar { left: 68px; }
-  .app-content { margin-left: 68px; }
-  .install-prompt { left: calc(68px + 1rem); }
-
-  body.auth-mode .app-content,
-  body.sub-page-mode .app-content { margin-left: 0; }
+/* ── Mobile Keyframes ── */
+@keyframes mobilePageEnter {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes navGlowIn {
+  from { transform: translateX(-50%) scale(0); opacity: 0; }
+  to { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+@keyframes badgePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0.4); }
+  50% { box-shadow: 0 0 0 4px rgba(248,113,113,0); }
 }
 
 /* ============================================================
