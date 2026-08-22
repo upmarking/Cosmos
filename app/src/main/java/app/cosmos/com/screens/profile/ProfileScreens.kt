@@ -1,5 +1,7 @@
 package app.cosmos.com.screens.profile
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.cosmos.com.data.model.*
@@ -43,6 +46,7 @@ import java.io.ByteArrayOutputStream
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
+
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -397,7 +401,6 @@ fun SettingsPrivacyScreen(
     // Dialog state
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showConnectedAccountsDialog by remember { mutableStateOf(false) }
-    var showLimitDialog by remember { mutableStateOf(false) }
     var showMatchingPrefsDialog by remember { mutableStateOf(false) }
     var showAvailabilityDialog by remember { mutableStateOf(false) }
     var showBlockedUsersDialog by remember { mutableStateOf(false) }
@@ -450,12 +453,7 @@ fun SettingsPrivacyScreen(
             LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp)) {
                 // ── Account Section ──────────────────────────────────────────
                 item {
-                    Text(
-                        text = "ACCOUNT",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                        color = CosmosPrimary,
-                        modifier = Modifier.padding(start = 24.dp, top = 8.dp, bottom = 8.dp)
-                    )
+                    CosmosSettingsSectionHeader(emoji = "🛸", title = "ACCOUNT")
                 }
                 item {
                     CosmosSettingsCard {
@@ -492,12 +490,7 @@ fun SettingsPrivacyScreen(
 
                 // ── COSMOS Membership Section ─────────────────────────────────
                 item {
-                    Text(
-                        text = "COSMOS MEMBERSHIP",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                        color = CosmosPrimary,
-                        modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp)
-                    )
+                    CosmosSettingsSectionHeader(emoji = "🌟", title = "COSMOS MEMBERSHIP")
                 }
                 item {
                     CosmosSettingsCard {
@@ -524,12 +517,7 @@ fun SettingsPrivacyScreen(
 
                 // ── COSMOS Appearance Section ─────────────────────────────────
                 item {
-                    Text(
-                        text = "COSMOS APPEARANCE",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                        color = CosmosPrimary,
-                        modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp)
-                    )
+                    CosmosSettingsSectionHeader(emoji = "🎨", title = "COSMOS APPEARANCE")
                 }
                 item {
                     CosmosSettingsCard {
@@ -545,12 +533,7 @@ fun SettingsPrivacyScreen(
 
                 // ── Notifications Section ────────────────────────────────────
                 item {
-                    Text(
-                        text = "NOTIFICATIONS",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                        color = CosmosPrimary,
-                        modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp)
-                    )
+                    CosmosSettingsSectionHeader(emoji = "🔔", title = "NOTIFICATIONS")
                 }
                 item {
                     CosmosSettingsCard {
@@ -614,12 +597,7 @@ fun SettingsPrivacyScreen(
 
                 // ── Privacy Section ──────────────────────────────────────────
                 item {
-                    Text(
-                        text = "PRIVACY",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                        color = CosmosPrimary,
-                        modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp)
-                    )
+                    CosmosSettingsSectionHeader(emoji = "🛡️", title = "PRIVACY")
                 }
                 item {
                     CosmosSettingsCard {
@@ -659,12 +637,7 @@ fun SettingsPrivacyScreen(
 
                 // ── Networking Section ───────────────────────────────────────
                 item {
-                    Text(
-                        text = "NETWORKING",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                        color = CosmosPrimary,
-                        modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp)
-                    )
+                    CosmosSettingsSectionHeader(emoji = "🌐", title = "NETWORKING")
                 }
                 item {
                     CosmosSettingsCard {
@@ -673,12 +646,7 @@ fun SettingsPrivacyScreen(
                             icon = Icons.Outlined.People,
                             onClick = { onNavigate(Screen.NetworkRelations.createRoute("connections")) }
                         )
-                        SettingsItemWithTrailingText(
-                            title = "Monthly Connection Limit",
-                            icon = Icons.Outlined.TrendingUp,
-                            valueText = if (user.monthlyConnectionLimit > 100) "Unlimited" else "${user.monthlyConnectionLimit}",
-                            onClick = { showLimitDialog = true }
-                        )
+
                         SettingsItem(
                             title = "Matching Preferences",
                             icon = Icons.Outlined.Tune,
@@ -700,12 +668,7 @@ fun SettingsPrivacyScreen(
 
                 // ── Danger Zone Section ──────────────────────────────────────
                 item {
-                    Text(
-                        text = "DANGER ZONE",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                        color = CosmosError,
-                        modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp)
-                    )
+                    CosmosSettingsSectionHeader(emoji = "⚠️", title = "DANGER ZONE", color = CosmosError)
                 }
                 item {
                     CosmosSettingsCard {
@@ -944,49 +907,7 @@ fun SettingsPrivacyScreen(
             )
         }
 
-        // 3. Connection Limit Dialog
-        if (showLimitDialog) {
-            val limits = listOf(3, 5, 10, 20, 50, 999)
-            AlertDialog(
-                onDismissRequest = { showLimitDialog = false },
-                title = { Text("Monthly Connection Limit", color = CosmosOnBackground) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Control the maximum number of new introductions you accept per month to maintain connection quality.", color = CosmosOnSurfaceVariant)
-                        limits.forEach { lim ->
-                            val label = if (lim == 999) "Unlimited" else "$lim connections"
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        val updated = user.copy(monthlyConnectionLimit = lim)
-                                        authViewModel.updateProfile(updated) {
-                                            showLimitDialog = false
-                                            android.widget.Toast.makeText(context, "Monthly limit set to $label", android.widget.Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                    .padding(vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(label, color = CosmosOnBackground, fontWeight = if (user.monthlyConnectionLimit == lim) FontWeight.Bold else FontWeight.Normal)
-                                if (user.monthlyConnectionLimit == lim) {
-                                    Icon(Icons.Default.Check, null, tint = CosmosPrimary, modifier = Modifier.size(18.dp))
-                                }
-                            }
-                            Divider(color = CosmosOutlineVariant.copy(alpha = 0.1f), thickness = 0.5.dp)
-                        }
-                    }
-                },
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(onClick = { showLimitDialog = false }) {
-                        Text("Close", color = CosmosOnSurfaceVariant)
-                    }
-                },
-                containerColor = CosmosSurfaceContainerHigh
-            )
-        }
+
 
         // 4. Matching Preferences Dialog
         if (showMatchingPrefsDialog) {
@@ -1546,31 +1467,43 @@ fun CosmosSettingsCard(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "cardShimmer")
+    val shimmerOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(4000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shimmerOffset"
+    )
     Box(modifier = modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFF16191F).copy(alpha = 0.64f))
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF0C1020).copy(alpha = 0.65f))
                 .border(
                     width = 1.dp,
-                    color = Color(0x1AFFFFFF),
-                    shape = RoundedCornerShape(16.dp)
+                    color = Color(0x0FFFFFFF),
+                    shape = RoundedCornerShape(20.dp)
                 ),
             content = content
         )
-        // Subtle top border glint
+        // Animated shimmer top border
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
                 .padding(horizontal = 1.dp)
-                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                 .background(
                     Brush.horizontalGradient(
-                        listOf(
+                        colors = listOf(
                             Color.Transparent,
-                            CosmosPrimary.copy(alpha = 0.4f),
+                            CosmosPrimary.copy(alpha = 0.25f + shimmerOffset * 0.3f),
+                            Color(0xFF60A5FA).copy(alpha = 0.3f),
+                            CosmosPrimary.copy(alpha = 0.25f + (1f - shimmerOffset) * 0.3f),
                             Color.Transparent
                         )
                     )
@@ -1578,6 +1511,49 @@ fun CosmosSettingsCard(
         )
     }
 }
+
+// ── Cosmic Section Header with Emoji + Gradient Underline ──
+@Composable
+fun CosmosSettingsSectionHeader(
+    emoji: String,
+    title: String,
+    color: Color = CosmosPrimary,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = emoji,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(end = 8.dp)
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.2.sp
+            ),
+            color = color
+        )
+        Spacer(Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            color.copy(alpha = 0.35f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+    }
+}
+
 
 @Composable
 fun SettingsItem(
@@ -1590,83 +1566,103 @@ fun SettingsItem(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 15.dp),
+            .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = CosmosPrimary,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(Modifier.width(16.dp))
+        // Icon with glow background
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(CosmosPrimary.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = CosmosPrimary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(Modifier.width(14.dp))
         Text(
             text = title,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
             color = CosmosOnBackground,
             modifier = Modifier.weight(1f)
         )
         Icon(
             imageVector = Icons.Default.ChevronRight,
             contentDescription = null,
-            tint = CosmosOnSurfaceVariant.copy(alpha = 0.5f),
+            tint = CosmosOnSurfaceVariant.copy(alpha = 0.4f),
             modifier = Modifier.size(16.dp)
         )
     }
     if (showDivider) {
         HorizontalDivider(
             modifier = Modifier.padding(horizontal = 20.dp),
-            color = CosmosOutlineVariant.copy(alpha = 0.15f),
+            color = CosmosOutlineVariant.copy(alpha = 0.08f),
             thickness = 0.5.dp
         )
     }
 }
+
 
 @Composable
 fun SettingsItemWithTrailingText(
     title: String,
     icon: ImageVector,
     valueText: String,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)? = null,
     showDivider: Boolean = true
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 15.dp),
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = CosmosPrimary,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(Modifier.width(16.dp))
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(CosmosPrimary.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = CosmosPrimary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(Modifier.width(14.dp))
         Text(
             text = title,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
             color = CosmosOnBackground,
             modifier = Modifier.weight(1f)
         )
         Text(
             text = valueText,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
             color = CosmosPrimary,
-            modifier = Modifier.padding(end = 4.dp)
+            modifier = Modifier.padding(end = if (onClick != null) 4.dp else 0.dp)
         )
-        Icon(
-            imageVector = Icons.Default.ChevronRight,
-            contentDescription = null,
-            tint = CosmosOnSurfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier.size(16.dp)
-        )
+        if (onClick != null) {
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = CosmosOnSurfaceVariant.copy(alpha = 0.4f),
+                modifier = Modifier.size(16.dp)
+            )
+        }
     }
     if (showDivider) {
         HorizontalDivider(
             modifier = Modifier.padding(horizontal = 20.dp),
-            color = CosmosOutlineVariant.copy(alpha = 0.15f),
+            color = CosmosOutlineVariant.copy(alpha = 0.08f),
             thickness = 0.5.dp
         )
     }
@@ -1687,16 +1683,27 @@ fun SettingsItemWithSwitch(
             .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = CosmosPrimary,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(Modifier.width(16.dp))
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(
+                    if (checked) CosmosPrimary.copy(alpha = 0.12f)
+                    else CosmosOnSurfaceVariant.copy(alpha = 0.06f)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (checked) CosmosPrimary else CosmosOnSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(Modifier.width(14.dp))
         Text(
             text = title,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
             color = CosmosOnBackground,
             modifier = Modifier.weight(1f)
         )
@@ -1706,15 +1713,15 @@ fun SettingsItemWithSwitch(
             colors = SwitchDefaults.colors(
                 checkedTrackColor = CosmosPrimary,
                 checkedThumbColor = Color.White,
-                uncheckedTrackColor = CosmosSurfaceContainerHigh.copy(alpha = 0.5f),
-                uncheckedBorderColor = CosmosOutlineVariant.copy(alpha = 0.3f)
+                uncheckedTrackColor = CosmosSurfaceContainerHigh.copy(alpha = 0.4f),
+                uncheckedBorderColor = CosmosOutlineVariant.copy(alpha = 0.2f)
             )
         )
     }
     if (showDivider) {
         HorizontalDivider(
             modifier = Modifier.padding(horizontal = 20.dp),
-            color = CosmosOutlineVariant.copy(alpha = 0.15f),
+            color = CosmosOutlineVariant.copy(alpha = 0.08f),
             thickness = 0.5.dp
         )
     }
@@ -1731,37 +1738,46 @@ fun SettingsItemDanger(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 15.dp),
+            .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = CosmosError,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(Modifier.width(16.dp))
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(CosmosError.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = CosmosError,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(Modifier.width(14.dp))
         Text(
             text = title,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
             color = CosmosError,
             modifier = Modifier.weight(1f)
         )
         Icon(
             imageVector = Icons.Default.ChevronRight,
             contentDescription = null,
-            tint = CosmosError.copy(alpha = 0.5f),
+            tint = CosmosError.copy(alpha = 0.4f),
             modifier = Modifier.size(16.dp)
         )
     }
     if (showDivider) {
         HorizontalDivider(
             modifier = Modifier.padding(horizontal = 20.dp),
-            color = CosmosOutlineVariant.copy(alpha = 0.15f),
+            color = CosmosOutlineVariant.copy(alpha = 0.08f),
             thickness = 0.5.dp
         )
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -1812,12 +1828,25 @@ fun EditProfileScreen(
         }
     }
 
-    val userTypes = listOf(
-        "Founder", "Co-Founder", "Startup Operator", "Investor", "Student",
-        "Mentor", "Tech Professional", "Marketing Professional", "Finance Professional",
-        "Legal Professional", "Healthcare Professional", "Business Professional",
-        "Creator", "Freelancer", "Service Provider", "Community Member"
+    val userTypesWithIcons = listOf(
+        "Founder" to "🚀",
+        "Co-Founder" to "🛸",
+        "Startup Operator" to "🪐",
+        "Investor" to "💎",
+        "Student" to "🎓",
+        "Mentor" to "🧭",
+        "Tech Professional" to "⚡",
+        "Marketing Professional" to "📣",
+        "Finance Professional" to "📈",
+        "Legal Professional" to "⚖️",
+        "Healthcare Professional" to "🧬",
+        "Business Professional" to "💼",
+        "Creator" to "🎨",
+        "Freelancer" to "🔮",
+        "Service Provider" to "🛠️",
+        "Community Member" to "🌌"
     )
+    val userTypes = remember { userTypesWithIcons.map { it.first } }
 
     // Prefill form values once when currentUserState becomes available
     var hasPrefilled by remember { mutableStateOf(false) }
@@ -1851,17 +1880,220 @@ fun EditProfileScreen(
 
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
-            CosmosTopBar(title = "Edit Profile", onBack = onBack)
+            CosmosTopBar(title = "Cosmic Profile Forge", onBack = onBack)
 
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
+                    .padding(horizontal = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                Spacer(Modifier.height(10.dp))
+
+                // Cosmic Badge Pill
+                Surface(
+                    shape = RoundedCornerShape(99.dp),
+                    color = CosmosPrimary.copy(alpha = 0.12f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CosmosPrimary.copy(alpha = 0.3f))
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(CosmosPrimary)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "COSMOS CITIZEN ID FORGE",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp),
+                            color = CosmosPrimaryFixedDim
+                        )
+                    }
+                }
+
                 Spacer(Modifier.height(16.dp))
 
-                // Profile photo edit
+                // ── Live Hologram Card Preview ──
+                CosmosGlassCard(
+                    showTopGradientBorder = true,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = CosmosPrimary,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    "LIVE HOLOGRAM CARD",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.8.sp
+                                    ),
+                                    color = CosmosOnSurfaceVariant
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(CosmosSuccess)
+                            )
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            // Live Avatar with Cosmic Gradient Halo
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.linearGradient(
+                                            colors = listOf(CosmosGradientStart, CosmosGradientEnd, CosmosPrimary)
+                                        )
+                                    )
+                                    .padding(2.5.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape)
+                                        .background(CosmosSurfaceContainerHigh),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (selectedImageUri != null || selectedImageBitmap != null) {
+                                        AsyncImage(
+                                            model = selectedImageUri ?: selectedImageBitmap,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else if (currentAvatarUrl.isNotEmpty()) {
+                                        val model: Any = if (currentAvatarUrl.startsWith("data:image")) {
+                                            try {
+                                                val base64Data = currentAvatarUrl.substringAfter(",")
+                                                android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
+                                            } catch (e: Exception) {
+                                                currentAvatarUrl
+                                            }
+                                        } else {
+                                            currentAvatarUrl
+                                        }
+                                        AsyncImage(
+                                            model = model,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Text(
+                                            text = if (name.isNotBlank()) name.take(1).uppercase() else "C",
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = CosmosPrimary
+                                        )
+                                    }
+                                }
+                            }
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (name.isNotBlank()) name else "Your Name",
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = CosmosOnBackground,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    if (isLinkedInConnected) {
+                                        Spacer(Modifier.width(6.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(16.dp)
+                                                .clip(RoundedCornerShape(3.dp))
+                                                .background(CosmosLinkedIn),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("in", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+
+                                Text(
+                                    text = if (headline.isNotBlank()) headline
+                                           else if (company.isNotBlank()) "$selectedUserType at $company"
+                                           else selectedUserType.ifBlank { "Cosmos Citizen" },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = CosmosPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                Spacer(Modifier.height(6.dp))
+
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (selectedUserType.isNotBlank()) {
+                                        val personaIcon = userTypesWithIcons.find { it.first == selectedUserType }?.second ?: "✨"
+                                        Surface(
+                                            shape = RoundedCornerShape(99.dp),
+                                            color = CosmosSurfaceContainerHighest,
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, CosmosOutlineVariant.copy(alpha = 0.5f))
+                                        ) {
+                                            Text(
+                                                text = "$personaIcon $selectedUserType",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = CosmosOnSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                    if (location.isNotBlank()) {
+                                        Surface(
+                                            shape = RoundedCornerShape(99.dp),
+                                            color = CosmosSurfaceContainerHighest,
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, CosmosOutlineVariant.copy(alpha = 0.5f))
+                                        ) {
+                                            Text(
+                                                text = "📍 $location",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = CosmosOnSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                // Profile photo edit with Cosmic Orbital Halo
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
@@ -1869,63 +2101,77 @@ fun EditProfileScreen(
                     Box(contentAlignment = Alignment.BottomEnd) {
                         Box(
                             modifier = Modifier
-                                .size(96.dp)
+                                .size(104.dp)
                                 .clip(CircleShape)
-                                .background(CosmosSurfaceContainerHigh)
-                                .border(2.dp, CosmosOutlineVariant, CircleShape)
+                                .background(
+                                    Brush.sweepGradient(
+                                        colors = listOf(CosmosGradientStart, CosmosGradientEnd, CosmosPrimary, CosmosSecondary, CosmosGradientStart)
+                                    )
+                                )
+                                .padding(3.dp)
                                 .clickable { showPhotoOptions = true },
                             contentAlignment = Alignment.Center
                         ) {
-                            if (selectedImageUri != null || selectedImageBitmap != null) {
-                                AsyncImage(
-                                    model = selectedImageUri ?: selectedImageBitmap,
-                                    contentDescription = "Selected photo",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else if (currentAvatarUrl.isNotEmpty()) {
-                                val model: Any = if (currentAvatarUrl.startsWith("data:image")) {
-                                    try {
-                                        val base64Data = currentAvatarUrl.substringAfter(",")
-                                        android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
-                                    } catch (e: Exception) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                                    .background(CosmosSurfaceContainerHigh),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (selectedImageUri != null || selectedImageBitmap != null) {
+                                    AsyncImage(
+                                        model = selectedImageUri ?: selectedImageBitmap,
+                                        contentDescription = "Selected photo",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else if (currentAvatarUrl.isNotEmpty()) {
+                                    val model: Any = if (currentAvatarUrl.startsWith("data:image")) {
+                                        try {
+                                            val base64Data = currentAvatarUrl.substringAfter(",")
+                                            android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
+                                        } catch (e: Exception) {
+                                            currentAvatarUrl
+                                        }
+                                    } else {
                                         currentAvatarUrl
                                     }
+                                    AsyncImage(
+                                        model = model,
+                                        contentDescription = "Current photo",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
                                 } else {
-                                    currentAvatarUrl
-                                }
-                                AsyncImage(
-                                    model = model,
-                                    contentDescription = "Current photo",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        Icons.Default.AddAPhoto,
-                                        contentDescription = "Add photo",
-                                        tint = CosmosOnSurfaceVariant,
-                                        modifier = Modifier.size(28.dp)
-                                    )
-                                    Text(
-                                        "Photo",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = CosmosOnSurfaceVariant
-                                    )
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(
+                                            Icons.Default.AddAPhoto,
+                                            contentDescription = "Add photo",
+                                            tint = CosmosPrimary,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                        Text(
+                                            "Add Photo",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = CosmosPrimary
+                                        )
+                                    }
                                 }
                             }
                         }
                         Box(
                             modifier = Modifier
-                                .size(28.dp)
+                                .size(32.dp)
                                 .clip(CircleShape)
-                                .background(CosmosPrimary)
+                                .background(
+                                    Brush.linearGradient(listOf(CosmosGradientStart, CosmosGradientEnd))
+                                )
                                 .border(2.dp, CosmosBackground, CircleShape)
                                 .clickable { showPhotoOptions = true },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Edit, contentDescription = "Edit photo", tint = Color.White, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Default.Edit, contentDescription = "Edit photo", tint = Color.White, modifier = Modifier.size(15.dp))
                         }
                     }
                 }
@@ -1980,12 +2226,13 @@ fun EditProfileScreen(
                 CosmosGlassCard(showTopGradientBorder = false) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(12.dp)
                     ) {
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(RoundedCornerShape(10.dp))
                                 .background(if (isLinkedInConnected) CosmosSuccess.copy(alpha = 0.2f) else CosmosLinkedIn),
                             contentAlignment = Alignment.Center
                         ) {
@@ -1997,12 +2244,12 @@ fun EditProfileScreen(
                         }
                         Column(Modifier.weight(1f)) {
                             Text(
-                                if (isLinkedInConnected) "LinkedIn Connected" else "Connect LinkedIn",
+                                if (isLinkedInConnected) "LinkedIn Verified & Linked" else "Connect LinkedIn Node",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = if (isLinkedInConnected) CosmosSuccess else CosmosOnBackground
                             )
                             Text(
-                                if (isLinkedInConnected) "Credentials linked & imported" else "Import profile & build trust",
+                                if (isLinkedInConnected) "Credentials linked & imported" else "Import profile & build peer trust",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = CosmosOnSurfaceVariant
                             )
@@ -2033,72 +2280,180 @@ fun EditProfileScreen(
 
                 Spacer(Modifier.height(24.dp))
 
-                // User type selector
-                Text(
-                    "I am a...",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = CosmosOnBackground,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    userTypes.forEach { type ->
-                        CosmosTagChip(
-                            text = type,
-                            backgroundColor = if (selectedUserType == type) CosmosPrimary.copy(alpha = 0.2f)
-                                             else CosmosSurfaceContainerHigh,
-                            textColor = if (selectedUserType == type) CosmosPrimary else CosmosOnSurfaceVariant,
-                            onClick = {
-                                val trimmedHeadline = headline.trim()
-                                val isDefaultHeadline = trimmedHeadline.isBlank() || userTypes.any { t ->
-                                    val tLower = t.lowercase()
-                                    trimmedHeadline.lowercase() == tLower || trimmedHeadline.lowercase().startsWith("$tLower at")
-                                }
-                                if (isDefaultHeadline) {
-                                    val matchingType = userTypes.find { t ->
+                // Section: Cosmic Identity (Persona Chips)
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Person, contentDescription = null, tint = CosmosPrimary, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Cosmic Identity",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = CosmosOnBackground
+                        )
+                    }
+                    Text(
+                        "Select your primary role archetype in the Cosmos ecosystem.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CosmosOnSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
+                    )
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        userTypesWithIcons.forEach { (type, emoji) ->
+                            val isSelected = selectedUserType == type
+                            Surface(
+                                shape = RoundedCornerShape(99.dp),
+                                color = if (isSelected) CosmosPrimary.copy(alpha = 0.22f) else CosmosSurfaceContainerHigh,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (isSelected) CosmosPrimary else CosmosOutlineVariant.copy(alpha = 0.6f)
+                                ),
+                                modifier = Modifier.clickable {
+                                    val trimmedHeadline = headline.trim()
+                                    val isDefaultHeadline = trimmedHeadline.isBlank() || userTypes.any { t ->
                                         val tLower = t.lowercase()
                                         trimmedHeadline.lowercase() == tLower || trimmedHeadline.lowercase().startsWith("$tLower at")
                                     }
-                                    val companySuffix = if (matchingType != null && trimmedHeadline.lowercase().startsWith("${matchingType.lowercase()} at")) {
-                                        trimmedHeadline.substring(matchingType.length + 4).trim()
-                                    } else {
-                                        company
+                                    if (isDefaultHeadline) {
+                                        val matchingType = userTypes.find { t ->
+                                            val tLower = t.lowercase()
+                                            trimmedHeadline.lowercase() == tLower || trimmedHeadline.lowercase().startsWith("$tLower at")
+                                        }
+                                        val companySuffix = if (matchingType != null && trimmedHeadline.lowercase().startsWith("${matchingType.lowercase()} at")) {
+                                            trimmedHeadline.substring(matchingType.length + 4).trim()
+                                        } else {
+                                            company
+                                        }
+                                        headline = if (companySuffix.isBlank()) type else "$type at $companySuffix"
                                     }
-                                    headline = if (companySuffix.isBlank()) type else "$type at $companySuffix"
+                                    selectedUserType = type
                                 }
-                                selectedUserType = type
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                                ) {
+                                    Text(emoji, fontSize = 13.sp)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = type,
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        ),
+                                        color = if (isSelected) CosmosPrimary else CosmosOnSurfaceVariant
+                                    )
+                                }
                             }
-                        )
+                        }
                     }
+
+                    Spacer(Modifier.height(16.dp))
+                    EditProfileTextField(
+                        label = "Full Legal / Display Name *",
+                        value = name,
+                        onValueChange = { name = it },
+                        placeholder = "Alexandra Chen",
+                        leadingIcon = Icons.Default.Person
+                    )
                 }
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
 
-                // Input fields
-                EditProfileTextField(label = "Full Name *", value = name, onValueChange = { name = it }, placeholder = "Alexandra Chen")
-                EditProfileTextField(label = "Professional Headline", value = headline, onValueChange = { headline = it }, placeholder = "Founder & CEO at NexusAI")
-                EditProfileTextField(label = "Current Role", value = role, onValueChange = { role = it }, placeholder = "CEO")
-                EditProfileTextField(
-                    label = "Company",
-                    value = company,
-                    onValueChange = { newCompany ->
-                        val trimmedHeadline = headline.trim()
-                        val isDefaultHeadline = trimmedHeadline.isBlank() || userTypes.any { t ->
-                            val tLower = t.lowercase()
-                            trimmedHeadline.lowercase() == tLower || trimmedHeadline.lowercase().startsWith("$tLower at")
-                        }
-                        if (isDefaultHeadline) {
-                            headline = if (newCompany.isBlank()) selectedUserType else "$selectedUserType at $newCompany"
-                        }
-                        company = newCompany
-                    },
-                    placeholder = "NexusAI"
-                )
-                EditProfileTextField(label = "Location", value = location, onValueChange = { location = it }, placeholder = "San Francisco, CA")
-                EditProfileTextField(label = "Bio", value = bio, onValueChange = { bio = it }, placeholder = "Tell other members about yourself...", singleLine = false)
+                // Section: Orbital Trajectory
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Work, contentDescription = null, tint = CosmosSecondary, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Orbital Trajectory",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = CosmosOnBackground
+                        )
+                    }
+                    Text(
+                        "Your professional orbit, ventures, and mission statement.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CosmosOnSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
+                    )
+
+                    EditProfileTextField(
+                        label = "Professional Headline",
+                        value = headline,
+                        onValueChange = { headline = it },
+                        placeholder = "Founder & CEO at NexusAI",
+                        leadingIcon = Icons.Default.AutoAwesome
+                    )
+
+                    EditProfileTextField(
+                        label = "Current Role",
+                        value = role,
+                        onValueChange = { role = it },
+                        placeholder = "CEO / Lead Architect",
+                        leadingIcon = Icons.Default.WorkOutline
+                    )
+
+                    EditProfileTextField(
+                        label = "Company / Venture",
+                        value = company,
+                        onValueChange = { newCompany ->
+                            val trimmedHeadline = headline.trim()
+                            val isDefaultHeadline = trimmedHeadline.isBlank() || userTypes.any { t ->
+                                val tLower = t.lowercase()
+                                trimmedHeadline.lowercase() == tLower || trimmedHeadline.lowercase().startsWith("$tLower at")
+                            }
+                            if (isDefaultHeadline) {
+                                headline = if (newCompany.isBlank()) selectedUserType else "$selectedUserType at $newCompany"
+                            }
+                            company = newCompany
+                        },
+                        placeholder = "NexusAI",
+                        leadingIcon = Icons.Default.Business
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Section: Planetary Coordinates & Transmission
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.LocationOn, contentDescription = null, tint = CosmosEarthColor, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Planetary Coordinates & Transmission",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = CosmosOnBackground
+                        )
+                    }
+                    Text(
+                        "Where on Earth you operate and your message to the Cosmos community.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CosmosOnSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
+                    )
+
+                    EditProfileTextField(
+                        label = "Location / Base",
+                        value = location,
+                        onValueChange = { location = it },
+                        placeholder = "San Francisco, CA (or Remote)",
+                        leadingIcon = Icons.Default.LocationOn
+                    )
+
+                    EditProfileTextField(
+                        label = "Cosmic Bio / Transmission",
+                        value = bio,
+                        onValueChange = { bio = it },
+                        placeholder = "Tell other members what you are building, what inspires you, and how you can collaborate...",
+                        singleLine = false,
+                        leadingIcon = Icons.Default.Description,
+                        maxChar = 500
+                    )
+                }
 
                 if (localError.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
@@ -2114,13 +2469,14 @@ fun EditProfileScreen(
                     .fillMaxWidth()
                     .background(CosmosBackground)
                     .navigationBarsPadding()
-                    .padding(20.dp)
+                    .padding(horizontal = 20.dp, vertical = 14.dp)
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(color = CosmosPrimary, modifier = Modifier.align(Alignment.Center))
                 } else {
                     CosmosButton(
-                        text = "Save Changes",
+                        text = "Save Cosmic Profile",
+                        icon = Icons.Default.AutoAwesome,
                         onClick = {
                             if (name.isNotBlank() && selectedUserType.isNotBlank()) {
                                 val imageBytes = when {
@@ -2166,7 +2522,7 @@ fun EditProfileScreen(
                                     isLinkedInConnected = isLinkedInConnected
                                 )
 
-                                android.widget.Toast.makeText(context, "Profile updated successfully!", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(context, "Cosmic Profile updated successfully!", android.widget.Toast.LENGTH_SHORT).show()
                                 authViewModel.saveOnboarding(
                                     member = updatedMember,
                                     onSuccess = onBack,
@@ -2249,25 +2605,53 @@ fun EditProfileTextField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String = "",
+    leadingIcon: ImageVector? = null,
     singleLine: Boolean = true,
+    maxChar: Int? = null,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.padding(bottom = 16.dp)) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = CosmosOnSurfaceVariant,
-            modifier = Modifier.padding(bottom = 6.dp)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = CosmosOnSurfaceVariant
+            )
+            if (maxChar != null) {
+                Text(
+                    "${value.length} / $maxChar",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CosmosOutline
+                )
+            }
+        }
         OutlinedTextField(
             value = value,
-            onValueChange = onValueChange,
+            onValueChange = {
+                if (maxChar == null || it.length <= maxChar) {
+                    onValueChange(it)
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(placeholder, color = CosmosOnSurfaceVariant.copy(alpha = 0.5f)) },
-            shape = RoundedCornerShape(12.dp),
+            placeholder = { Text(placeholder, color = CosmosOnSurfaceVariant.copy(alpha = 0.45f)) },
+            leadingIcon = if (leadingIcon != null) {
+                {
+                    Icon(
+                        imageVector = leadingIcon,
+                        contentDescription = null,
+                        tint = CosmosPrimary.copy(alpha = 0.8f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            } else null,
+            shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = CosmosPrimary,
-                unfocusedBorderColor = CosmosOutlineVariant,
+                unfocusedBorderColor = CosmosOutlineVariant.copy(alpha = 0.6f),
                 focusedTextColor = CosmosOnBackground,
                 unfocusedTextColor = CosmosOnBackground,
                 cursorColor = CosmosPrimary,
@@ -2279,4 +2663,5 @@ fun EditProfileTextField(
         )
     }
 }
+
 

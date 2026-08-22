@@ -3199,30 +3199,113 @@ body.sub-page-mode .app-content {
   margin: 0 auto;
   min-height: 100%;
   padding: 0.5rem 0.5rem calc(var(--bottom-nav-h) + var(--safe-bottom) + 36px);
+  position: relative;
+  overflow: hidden;
 }
 
+/* ── Floating Cosmic Particles ── */
+.cosmic-particles {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.cosmic-particle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0;
+  animation: cosmicFloat 18s infinite ease-in-out;
+}
+.cosmic-particle:nth-child(1) { width: 3px; height: 3px; background: rgba(167,139,250,0.6); left: 12%; top: 20%; animation-delay: 0s; animation-duration: 22s; }
+.cosmic-particle:nth-child(2) { width: 2px; height: 2px; background: rgba(96,165,250,0.5); left: 45%; top: 60%; animation-delay: 3s; animation-duration: 19s; }
+.cosmic-particle:nth-child(3) { width: 4px; height: 4px; background: rgba(244,114,182,0.4); left: 78%; top: 30%; animation-delay: 6s; animation-duration: 24s; }
+.cosmic-particle:nth-child(4) { width: 2px; height: 2px; background: rgba(52,211,153,0.5); left: 30%; top: 80%; animation-delay: 9s; animation-duration: 20s; }
+.cosmic-particle:nth-child(5) { width: 3px; height: 3px; background: rgba(251,191,36,0.4); left: 65%; top: 15%; animation-delay: 12s; animation-duration: 25s; }
+.cosmic-particle:nth-child(6) { width: 2px; height: 2px; background: rgba(167,139,250,0.5); left: 90%; top: 70%; animation-delay: 4s; animation-duration: 21s; }
+.cosmic-particle:nth-child(7) { width: 3px; height: 3px; background: rgba(96,165,250,0.4); left: 5%; top: 50%; animation-delay: 7s; animation-duration: 23s; }
+.cosmic-particle:nth-child(8) { width: 2px; height: 2px; background: rgba(244,114,182,0.5); left: 55%; top: 90%; animation-delay: 10s; animation-duration: 18s; }
+
+@keyframes cosmicFloat {
+  0%, 100% { opacity: 0; transform: translateY(0) translateX(0) scale(0.5); }
+  10% { opacity: 0.8; }
+  50% { opacity: 0.4; transform: translateY(-120px) translateX(30px) scale(1.2); }
+  90% { opacity: 0.6; }
+}
+
+/* ── Cosmic Command Header ── */
 .settings-header-banner {
-  padding: 0.5rem 0.5rem 1.25rem;
+  padding: 0.75rem 0.5rem 1rem;
+  position: relative;
+  z-index: 1;
+}
+.cosmic-command-title {
+  font-size: 1.85rem;
+  font-weight: 800;
+  font-family: var(--font-display);
+  background: linear-gradient(135deg, #c4b5fd 0%, #60a5fa 40%, #f472b6 70%, #a78bfa 100%);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: cosmicTitleShift 6s ease-in-out infinite;
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+.cosmic-command-subtitle {
+  margin: 0.3rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+@keyframes cosmicTitleShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 
-/* ── Profile Summary Hero Card (Android Parity) ── */
+/* ── Holographic Hero Profile Card ── */
 .settings-hero-card {
   position: relative;
-  border-radius: 22px;
-  background: rgba(22, 26, 38, 0.85);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border-radius: 24px;
+  background: rgba(12, 16, 32, 0.75);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 24px rgba(167, 139, 250, 0.08);
-  padding: 1.25rem;
+  padding: 1.5rem;
   margin-bottom: 1.5rem;
   overflow: hidden;
+  z-index: 1;
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.5),
+    0 0 80px rgba(167, 139, 250, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.settings-hero-card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 25px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(167,139,250,0.4) 0%, rgba(96,165,250,0.2) 30%, rgba(244,114,182,0.3) 60%, rgba(167,139,250,0.2) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: holoBorderRotate 8s linear infinite;
+  background-size: 300% 300%;
+}
+@keyframes holoBorderRotate {
+  0% { background-position: 0% 0%; }
+  50% { background-position: 100% 100%; }
+  100% { background-position: 0% 0%; }
 }
 .settings-hero-bg {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 100% 0%, rgba(167, 139, 250, 0.15) 0%, transparent 60%),
-              radial-gradient(circle at 0% 100%, rgba(59, 130, 246, 0.1) 0%, transparent 60%);
+  background:
+    radial-gradient(ellipse 80% 60% at 100% -10%, rgba(167, 139, 250, 0.2) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 80% at -10% 100%, rgba(96, 165, 250, 0.15) 0%, transparent 55%),
+    radial-gradient(circle at 50% 50%, rgba(244, 114, 182, 0.05) 0%, transparent 50%);
   pointer-events: none;
 }
 .settings-hero-content {
@@ -3230,25 +3313,52 @@ body.sub-page-mode .app-content {
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 1.15rem;
+  gap: 1.25rem;
   flex-wrap: wrap;
 }
+
+/* Orbital Avatar */
 .settings-avatar-wrap {
   position: relative;
   flex-shrink: 0;
 }
-.settings-avatar {
-  width: 68px;
-  height: 68px;
+.cosmic-avatar-orbit {
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+.cosmic-avatar-orbit::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
   border-radius: 50%;
-  border: 2px solid var(--purple);
-  box-shadow: 0 0 16px rgba(167, 139, 250, 0.35);
-  font-size: 1.35rem;
+  background: conic-gradient(from 0deg, #a78bfa, #60a5fa, #f472b6, #34d399, #a78bfa);
+  animation: orbitSpin 4s linear infinite;
+  opacity: 0.7;
+}
+.cosmic-avatar-orbit::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+}
+@keyframes orbitSpin {
+  to { transform: rotate(360deg); }
+}
+.settings-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  font-size: 1.5rem;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 0 24px rgba(167, 139, 250, 0.35);
 }
 .settings-avatar img {
   width: 100%;
@@ -3257,20 +3367,24 @@ body.sub-page-mode .app-content {
 }
 .settings-verified-badge {
   position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 20px;
-  height: 20px;
+  bottom: 0px;
+  right: 0px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: #0a66c2;
+  background: linear-gradient(135deg, #0a66c2, #0077b5);
   color: #fff;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid #060811;
+  border: 2.5px solid var(--bg-primary);
+  z-index: 3;
+  box-shadow: 0 0 10px rgba(10, 102, 194, 0.4);
 }
+
+/* Hero Info */
 .settings-hero-info {
   flex: 1;
   min-width: 200px;
@@ -3283,52 +3397,71 @@ body.sub-page-mode .app-content {
 }
 .settings-hero-name {
   margin: 0;
-  font-size: 1.35rem;
-  font-weight: 700;
+  font-size: 1.4rem;
+  font-weight: 800;
   font-family: var(--font-display);
+  background: linear-gradient(135deg, #f1f5f9 0%, #c4b5fd 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 .settings-tier-pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: 999px;
   font-size: 0.72rem;
   font-weight: 700;
   cursor: pointer;
   border: 1px solid transparent;
-  transition: all 0.2s var(--ease);
-  background: rgba(255, 255, 255, 0.06);
+  transition: all 0.3s var(--ease);
+  position: relative;
+  overflow: hidden;
+}
+.settings-tier-pill::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: tierShimmer 3s ease-in-out infinite;
+}
+@keyframes tierShimmer {
+  0%, 100% { background-position: 200% 0; }
+  50% { background-position: -100% 0; }
 }
 .settings-tier-pill:hover {
-  transform: scale(1.04);
+  transform: scale(1.08);
+  box-shadow: 0 0 16px currentColor;
 }
 .tier-badge-explorer {
   color: var(--blue);
-  background: rgba(96, 165, 250, 0.12);
-  border-color: rgba(96, 165, 250, 0.3);
+  background: rgba(96, 165, 250, 0.15);
+  border-color: rgba(96, 165, 250, 0.35);
 }
 .tier-badge-member {
   color: var(--green);
-  background: rgba(52, 211, 153, 0.12);
-  border-color: rgba(52, 211, 153, 0.3);
+  background: rgba(52, 211, 153, 0.15);
+  border-color: rgba(52, 211, 153, 0.35);
 }
 .tier-badge-inner {
   color: var(--purple-l);
-  background: rgba(167, 139, 250, 0.15);
-  border-color: rgba(167, 139, 250, 0.4);
-  box-shadow: 0 0 10px rgba(167, 139, 250, 0.2);
+  background: rgba(167, 139, 250, 0.18);
+  border-color: rgba(167, 139, 250, 0.45);
+  box-shadow: 0 0 14px rgba(167, 139, 250, 0.25);
 }
 .tier-badge-founder {
   color: #fbbf24;
-  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(245, 158, 11, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(245, 158, 11, 0.12) 100%);
   border-color: rgba(251, 191, 36, 0.5);
-  box-shadow: 0 0 12px rgba(251, 191, 36, 0.25);
+  box-shadow: 0 0 18px rgba(251, 191, 36, 0.3);
 }
 .settings-hero-headline {
   color: var(--text-secondary);
-  font-size: 0.85rem;
-  margin: 0.2rem 0 0.4rem;
+  font-size: 0.88rem;
+  margin: 0.3rem 0 0.5rem;
 }
 .settings-hero-meta {
   display: flex;
@@ -3342,46 +3475,97 @@ body.sub-page-mode .app-content {
   display: flex;
   align-items: center;
   gap: 4px;
+  transition: color 0.2s;
+}
+.settings-meta-item:hover {
+  color: var(--text-secondary);
 }
 .settings-hero-action {
   flex-shrink: 0;
 }
+.settings-hero-action .btn {
+  background: rgba(167, 139, 250, 0.12);
+  border-color: rgba(167, 139, 250, 0.35);
+  color: var(--purple-l);
+  transition: all 0.3s var(--ease);
+}
+.settings-hero-action .btn:hover {
+  background: rgba(167, 139, 250, 0.25);
+  border-color: rgba(167, 139, 250, 0.6);
+  box-shadow: 0 0 20px rgba(167, 139, 250, 0.2);
+  transform: translateY(-1px);
+}
 
-/* ── Monthly Introduction Progress Card ── */
-.settings-progress-card {
-  background: var(--bg-glass);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 1rem 1.15rem;
+/* ── Cosmic Fuel Gauge (Monthly Progress) ── */
+.cosmic-fuel-gauge {
+  position: relative;
+  border-radius: 20px;
+  background: rgba(12, 16, 32, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 1.15rem 1.25rem;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+.cosmic-fuel-gauge::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(167,139,250,0.5) 30%, rgba(96,165,250,0.5) 70%, transparent 100%);
 }
 .settings-progress-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.6rem;
 }
 .settings-progress-label {
   font-size: 0.85rem;
   color: var(--text-secondary);
+  font-weight: 500;
 }
 .settings-progress-count {
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   font-weight: 700;
-  color: var(--purple-l);
+  background: linear-gradient(135deg, #a78bfa, #60a5fa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
-.settings-progress-bar-wrap {
+.cosmic-progress-track {
   width: 100%;
-  height: 8px;
+  height: 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
   overflow: hidden;
   margin-bottom: 0.5rem;
+  position: relative;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);
 }
-.settings-progress-fill {
+.cosmic-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: var(--gradient-primary);
-  transition: width 0.5s var(--ease-spring);
+  background: linear-gradient(90deg, #a78bfa 0%, #60a5fa 50%, #34d399 100%);
+  position: relative;
+  transition: width 0.8s var(--ease-spring);
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.4);
+}
+.cosmic-progress-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: fuelShimmer 2.5s ease-in-out infinite;
+  border-radius: 999px;
+}
+@keyframes fuelShimmer {
+  0%, 100% { background-position: 200% 0; }
+  50% { background-position: -100% 0; }
 }
 .settings-progress-desc {
   font-size: 0.76rem;
@@ -3389,7 +3573,7 @@ body.sub-page-mode .app-content {
   line-height: 1.4;
 }
 
-/* ── 6-Tile Stats Grid ── */
+/* ── Orbital Stats Grid ── */
 .settings-stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -3398,136 +3582,330 @@ body.sub-page-mode .app-content {
 @media (max-width: 480px) {
   .settings-stats-grid {
     grid-template-columns: repeat(3, 1fr);
-    gap: 0.45rem;
+    gap: 0.5rem;
   }
+}
+.cosmic-stat-pod {
+  text-align: center;
+  background: rgba(12, 16, 32, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 18px;
+  padding: 1rem 0.5rem;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.35s var(--ease);
+  backdrop-filter: blur(12px);
+}
+.cosmic-stat-pod::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--stat-accent, var(--purple)), transparent);
+  opacity: 0.5;
+}
+.cosmic-stat-pod::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at center, var(--stat-accent, var(--purple)), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.cosmic-stat-pod:hover {
+  transform: translateY(-4px) scale(1.02);
+  border-color: var(--stat-accent, var(--purple));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 24px color-mix(in srgb, var(--stat-accent, var(--purple)) 20%, transparent);
+}
+.cosmic-stat-pod:hover::after {
+  opacity: 0.06;
+}
+.cosmic-stat-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.2;
+  font-family: var(--font-display);
+  position: relative;
+  z-index: 1;
+}
+.cosmic-stat-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.3rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Cosmic Section Headers ── */
+.cosmic-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.7rem;
+  position: relative;
+}
+.cosmic-section-emoji {
+  font-size: 1rem;
+  filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.3));
+}
+.cosmic-section-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, var(--purple-l) 0%, var(--purple) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.cosmic-section-header::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(167, 139, 250, 0.3) 0%, transparent 100%);
+  margin-left: 0.5rem;
 }
 
 /* ── Section & Card Base ── */
-.settings-section-title {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--purple);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  display: block;
-  margin-bottom: 0.65rem;
-}
-
-.settings-card {
-  background: var(--bg-glass);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  overflow: hidden;
-}
-
 .settings-section {
   padding: 0 0.5rem;
+  position: relative;
+  z-index: 1;
 }
-
 .settings-section + .settings-section {
   margin-top: 1.5rem;
 }
 
+.settings-card {
+  background: rgba(12, 16, 32, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+.settings-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 5%, rgba(167, 139, 250, 0.3) 20%, rgba(96, 165, 250, 0.3) 80%, transparent 95%);
+}
+
+/* ── Premium Settings Item Rows ── */
 .settings-item {
   display: flex;
   align-items: center;
   gap: 0.88rem;
   padding: 0.95rem 1.15rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   cursor: pointer;
-  transition: background 0.2s var(--ease);
+  transition: all 0.25s var(--ease);
+  position: relative;
+  overflow: hidden;
 }
-
+.settings-item::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 0%, rgba(167, 139, 250, 0.04) 50%, transparent 100%);
+  transition: left 0.5s var(--ease);
+}
+.settings-item:hover::after {
+  left: 100%;
+}
 .settings-item:last-child {
   border-bottom: none;
 }
-
 .settings-item:hover {
-  background: rgba(255,255,255,0.03);
+  background: rgba(167, 139, 250, 0.04);
 }
-
 .settings-item-icon {
-  color: var(--purple);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  background: rgba(167, 139, 250, 0.1);
+  color: var(--purple);
+  transition: all 0.3s var(--ease);
+  box-shadow: 0 0 12px rgba(167, 139, 250, 0.1);
 }
-
+.settings-item:hover .settings-item-icon {
+  background: rgba(167, 139, 250, 0.2);
+  box-shadow: 0 0 20px rgba(167, 139, 250, 0.25);
+  transform: scale(1.05);
+}
+.settings-item-text {
+  flex: 1;
+  min-width: 0;
+}
 .settings-item-label {
   flex: 1;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 0.9rem;
+  color: var(--text-primary);
 }
-
+.settings-item-desc {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+  line-height: 1.3;
+}
 .settings-item-value {
   font-size: 0.8rem;
   color: var(--text-muted);
   margin-right: 0.25rem;
+  font-weight: 500;
+}
+.settings-item-chevron {
+  color: var(--text-muted);
+  opacity: 0.4;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.settings-item:hover .settings-item-chevron {
+  opacity: 0.8;
+  transform: translateX(2px);
+  color: var(--purple);
 }
 
+/* ── Notification & Privacy Toggle Rows ── */
+.settings-card-padded {
+  padding: 0.4rem 1.15rem;
+}
 .settings-toggle-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid var(--border);
+  padding: 0.8rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.2s;
 }
-
 .settings-toggle-row:last-child {
   border-bottom: none;
 }
-
+.settings-toggle-row:hover {
+  background: rgba(255, 255, 255, 0.015);
+}
 .settings-toggle-copy {
   min-width: 0;
 }
-
 .settings-toggle-title {
-  font-weight: 500;
+  font-weight: 600;
   font-size: 0.92rem;
+  color: var(--text-primary);
 }
-
 .settings-toggle-desc {
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   color: var(--text-muted);
   margin-top: 0.15rem;
+  line-height: 1.35;
 }
 
-.settings-card-padded {
-  padding: 0.4rem 1.15rem;
+/* ── Cosmic Toggle Switch ── */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 27px;
+  flex-shrink: 0;
 }
-
-.dashboard-tile {
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
   cursor: pointer;
-  text-align: center;
-  background: var(--bg-glass);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 1rem 0.5rem;
-  transition: transform 0.2s var(--ease), border-color 0.2s var(--ease);
+  inset: 0;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+  transition: all 0.35s var(--ease);
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 21px;
+  width: 21px;
+  left: 2px;
+  bottom: 2px;
+  background: linear-gradient(135deg, #e2e8f0, #fff);
+  transition: all 0.35s var(--ease);
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+.switch input:checked + .slider {
+  background: linear-gradient(135deg, #7c3aed, #a78bfa);
+  border-color: rgba(167, 139, 250, 0.6);
+  box-shadow: 0 0 16px rgba(167, 139, 250, 0.3);
+}
+.switch input:checked + .slider:before {
+  transform: translateX(21px);
+  background: #fff;
+  box-shadow: 0 0 8px rgba(167, 139, 250, 0.4), 0 1px 4px rgba(0,0,0,0.15);
+}
+.slider.round {
+  border-radius: 999px;
+}
+.slider.round:before {
+  border-radius: 50%;
 }
 
-.dashboard-tile:hover {
-  transform: scale(1.02);
-  border-color: rgba(167,139,250,0.35);
+/* ── Danger Zone ── */
+.settings-card-danger {
+  background: rgba(248, 113, 113, 0.04);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(248, 113, 113, 0.12);
+  border-radius: 20px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25), 0 0 30px rgba(248, 113, 113, 0.05);
 }
-
-.dashboard-tile-value {
-  font-size: 1.45rem;
-  font-weight: 700;
-  line-height: 1.2;
+.settings-card-danger::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 5%, rgba(248, 113, 113, 0.4) 30%, rgba(239, 68, 68, 0.4) 70%, transparent 95%);
 }
-
-.dashboard-tile-label {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  margin-top: 0.25rem;
-}
-
 .settings-item-danger {
   color: var(--red);
 }
-
 .settings-item-danger .settings-item-icon {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--red);
+  box-shadow: 0 0 12px rgba(248, 113, 113, 0.1);
+}
+.settings-item-danger:hover .settings-item-icon {
+  background: rgba(248, 113, 113, 0.2);
+  box-shadow: 0 0 20px rgba(248, 113, 113, 0.25);
+}
+.settings-item-danger .settings-item-chevron {
   color: var(--red);
 }
 
@@ -3555,15 +3933,16 @@ body.sub-page-mode .app-content {
   display: flex;
   flex-direction: column;
   position: relative;
-  transition: all 0.25s var(--ease);
+  transition: all 0.3s var(--ease);
 }
 .membership-tier-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   border-color: var(--purple);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 .membership-tier-card.active-tier {
   border-color: var(--purple-l);
-  box-shadow: 0 0 20px rgba(167, 139, 250, 0.15);
+  box-shadow: 0 0 24px rgba(167, 139, 250, 0.15);
 }
 .membership-tier-header {
   margin-bottom: 0.75rem;
@@ -3605,66 +3984,55 @@ body.sub-page-mode .app-content {
 .tier-badge-current {
   display: block;
   text-align: center;
-  padding: 0.4rem;
+  padding: 0.45rem;
   background: rgba(167, 139, 250, 0.15);
   color: var(--purple-l);
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 700;
+  border: 1px solid rgba(167, 139, 250, 0.2);
 }
 
-/* Toggle switch */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 46px;
-  height: 26px;
-  flex-shrink: 0;
-}
-
-.switch input {
+/* ── Staggered Cosmic Entrance ── */
+.cosmic-enter {
   opacity: 0;
-  width: 0;
-  height: 0;
+  transform: translateY(20px) scale(0.97);
+  animation: cosmicEnter 0.6s var(--ease-spring) forwards;
+}
+@keyframes cosmicEnter {
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.slider {
-  position: absolute;
+/* ── Relations Modal ── */
+.relations-modal { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); display: flex; align-items: flex-end; justify-content: center; }
+.relations-modal.hidden { display: none; }
+.relations-modal-inner { width: 100%; max-width: 600px; max-height: 85vh; background: var(--bg-secondary); border-radius: 24px 24px 0 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 -8px 32px rgba(0,0,0,0.4); }
+
+/* Dashboard tile compat (used by stats) */
+.dashboard-tile {
   cursor: pointer;
-  inset: 0;
-  background: rgba(255,255,255,0.12);
+  text-align: center;
+  background: var(--bg-glass);
   border: 1px solid var(--border);
-  transition: 0.25s var(--ease);
+  border-radius: 16px;
+  padding: 1rem 0.5rem;
+  transition: transform 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+.dashboard-tile:hover {
+  transform: scale(1.02);
+  border-color: rgba(167,139,250,0.35);
+}
+.dashboard-tile-value {
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.dashboard-tile-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
 }
 
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 20px;
-  width: 20px;
-  left: 2px;
-  bottom: 2px;
-  background: #fff;
-  transition: 0.25s var(--ease);
-  border-radius: 50%;
-}
-
-.switch input:checked + .slider {
-  background: var(--purple-d);
-  border-color: var(--purple);
-}
-
-.switch input:checked + .slider:before {
-  transform: translateX(20px);
-}
-
-.slider.round {
-  border-radius: 999px;
-}
-
-.slider.round:before {
-  border-radius: 50%;
-}
 
 /* ===================== EDIT PROFILE ===================== */
 .edit-profile-form {
@@ -6500,6 +6868,575 @@ select.form-input option {
   font-size: 0.85rem;
   font-weight: 600;
   border-radius: 10px;
+}
+
+/* ============================================================
+   COSMIC EDIT PROFILE — PREMIUM COSMOS VIBE
+   ============================================================ */
+
+.cosmic-edit-page {
+  position: relative;
+  min-height: 100%;
+  padding-bottom: calc(var(--bottom-nav-h) + 2rem);
+  overflow-x: hidden;
+}
+
+/* Cosmic Nebula Glows in Background */
+.cosmic-nebula-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 480px;
+  pointer-events: none;
+  background: 
+    radial-gradient(circle at 20% 15%, rgba(124, 58, 237, 0.18) 0%, transparent 60%),
+    radial-gradient(circle at 80% 25%, rgba(96, 165, 250, 0.15) 0%, transparent 55%),
+    radial-gradient(circle at 50% 50%, rgba(244, 114, 182, 0.08) 0%, transparent 70%);
+  filter: blur(40px);
+  z-index: 0;
+}
+
+.cosmic-edit-container {
+  position: relative;
+  z-index: 1;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+/* Top Cosmic Badge */
+.cosmic-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: var(--radius-full);
+  background: rgba(167, 139, 250, 0.12);
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--purple-l);
+  box-shadow: 0 0 16px rgba(167, 139, 250, 0.15);
+  margin-bottom: 0.85rem;
+}
+
+.cosmic-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--purple);
+  box-shadow: 0 0 8px var(--purple);
+  animation: cosmicPulse 2s infinite ease-in-out;
+}
+
+@keyframes cosmicPulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* ── Live Hologram Card Preview ── */
+.cosmic-preview-card {
+  position: relative;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.4rem;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 
+    0 10px 30px -10px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 25px -5px rgba(124, 58, 237, 0.15);
+  margin-bottom: 1.75rem;
+  overflow: hidden;
+  transition: all 0.3s var(--ease);
+}
+
+.cosmic-preview-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at center, rgba(167, 139, 250, 0.08) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.cosmic-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.cosmic-preview-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.cosmic-live-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 10px #10b981;
+  animation: cosmicPulse 1.8s infinite;
+}
+
+.cosmic-preview-content {
+  display: flex;
+  gap: 1.1rem;
+  align-items: center;
+}
+
+.cosmic-preview-avatar {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  padding: 3px;
+  background: linear-gradient(135deg, var(--purple) 0%, var(--blue) 50%, var(--pink) 100%);
+  box-shadow: 0 0 18px rgba(167, 139, 250, 0.35);
+}
+
+.cosmic-preview-avatar img,
+.cosmic-preview-avatar .avatar-fallback {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--purple-l);
+}
+
+.cosmic-preview-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.cosmic-preview-name {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.cosmic-preview-headline {
+  font-size: 0.84rem;
+  color: var(--purple-l);
+  margin-top: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cosmic-preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.cosmic-meta-pill {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* ── Avatar Forge Orb ── */
+.cosmic-avatar-forge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 1.25rem 0 2rem 0;
+  position: relative;
+}
+
+.cosmic-avatar-ring {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: linear-gradient(135deg, #a78bfa 0%, #60a5fa 50%, #f472b6 100%);
+  box-shadow: 
+    0 0 24px rgba(167, 139, 250, 0.35),
+    0 0 50px rgba(96, 165, 250, 0.15);
+  cursor: pointer;
+  transition: transform 0.3s var(--ease-spring), box-shadow 0.3s var(--ease);
+}
+
+.cosmic-avatar-ring:hover {
+  transform: scale(1.04);
+  box-shadow: 
+    0 0 32px rgba(167, 139, 250, 0.5),
+    0 0 60px rgba(96, 165, 250, 0.25);
+}
+
+.cosmic-avatar-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cosmic-avatar-inner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cosmic-avatar-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--purple-l);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  gap: 0.2rem;
+}
+
+.cosmic-avatar-placeholder svg {
+  color: var(--purple);
+}
+
+.cosmic-avatar-edit-badge {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple) 0%, var(--blue) 100%);
+  border: 2px solid var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: transform 0.2s var(--ease-spring);
+}
+
+.cosmic-avatar-ring:hover .cosmic-avatar-edit-badge {
+  transform: scale(1.15);
+}
+
+.cosmic-avatar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+/* ── Cosmic Form Sections & Cards ── */
+.cosmic-section-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-lg);
+  padding: 1.35rem 1.4rem;
+  margin-bottom: 1.5rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: border-color 0.2s var(--ease);
+}
+
+.cosmic-section-card:hover {
+  border-color: rgba(167, 139, 250, 0.2);
+}
+
+.cosmic-section-title {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.cosmic-section-sub {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 1.1rem;
+  line-height: 1.4;
+}
+
+/* ── Cosmic Persona Chips ── */
+.cosmic-persona-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.cosmic-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all 0.2s var(--ease-spring);
+  user-select: none;
+}
+
+.cosmic-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(167, 139, 250, 0.3);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.cosmic-chip.active {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.3) 0%, rgba(96, 165, 250, 0.3) 100%);
+  border-color: var(--purple);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 
+    0 0 16px rgba(167, 139, 250, 0.35),
+    inset 0 0 12px rgba(167, 139, 250, 0.2);
+  transform: translateY(-1px) scale(1.02);
+}
+
+/* ── Cosmic Input Wrap & Custom Fields ── */
+.cosmic-field-group {
+  margin-bottom: 1.15rem;
+}
+
+.cosmic-field-group:last-child {
+  margin-bottom: 0;
+}
+
+.cosmic-field-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 0.45rem;
+  letter-spacing: 0.01em;
+}
+
+.cosmic-field-label .required-star {
+  color: var(--purple);
+}
+
+.cosmic-char-counter {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.cosmic-input-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.cosmic-input-icon {
+  position: absolute;
+  left: 1rem;
+  color: var(--purple-l);
+  opacity: 0.7;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s, color 0.2s;
+}
+
+.cosmic-input {
+  width: 100%;
+  padding: 0.78rem 1rem 0.78rem 2.85rem;
+  background: rgba(12, 16, 32, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: 0.9rem;
+  transition: all 0.2s var(--ease);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+
+.cosmic-input::placeholder {
+  color: rgba(148, 163, 184, 0.45);
+}
+
+.cosmic-input:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.cosmic-input:focus {
+  outline: none;
+  border-color: var(--purple);
+  background: rgba(12, 16, 32, 0.95);
+  box-shadow: 
+    0 0 0 3px rgba(167, 139, 250, 0.15),
+    0 0 20px rgba(167, 139, 250, 0.25);
+}
+
+.cosmic-input:focus + .cosmic-input-icon,
+.cosmic-input-box:focus-within .cosmic-input-icon {
+  opacity: 1;
+  color: var(--purple);
+}
+
+.cosmic-textarea {
+  min-height: 110px;
+  resize: vertical;
+  padding-top: 0.85rem;
+}
+
+/* ── LinkedIn Trust Node ── */
+.cosmic-linkedin-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(10, 102, 194, 0.12) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border: 1px solid rgba(10, 102, 194, 0.25);
+  border-radius: var(--radius-lg);
+  padding: 1.15rem 1.35rem;
+  margin-bottom: 1.5rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.cosmic-linkedin-left {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.cosmic-linkedin-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: #0a66c2;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+  box-shadow: 0 4px 14px rgba(10, 102, 194, 0.35);
+  flex-shrink: 0;
+}
+
+.cosmic-linkedin-icon.connected {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.cosmic-linkedin-info h4 {
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.cosmic-linkedin-info p {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 0.1rem;
+}
+
+/* ── Save CTA Button ── */
+.cosmic-save-wrap {
+  position: sticky;
+  bottom: calc(var(--bottom-nav-h) + 0.5rem);
+  z-index: 10;
+  padding: 0.75rem 0;
+  background: linear-gradient(to top, var(--bg-primary) 70%, transparent 100%);
+}
+
+.btn-cosmic-save {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1rem 1.5rem;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 50%, #2563eb 100%);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 
+    0 6px 25px rgba(124, 58, 237, 0.45),
+    0 0 15px rgba(96, 165, 250, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: all 0.25s var(--ease-spring);
+}
+
+.btn-cosmic-save:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 10px 30px rgba(124, 58, 237, 0.6),
+    0 0 25px rgba(96, 165, 250, 0.45);
+}
+
+.btn-cosmic-save:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-cosmic-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cosmic-save-sparkle {
+  animation: cosmicRotate 6s infinite linear;
+}
+
+@keyframes cosmicRotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 

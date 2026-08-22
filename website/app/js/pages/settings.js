@@ -77,21 +77,33 @@ export async function renderSettings(outlet) {
 
   outlet.innerHTML = `
     <div class="settings-page page">
-      <!-- ── Header ── -->
-      <div class="settings-header-banner anim-fade-up">
-        <div class="settings-title-wrap">
-          <h1 class="page-title" style="margin:0;font-size:1.75rem;">Control Center</h1>
-          <p class="page-subtitle" style="margin:0.25rem 0 0;color:var(--text-secondary);font-size:0.88rem;">Manage your identity, connectivity, privacy, and cosmic journey</p>
-        </div>
+      <!-- ── Floating Cosmic Particles ── -->
+      <div class="cosmic-particles">
+        <div class="cosmic-particle"></div>
+        <div class="cosmic-particle"></div>
+        <div class="cosmic-particle"></div>
+        <div class="cosmic-particle"></div>
+        <div class="cosmic-particle"></div>
+        <div class="cosmic-particle"></div>
+        <div class="cosmic-particle"></div>
+        <div class="cosmic-particle"></div>
       </div>
 
-      <!-- ── Profile Summary Hero Card ── -->
-      <div class="settings-hero-card anim-fade-up" style="animation-delay:0.04s;">
+      <!-- ── Cosmic Command Header ── -->
+      <div class="settings-header-banner cosmic-enter">
+        <h1 class="cosmic-command-title">Command Center</h1>
+        <p class="cosmic-command-subtitle">Manage your identity, connectivity, privacy, and cosmic journey</p>
+      </div>
+
+      <!-- ── Holographic Hero Profile Card ── -->
+      <div class="settings-hero-card cosmic-enter" style="animation-delay:0.06s;">
         <div class="settings-hero-bg"></div>
         <div class="settings-hero-content">
           <div class="settings-avatar-wrap">
-            <div class="avatar avatar-lg settings-avatar" style="${photoURL ? '' : 'background:var(--gradient-primary);'}">
-              ${photoURL ? `<img src="${photoURL}" alt="${escapeHtml(displayName)}" />` : initials}
+            <div class="cosmic-avatar-orbit">
+              <div class="avatar avatar-lg settings-avatar" style="${photoURL ? '' : 'background:var(--gradient-primary);'}">
+                ${photoURL ? `<img src="${photoURL}" alt="${escapeHtml(displayName)}" />` : initials}
+              </div>
             </div>
             ${isLinkedIn ? '<div class="settings-verified-badge" title="Verified LinkedIn">✓</div>' : ''}
           </div>
@@ -122,16 +134,19 @@ export async function renderSettings(outlet) {
         </div>
       </div>
 
-      <!-- ── Monthly Introduction Progress ── -->
-      <div class="settings-section anim-fade-up" style="animation-delay:0.08s;">
-        <span class="settings-section-title">Monthly Progress</span>
-        <div class="settings-progress-card">
+      <!-- ── Cosmic Fuel Gauge (Monthly Progress) ── -->
+      <div class="settings-section cosmic-enter" style="animation-delay:0.1s;">
+        <div class="cosmic-section-header">
+          <span class="cosmic-section-emoji">⛽</span>
+          <span class="cosmic-section-title">Cosmic Fuel</span>
+        </div>
+        <div class="cosmic-fuel-gauge">
           <div class="settings-progress-header">
             <span class="settings-progress-label">Connections this month</span>
             <span class="settings-progress-count">${usedThisMonth} of ${limitText}</span>
           </div>
-          <div class="settings-progress-bar-wrap">
-            <div class="settings-progress-fill" style="width:${progressPercent}%;"></div>
+          <div class="cosmic-progress-track">
+            <div class="cosmic-progress-fill" style="width:${progressPercent}%;"></div>
           </div>
           <div class="settings-progress-desc">
             ${monthlyLimit > 100 ? '✨ Unlimited introductions active with your cosmic tier.' : `${Math.max(0, monthlyLimit - usedThisMonth)} more curated introductions available this billing cycle.`}
@@ -139,128 +154,138 @@ export async function renderSettings(outlet) {
         </div>
       </div>
 
-      <!-- ── Networking Stats Grid ── -->
-      <div class="settings-section anim-fade-up" style="animation-delay:0.12s;">
-        <span class="settings-section-title">Networking Stats</span>
+      <!-- ── Orbital Stats Grid ── -->
+      <div class="settings-section cosmic-enter" style="animation-delay:0.14s;">
+        <div class="cosmic-section-header">
+          <span class="cosmic-section-emoji">📡</span>
+          <span class="cosmic-section-title">Signal Metrics</span>
+        </div>
         <div class="settings-stats-grid">
-          <div class="dashboard-tile" id="tile-followers">
-            <div class="dashboard-tile-value" id="val-followers" style="color:var(--purple);">${followersCount}</div>
-            <div class="dashboard-tile-label">Followers</div>
+          <div class="cosmic-stat-pod" style="--stat-accent:var(--purple);" id="tile-followers">
+            <div class="cosmic-stat-value" id="val-followers" style="color:var(--purple);">${followersCount}</div>
+            <div class="cosmic-stat-label">Followers</div>
           </div>
-          <div class="dashboard-tile" id="tile-following">
-            <div class="dashboard-tile-value" id="val-following" style="color:var(--blue);">${followingCount}</div>
-            <div class="dashboard-tile-label">Following</div>
+          <div class="cosmic-stat-pod" style="--stat-accent:var(--blue);" id="tile-following">
+            <div class="cosmic-stat-value" id="val-following" style="color:var(--blue);">${followingCount}</div>
+            <div class="cosmic-stat-label">Following</div>
           </div>
-          <div class="dashboard-tile" id="tile-connections">
-            <div class="dashboard-tile-value" id="val-connections" style="color:var(--teal);">${connectionsCount}</div>
-            <div class="dashboard-tile-label">Connections</div>
+          <div class="cosmic-stat-pod" style="--stat-accent:var(--teal);" id="tile-connections">
+            <div class="cosmic-stat-value" id="val-connections" style="color:var(--teal);">${connectionsCount}</div>
+            <div class="cosmic-stat-label">Connections</div>
           </div>
-          <div class="dashboard-tile" id="tile-events">
-            <div class="dashboard-tile-value" style="color:var(--amber);">${eventsCount}</div>
-            <div class="dashboard-tile-label">Events</div>
+          <div class="cosmic-stat-pod" style="--stat-accent:var(--amber);" id="tile-events">
+            <div class="cosmic-stat-value" style="color:var(--amber);">${eventsCount}</div>
+            <div class="cosmic-stat-label">Events</div>
           </div>
-          <div class="dashboard-tile" id="tile-followups">
-            <div class="dashboard-tile-value" style="color:var(--green);">${followUpsCount}</div>
-            <div class="dashboard-tile-label">Follow-ups</div>
+          <div class="cosmic-stat-pod" style="--stat-accent:var(--green);" id="tile-followups">
+            <div class="cosmic-stat-value" style="color:var(--green);">${followUpsCount}</div>
+            <div class="cosmic-stat-label">Follow-ups</div>
           </div>
-          <div class="dashboard-tile" id="tile-orbits">
-            <div class="dashboard-tile-value" style="color:var(--pink);">${orbitsCount}</div>
-            <div class="dashboard-tile-label">Orbits</div>
+          <div class="cosmic-stat-pod" style="--stat-accent:var(--pink);" id="tile-orbits">
+            <div class="cosmic-stat-value" style="color:var(--pink);">${orbitsCount}</div>
+            <div class="cosmic-stat-label">Orbits</div>
           </div>
         </div>
       </div>
 
-      <!-- ── Account & Identity ── -->
-      <div class="settings-section anim-fade-up" style="animation-delay:0.16s;">
-        <span class="settings-section-title">Account</span>
+      <!-- ── 🛸 Account & Identity ── -->
+      <div class="settings-section cosmic-enter" style="animation-delay:0.18s;">
+        <div class="cosmic-section-header">
+          <span class="cosmic-section-emoji">🛸</span>
+          <span class="cosmic-section-title">Account</span>
+        </div>
         <div class="settings-card">
           <div class="settings-item" id="item-edit-profile">
             <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
             <div class="settings-item-label">Edit Profile</div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
           <div class="settings-item" id="item-change-password">
             <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
             <div class="settings-item-label">Change Password</div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
           <div class="settings-item" id="item-connected-accounts">
             <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
             <div class="settings-item-label">Connected Accounts</div>
             <span class="settings-item-value">${isLinkedIn ? 'Google + LinkedIn' : 'Google'}</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
           <div class="settings-item" id="item-linkedin">
             <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.779-1.75-1.75s.784-1.75 1.75-1.75 1.75.779 1.75 1.75-.784 1.75-1.75 1.75zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg></div>
             <div class="settings-item-label">LinkedIn Connection</div>
             <span class="settings-item-value" id="txt-linkedin-status">${isLinkedIn ? 'Connected' : 'Not Connected'}</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
         </div>
       </div>
 
-      <!-- ── COSMOS Membership & Upgrades ── -->
-      <div class="settings-section anim-fade-up" style="animation-delay:0.2s;">
-        <span class="settings-section-title">COSMOS Membership</span>
+      <!-- ── 🌟 COSMOS Membership & Upgrades ── -->
+      <div class="settings-section cosmic-enter" style="animation-delay:0.22s;">
+        <div class="cosmic-section-header">
+          <span class="cosmic-section-emoji">🌟</span>
+          <span class="cosmic-section-title">Cosmos Membership</span>
+        </div>
         <div class="settings-card">
           <div class="settings-item" id="item-membership-plan">
-            <div class="settings-item-icon" style="color:var(--amber);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+            <div class="settings-item-icon" style="background:rgba(251,191,36,0.12);color:var(--amber);box-shadow:0 0 12px rgba(251,191,36,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
             <div class="settings-item-label">Current Plan</div>
             <span class="settings-item-value" style="color:var(--purple);font-weight:600;">${currentTier.badge} ${currentTier.label}</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
           <div class="settings-item" id="item-billing-status">
-            <div class="settings-item-icon" style="color:var(--green);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+            <div class="settings-item-icon" style="background:rgba(52,211,153,0.12);color:var(--green);box-shadow:0 0 12px rgba(52,211,153,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
             <div class="settings-item-label">Billing Status</div>
             <span class="settings-item-value">Lifetime Member</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
           <div class="settings-item" id="item-upgrade-journey">
-            <div class="settings-item-icon" style="color:var(--purple);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/></svg></div>
+            <div class="settings-item-icon" style="background:rgba(167,139,250,0.15);box-shadow:0 0 12px rgba(167,139,250,0.15);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/></svg></div>
             <div class="settings-item-label">Cosmic Journey & Upgrades</div>
             <span class="settings-item-value" style="color:var(--purple-l);">Explore Tiers</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
         </div>
       </div>
 
-      <!-- ── Networking & Discovery Preferences ── -->
-      <div class="settings-section anim-fade-up" style="animation-delay:0.24s;">
-        <span class="settings-section-title">Networking & Discovery</span>
+      <!-- ── 🌐 Networking & Discovery ── -->
+      <div class="settings-section cosmic-enter" style="animation-delay:0.26s;">
+        <div class="cosmic-section-header">
+          <span class="cosmic-section-emoji">🌐</span>
+          <span class="cosmic-section-title">Networking & Discovery</span>
+        </div>
         <div class="settings-card">
           <div class="settings-item" id="item-network-relations">
             <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
             <div class="settings-item-label">Network Relations & Requests</div>
             <span class="settings-item-value">View Active</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
-          <div class="settings-item" id="item-monthly-limit">
-            <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg></div>
-            <div class="settings-item-label">Monthly Connection Limit</div>
-            <span class="settings-item-value" id="txt-limit-val">${limitText}</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-          </div>
+
           <div class="settings-item" id="item-matching-prefs">
             <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg></div>
             <div class="settings-item-label">Matching Preferences</div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
           <div class="settings-item" id="item-availability-prefs">
             <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
             <div class="settings-item-label">Availability & Scheduling</div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
           <div class="settings-item" id="item-blocked-users">
             <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>
             <div class="settings-item-label">Blocked Users</div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
         </div>
       </div>
 
-      <!-- ── Notifications Matrix ── -->
-      <div class="settings-section anim-fade-up" style="animation-delay:0.28s;">
-        <span class="settings-section-title">Notifications</span>
+      <!-- ── 🔔 Notifications Matrix ── -->
+      <div class="settings-section cosmic-enter" style="animation-delay:0.3s;">
+        <div class="cosmic-section-header">
+          <span class="cosmic-section-emoji">🔔</span>
+          <span class="cosmic-section-title">Notifications</span>
+        </div>
         <div class="settings-card settings-card-padded">
           <div class="settings-toggle-row">
             <div class="settings-toggle-copy">
@@ -328,9 +353,12 @@ export async function renderSettings(outlet) {
         </div>
       </div>
 
-      <!-- ── Privacy & Visibility ── -->
-      <div class="settings-section anim-fade-up" style="animation-delay:0.32s;">
-        <span class="settings-section-title">Privacy</span>
+      <!-- ── 🛡️ Privacy & Visibility ── -->
+      <div class="settings-section cosmic-enter" style="animation-delay:0.34s;">
+        <div class="cosmic-section-header">
+          <span class="cosmic-section-emoji">🛡️</span>
+          <span class="cosmic-section-title">Privacy</span>
+        </div>
         <div class="settings-card settings-card-padded">
           <div class="settings-toggle-row">
             <div class="settings-toggle-copy">
@@ -370,43 +398,52 @@ export async function renderSettings(outlet) {
         </div>
       </div>
 
-      <!-- ── Support & Information ── -->
-      <div class="settings-section anim-fade-up" style="animation-delay:0.36s;">
-        <span class="settings-section-title">Support & Info</span>
+      <!-- ── ℹ️ Support & Information ── -->
+      <div class="settings-section cosmic-enter" style="animation-delay:0.38s;">
+        <div class="cosmic-section-header">
+          <span class="cosmic-section-emoji">ℹ️</span>
+          <span class="cosmic-section-title">Support & Info</span>
+        </div>
         <div class="settings-card">
           <div class="settings-item" id="item-help-support">
             <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
             <div class="settings-item-label">Help & Support</div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
           <div class="settings-item" id="item-guidelines">
             <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
             <div class="settings-item-label">Community Guidelines</div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
           <div class="settings-item" style="cursor:default;">
             <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></div>
             <div class="settings-item-label">App Version</div>
-            <span class="settings-item-value" style="color:var(--text-muted);font-size:0.78rem;">Cosmos v1.0.0 (Web/Android Parity)</span>
+            <span class="settings-item-value" style="color:var(--text-muted);font-size:0.78rem;">Cosmos v1.0.0</span>
           </div>
         </div>
       </div>
 
-      <!-- ── Danger Zone ── -->
-      <div class="settings-section anim-fade-up" style="animation-delay:0.4s;margin-bottom:2rem;">
-        <span class="settings-section-title" style="color:var(--red);">Danger Zone</span>
-        <div class="settings-card">
+      <!-- ── ⚠️ Danger Zone ── -->
+      <div class="settings-section cosmic-enter" style="animation-delay:0.42s;margin-bottom:2rem;">
+        <div class="cosmic-section-header">
+          <span class="cosmic-section-emoji">⚠️</span>
+          <span class="cosmic-section-title" style="background:linear-gradient(135deg, #f87171, #ef4444);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Danger Zone</span>
+        </div>
+        <div class="settings-card-danger">
           <div class="settings-item settings-item-danger" id="item-logout">
             <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></div>
             <div class="settings-item-label">Sign Out</div>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
           <div class="settings-item settings-item-danger" id="item-pause-account">
             <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/></svg></div>
             <div class="settings-item-label">Pause Account</div>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
           <div class="settings-item settings-item-danger" id="item-delete-account">
             <div class="settings-item-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></div>
             <div class="settings-item-label">Delete Account</div>
+            <svg class="settings-item-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
         </div>
       </div>
@@ -436,6 +473,7 @@ export async function renderSettings(outlet) {
     </div>
   `;
 
+
   // ── Event Handlers ──
   const attachClicks = () => {
     // Edit profile
@@ -456,7 +494,6 @@ export async function renderSettings(outlet) {
     outlet.querySelector('#item-connected-accounts')?.addEventListener('click', () => showConnectedAccountsModal(profile, user));
 
     // Networking Preferences Modals
-    outlet.querySelector('#item-monthly-limit')?.addEventListener('click', () => showMonthlyLimitModal(user.uid, monthlyLimit, outlet));
     outlet.querySelector('#item-matching-prefs')?.addEventListener('click', () => showMatchingPrefsModal(user.uid, profile));
     outlet.querySelector('#item-availability-prefs')?.addEventListener('click', () => showAvailabilityModal(user.uid, profile));
     outlet.querySelector('#item-blocked-users')?.addEventListener('click', () => showBlockedUsersModal(user.uid, profile));
