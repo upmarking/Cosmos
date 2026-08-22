@@ -444,9 +444,21 @@ async function showEventDetailsModal(outlet, event, currentUserId) {
         ` : `
           <!-- PARTICIPATION FORM -->
           <form class="event-participate-form" id="event-participate-form">
-            <h4 class="event-participate-title">Participate in this Event</h4>
-            <p class="event-participate-subtitle">Confirm your name and email to join the attendee list.</p>
+            <h4 class="event-participate-title">${event.isPaid ? 'Book Ticket (Razorpay Checkout)' : 'Participate in this Event'}</h4>
+            <p class="event-participate-subtitle">${event.isPaid ? 'Secure instant digital pass via centralized Razorpay gateway.' : 'Confirm your name and email to join the attendee list.'}</p>
             
+            ${event.isPaid ? `
+              <div style="background:rgba(108,99,255,0.08); border:1px solid rgba(108,99,255,0.25); border-radius:12px; padding:0.75rem 0.9rem; margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Ticket Price</div>
+                  <div style="font-size:1.15rem; font-weight:800; color:var(--accent-primary);">${event.price || '₹' + (event.priceAmount || 0)}</div>
+                </div>
+                <div style="font-size:0.75rem; color:#34d399; font-weight:600; background:rgba(16,185,129,0.1); padding:4px 8px; border-radius:6px;">
+                  🔒 Secured by Razorpay
+                </div>
+              </div>
+            ` : ''}
+
             <div class="form-group" style="margin-bottom:0.4rem;">
               <label class="form-label" for="participate-name" style="font-size:0.78rem;">Full Name *</label>
               <input class="form-input" type="text" id="participate-name" value="${defaultName}" required placeholder="Your full name" style="padding:0.65rem 0.85rem; font-size:0.88rem;" />
@@ -458,7 +470,7 @@ async function showEventDetailsModal(outlet, event, currentUserId) {
             </div>
 
             <button type="submit" class="btn btn-primary" id="btn-submit-participate" style="width:100%; py:12px; font-weight:700; font-size:0.92rem;">
-              Confirm Participation 🚀
+              ${event.isPaid ? `Pay ${event.price || '₹' + (event.priceAmount || 0)} & Book Ticket 💳` : 'Confirm Participation 🚀'}
             </button>
           </form>
         `))}
@@ -588,6 +600,101 @@ async function showEventDetailsModal(outlet, event, currentUserId) {
         return;
       }
 
+      // Paid Event Razorpay Checkout
+      if (event.isPaid) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Initializing Secure Checkout...';
+
+        try {
+          await loadRazorpaySdk();
+
+          const orderRes = await fetch('https://us-central1-cosmos-app-42ed2.cloudfunctions.net/createEventTicketOrder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              eventId: event.id,
+              uid: currentUserId,
+              userName: name,
+              userEmail: email
+            })
+          });
+
+          const orderData = await orderRes.json();
+          if (!orderData.success) {
+            throw new Error(orderData.error || 'Failed to initialize ticket order');
+          }
+
+          submitBtn.textContent = 'Awaiting Razorpay Payment...';
+
+          const rzp = new window.Razorpay({
+            key: orderData.keyId,
+            amount: orderData.amountInPaise,
+            currency: orderData.currency || 'INR',
+            name: 'COSMOS Events',
+            description: `Pass: ${event.title}`,
+            order_id: orderData.orderId,
+            prefill: {
+              name: name,
+              email: email
+            },
+            theme: {
+              color: '#6C63FF'
+            },
+            handler: async function (response) {
+              submitBtn.textContent = 'Verifying Ticket Payment...';
+              try {
+                const verifyRes = await fetch('https://us-central1-cosmos-app-42ed2.cloudfunctions.net/verifyEventTicketPayment', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    eventId: event.id,
+                    uid: currentUserId,
+                    orderId: response.razorpay_order_id,
+                    paymentId: response.razorpay_payment_id,
+                    signature: response.razorpay_signature,
+                    userName: name,
+                    userEmail: email
+                  })
+                });
+
+                const verifyData = await verifyRes.json();
+                if (!verifyData.success) {
+                  throw new Error(verifyData.error || 'Payment verification failed');
+                }
+
+                registrationsMap.set(event.id, true);
+                event.participantCount += 1;
+
+                showToast(`🎉 Ticket Confirmed! Pass Receipt: ${verifyData.receiptId}`, 'success');
+                showEventDetailsModal(outlet, event, currentUserId);
+                updateEventsDisplay(outlet, currentUserId);
+              } catch (vErr) {
+                console.error('[Cosmos Events] Verification error:', vErr);
+                showToast('Payment verification issue: ' + vErr.message, 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = `Pay ${event.price || '₹' + (event.priceAmount || 0)} & Book Ticket 💳`;
+              }
+            },
+            modal: {
+              ondismiss: function () {
+                submitBtn.disabled = false;
+                submitBtn.textContent = `Pay ${event.price || '₹' + (event.priceAmount || 0)} & Book Ticket 💳`;
+              }
+            }
+          });
+
+          rzp.open();
+          return;
+        } catch (err) {
+          console.error('[Cosmos Events] Razorpay checkout error:', err);
+          showToast('Checkout error: ' + (err.message || 'Unknown error'), 'error');
+          submitBtn.disabled = false;
+          submitBtn.textContent = `Pay ${event.price || '₹' + (event.priceAmount || 0)} & Book Ticket 💳`;
+          return;
+        }
+      }
+
+      // Free Event Direct Registration
       submitBtn.disabled = true;
       submitBtn.textContent = 'Registering...';
 
@@ -640,6 +747,21 @@ async function showEventDetailsModal(outlet, event, currentUserId) {
       }
     });
   }
+}
+
+function loadRazorpaySdk() {
+  return new Promise((resolve, reject) => {
+    if (window.Razorpay) {
+      resolve(window.Razorpay);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(window.Razorpay);
+    script.onerror = () => reject(new Error('Failed to load Razorpay SDK'));
+    document.head.appendChild(script);
+  });
 }
 
 function getGradientCss(coverUrl) {

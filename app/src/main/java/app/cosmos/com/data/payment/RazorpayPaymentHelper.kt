@@ -153,4 +153,96 @@ object RazorpayPaymentHelper {
             onPaymentError?.invoke(-1, e.message ?: "Failed to initialize Razorpay Checkout SDK")
         }
     }
+
+    /**
+     * Initiates Razorpay payment for a paid event ticket using a server-created order.
+     * All ticket payments are collected centrally into the platform's Razorpay account.
+     *
+     * @param activity The Android Activity for Razorpay SDK
+     * @param orderId The Razorpay Order ID from createEventTicketOrder Cloud Function
+     * @param amountInInr The ticket amount in INR
+     * @param keyId The Razorpay Key ID from the server
+     * @param eventTitle Title of the event
+     * @param eventId ID of the event
+     * @param userName User's full name for prefill
+     * @param userEmail User's email for prefill
+     * @param userContact User's contact for prefill
+     * @param userId User ID for tracking
+     */
+    fun startEventTicketPayment(
+        activity: Activity,
+        orderId: String,
+        amountInInr: Int,
+        keyId: String,
+        eventTitle: String,
+        eventId: String,
+        userName: String,
+        userEmail: String,
+        userContact: String = "",
+        userId: String = ""
+    ) {
+        if (keyId.isBlank()) {
+            Log.w(TAG, "Razorpay Key ID is empty for event checkout!")
+            onPaymentError?.invoke(-1, "Payment configuration error. Please try again later.")
+            return
+        }
+
+        if (orderId.isBlank()) {
+            Log.w(TAG, "Razorpay Order ID is empty for event checkout!")
+            onPaymentError?.invoke(-1, "Order creation failed. Please try again.")
+            return
+        }
+
+        val amountInPaise = amountInInr.toLong() * 100
+
+        val checkout = Checkout()
+        checkout.setKeyID(keyId)
+
+        try {
+            val options = JSONObject()
+            options.put("name", "COSMOS Events")
+            options.put("description", "Ticket: $eventTitle")
+            options.put("image", "https://s3.amazonaws.com/rzp-mobile/images/rzp.png")
+            options.put("currency", "INR")
+            options.put("amount", amountInPaise)
+            options.put("order_id", orderId)
+
+            // Theme customization — cosmic dark theme
+            val theme = JSONObject()
+            theme.put("color", "#6C63FF")
+            theme.put("backdrop_color", "#0A0A1E")
+            options.put("theme", theme)
+
+            // Prefill user details
+            val prefill = JSONObject()
+            prefill.put("name", userName.ifBlank { "Cosmos Member" })
+            prefill.put("email", userEmail.ifBlank { "user@cosmos.app" })
+            if (userContact.isNotBlank()) {
+                prefill.put("contact", userContact)
+            }
+            options.put("prefill", prefill)
+
+            // Notes for tracking in platform Razorpay dashboard
+            val notes = JSONObject()
+            notes.put("event_id", eventId)
+            notes.put("event_title", eventTitle)
+            notes.put("user_id", userId)
+            notes.put("user_name", userName)
+            notes.put("type", "event_ticket")
+            notes.put("source", "cosmos_android_app")
+            options.put("notes", notes)
+
+            // Retry configuration
+            val retry = JSONObject()
+            retry.put("enabled", true)
+            retry.put("max_count", 3)
+            options.put("retry", retry)
+
+            Log.d(TAG, "Launching Razorpay Event Checkout for '$eventTitle' (order: $orderId, amount: ₹$amountInInr)")
+            checkout.open(activity, options)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error launching Razorpay Event Checkout SDK", e)
+            onPaymentError?.invoke(-1, e.message ?: "Failed to initialize Razorpay Checkout SDK")
+        }
+    }
 }

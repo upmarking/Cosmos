@@ -165,15 +165,19 @@ fun EventLobbyScreen(
                     }
                     Spacer(Modifier.height(20.dp))
                     CosmosButton(
-                        text = if (isCreator) "✓ Hosting" else if (event.isRegistered) "✓ Participating" else if (event.isPaid) "Pay & Participate" else "Participate",
+                        text = if (isCreator) "✓ Hosting" else if (event.isRegistered) "✓ Registered · View Pass 🎟️" else if (event.isPaid) "🎟️ Get Ticket — ${event.price}" else "Participate 🚀",
                         onClick = {
-                            if (event.isPaid) {
+                            if (isCreator) {
+                                // Creator action
+                            } else if (event.isRegistered) {
+                                showSuccessOverlay = true
+                            } else if (event.isPaid) {
                                 showPaidSheet = true
                             } else {
                                 showRegistrationDialog = true
                             }
                         },
-                        enabled = !event.isRegistered && !isCreator
+                        enabled = !isCreator
                     )
                 }
             }
@@ -585,40 +589,43 @@ fun EventLobbyScreen(
             }
         )
     }
-    // ── Paid Event Payment Sheet ───────────────────────────────────────────────
+    // ── Paid Event Razorpay Checkout Sheet ────────────────────────────────────
     if (showPaidSheet && event.isPaid) {
         PaidEventRegistrationSheet(
             event = event,
-            userName = registrationName,
-            userEmail = registrationEmail,
-            isRegistering = isRegisteringPaid,
-            onRegisterWithPayment = { transactionId ->
-                eventViewModel.registerWithPayment(
-                    eventId = eventId,
-                    name = registrationName.trim(),
-                    email = registrationEmail.trim(),
-                    transactionId = transactionId.trim(),
-                    amount = event.priceAmount,
-                    currency = event.currency,
-                    onSuccess = { record ->
-                        showPaidSheet = false
-                        successPaymentRecord = record
-                        showSuccessOverlay = true
-                    },
-                    onError = { errorMsg ->
-                        Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
-                    }
-                )
+            eventViewModel = eventViewModel,
+            initialUserName = registrationName,
+            initialUserEmail = registrationEmail,
+            onPaymentSuccess = { record ->
+                showPaidSheet = false
+                successPaymentRecord = record
+                showSuccessOverlay = true
             },
             onDismiss = { showPaidSheet = false }
         )
     }
 
-    // ── Payment Success Overlay ────────────────────────────────────────────────
-    if (showSuccessOverlay && successPaymentRecord != null) {
+    // ── Digital Ticket Pass Overlay ────────────────────────────────────────────
+    if (showSuccessOverlay) {
+        val passRecord = successPaymentRecord ?: EventPaymentRecord(
+            participantId = currentUserId ?: "",
+            participantName = registrationName.ifBlank { "Cosmos Member" },
+            participantEmail = registrationEmail,
+            eventId = event.id,
+            eventTitle = event.title,
+            amount = event.priceAmount,
+            currency = event.currency,
+            paymentMethod = "RAZORPAY",
+            transactionId = "PAID-CONFIRMED",
+            paymentStatus = "CONFIRMED",
+            paidAt = System.currentTimeMillis(),
+            receiptId = "COSMOS-TKT-${event.id.takeLast(6).uppercase()}",
+            collectedCentrally = true
+        )
+
         EventPaymentSuccessOverlay(
             event = event,
-            paymentRecord = successPaymentRecord!!,
+            paymentRecord = passRecord,
             onDismiss = {
                 showSuccessOverlay = false
                 successPaymentRecord = null

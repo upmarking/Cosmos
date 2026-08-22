@@ -309,8 +309,22 @@ enum class EventPaymentStatus {
 }
 
 /**
+ * Details returned after creating a centralized Razorpay order for an event ticket.
+ */
+data class EventTicketOrder(
+    val orderId: String = "",
+    val eventId: String = "",
+    val eventTitle: String = "",
+    val amount: Int = 0,
+    val amountInPaise: Int = 0,
+    val currency: String = "INR",
+    val keyId: String = "",
+    val isFreeOrder: Boolean = false
+)
+
+/**
  * Tracks a participant's payment for a paid event.
- * Stored under: events/{eventId}/payments/{userId}
+ * Stored under: events/{eventId}/payments/{userId} and platform payments.
  */
 data class EventPaymentRecord(
     val participantId: String = "",
@@ -320,13 +334,17 @@ data class EventPaymentRecord(
     val eventTitle: String = "",
     val amount: Double = 0.0,
     val currency: String = "INR",
-    val paymentMethod: String = "UPI",
+    val paymentMethod: String = "RAZORPAY",
     val transactionId: String = "",
+    val razorpayOrderId: String = "",
+    val razorpayPaymentId: String = "",
+    val razorpaySignature: String = "",
     val paymentStatus: String = EventPaymentStatus.PENDING.name,
     val paidAt: Long = 0L,
     val receiptId: String = "",
     val organizerUpiId: String = "",
-    val organizerName: String = ""
+    val organizerName: String = "",
+    val collectedCentrally: Boolean = true
 )
 
 data class EventRegistrant(
@@ -336,7 +354,10 @@ data class EventRegistrant(
     val registeredAt: Long = 0L,
     val paymentStatus: String = "",
     val transactionId: String = "",
-    val amountPaid: Double = 0.0
+    val orderId: String = "",
+    val receiptId: String = "",
+    val amountPaid: Double = 0.0,
+    val paymentMethod: String = "RAZORPAY"
 )
 
 data class Circle(

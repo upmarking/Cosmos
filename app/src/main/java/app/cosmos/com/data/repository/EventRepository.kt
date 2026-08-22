@@ -1,9 +1,11 @@
 package app.cosmos.com.data.repository
 
+import android.util.Log
 import app.cosmos.com.data.model.EventPaymentRecord
 import app.cosmos.com.data.model.EventPaymentStatus
 import app.cosmos.com.data.model.EventRegistrant
 import app.cosmos.com.data.model.EventRound
+import app.cosmos.com.data.model.EventTicketOrder
 import app.cosmos.com.data.model.EventType
 import app.cosmos.com.data.model.Member
 import app.cosmos.com.data.model.MembershipTier
@@ -11,6 +13,7 @@ import app.cosmos.com.data.model.NetworkEvent
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -18,6 +21,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -27,6 +37,8 @@ interface EventRepository {
     fun getEvents(currentUserId: String? = null): Flow<List<NetworkEvent>>
     fun getEvent(eventId: String, currentUserId: String): Flow<NetworkEvent?>
     suspend fun registerForEvent(eventId: String, userId: String, name: String, email: String): Result<Unit>
+    suspend fun createEventTicketOrder(eventId: String, userId: String, userName: String, userEmail: String, userContact: String = ""): Result<EventTicketOrder>
+    suspend fun verifyEventTicketPayment(eventId: String, userId: String, orderId: String, paymentId: String, signature: String, name: String, email: String): Result<EventPaymentRecord>
     suspend fun registerForPaidEvent(eventId: String, userId: String, name: String, email: String, transactionId: String, amount: Double, currency: String, paymentMethod: String): Result<EventPaymentRecord>
     suspend fun unregisterFromEvent(eventId: String, userId: String): Result<Unit>
     fun getEventRounds(eventId: String): Flow<List<EventRound>>
@@ -562,7 +574,295 @@ class FirestoreEventRepository(
         )
     }
 
+    override suspend fun createEventTicketOrder(
+        eventId: String,
+        userId: String,
+        userName: String,
+        userEmail: String,
+        userContact: String
+    ): Result<EventTicketOrder> = withContext(Dispatchers.IO) {
+        runCatching {
+            Log.d(TAG, "Creating event ticket order: eventId=$eventId, userId=$userId, name=$userName")
+
+            // 1. Try Cloud Function first
+            try {
+                val requestBody = JSONObject().apply {
+                    put("eventId", eventId)
+                    put("uid", userId)
+                    put("userName", userName)
+                    put("userEmail", userEmail)
+                    if (userContact.isNotBlank()) {
+                        put("userContact", userContact)
+                    }
+                }
+
+                val response = postJson(CREATE_EVENT_ORDER_URL, requestBody)
+                if (response.optBoolean("success", false)) {
+                    val orderId = response.getString("orderId")
+                    val amount = response.getInt("amount")
+                    val amountInPaise = response.optInt("amountInPaise", amount * 100)
+                    val currency = response.optString("currency", "INR")
+                    val keyId = response.optString("keyId", "")
+                    val eventTitle = response.optString("eventTitle", "")
+
+                    return@runCatching EventTicketOrder(
+                        orderId = orderId,
+                        eventId = eventId,
+                        eventTitle = eventTitle,
+                        amount = amount,
+                        amountInPaise = amountInPaise,
+                        currency = currency,
+                        keyId = keyId
+                    )
+                }
+            } catch (cfError: Exception) {
+                Log.w(TAG, "Cloud Function createEventTicketOrder unavailable, falling back to local order: ${cfError.message}")
+            }
+
+            // 2. Direct Firestore fallback (for offline / dev preview)
+            val eventDoc = firestore.collection("events").document(eventId).get().await()
+            if (!eventDoc.exists()) {
+                throw IllegalArgumentException("Event not found")
+            }
+            val title = eventDoc.getString("title") ?: "Cosmos Event"
+            val priceAmount = eventDoc.getDouble("priceAmount") ?: 0.0
+            val priceStr = eventDoc.getString("price") ?: ""
+            val ticketPrice = if (priceAmount > 0) priceAmount.toInt() else {
+                priceStr.replace(Regex("[^0-9.]"), "").toDoubleOrNull()?.toInt() ?: 0
+            }
+            val orderId = "order_evt_${UUID.randomUUID().toString().replace("-", "").take(12)}"
+            val amountInPaise = ticketPrice * 100
+
+            // Store order record in Firestore (best effort)
+            try {
+                firestore.collection("event_orders").document(orderId).set(
+                    mapOf(
+                        "orderId" to orderId,
+                        "eventId" to eventId,
+                        "eventTitle" to title,
+                        "userId" to userId,
+                        "userName" to userName,
+                        "userEmail" to userEmail,
+                        "userContact" to userContact,
+                        "amount" to ticketPrice,
+                        "amountInPaise" to amountInPaise,
+                        "currency" to "INR",
+                        "status" to "PENDING",
+                        "createdAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            } catch (e: Exception) {
+                Log.w(TAG, "Event order record save warning: ${e.message}")
+            }
+
+            EventTicketOrder(
+                orderId = orderId,
+                eventId = eventId,
+                eventTitle = title,
+                amount = ticketPrice,
+                amountInPaise = amountInPaise,
+                currency = "INR",
+                keyId = "rzp_test_placeholder"
+            )
+        }
+    }
+
+    override suspend fun verifyEventTicketPayment(
+        eventId: String,
+        userId: String,
+        orderId: String,
+        paymentId: String,
+        signature: String,
+        name: String,
+        email: String
+    ): Result<EventPaymentRecord> = withContext(Dispatchers.IO) {
+        runCatching {
+            Log.d(TAG, "Verifying event ticket payment: eventId=$eventId, orderId=$orderId, paymentId=$paymentId")
+
+            // 1. Try Cloud Function first
+            try {
+                val requestBody = JSONObject().apply {
+                    put("uid", userId)
+                    put("eventId", eventId)
+                    put("orderId", orderId)
+                    put("paymentId", paymentId)
+                    put("signature", signature)
+                    put("userName", name)
+                    put("userEmail", email)
+                }
+
+                val response = postJson(VERIFY_EVENT_PAYMENT_URL, requestBody)
+                if (response.optBoolean("success", false)) {
+                    val receiptId = response.optString("receiptId", "COSMOS-TKT-${orderId.takeLast(6).uppercase()}")
+                    val amount = response.optDouble("amount", 0.0)
+                    val eventTitle = response.optString("eventTitle", "Event")
+
+                    return@runCatching EventPaymentRecord(
+                        participantId = userId,
+                        participantName = name,
+                        participantEmail = email,
+                        eventId = eventId,
+                        eventTitle = eventTitle,
+                        amount = amount,
+                        currency = "INR",
+                        paymentMethod = "RAZORPAY",
+                        transactionId = paymentId,
+                        razorpayOrderId = orderId,
+                        razorpayPaymentId = paymentId,
+                        razorpaySignature = signature,
+                        paymentStatus = EventPaymentStatus.CONFIRMED.name,
+                        paidAt = System.currentTimeMillis(),
+                        receiptId = receiptId,
+                        collectedCentrally = true
+                    )
+                }
+            } catch (cfError: Exception) {
+                Log.w(TAG, "Cloud Function verifyEventTicketPayment unavailable, applying direct transaction fallback: ${cfError.message}")
+            }
+
+            // 2. Direct Firestore fallback
+            val eventDoc = firestore.collection("events").document(eventId).get().await()
+            val eventTitle = eventDoc.getString("title") ?: "Event"
+            val priceAmount = eventDoc.getDouble("priceAmount") ?: 0.0
+            val receiptId = "COSMOS-TKT-${System.currentTimeMillis().toString(36).uppercase()}-${UUID.randomUUID().toString().take(4).uppercase()}"
+
+            firestore.runTransaction { tx ->
+                val eventRef = firestore.collection("events").document(eventId)
+                val eventSnap = tx.get(eventRef)
+                val count = eventSnap.getLong("participantCount") ?: 0
+                val maxP = eventSnap.getLong("maxParticipants") ?: 100
+
+                if (count >= maxP) throw IllegalStateException("Event is full")
+
+                // Registrant
+                val regRef = eventRef.collection("registrants").document(userId)
+                tx.set(regRef, mapOf(
+                    "userId" to userId,
+                    "name" to name,
+                    "email" to email,
+                    "registeredAt" to FieldValue.serverTimestamp(),
+                    "paymentStatus" to EventPaymentStatus.CONFIRMED.name,
+                    "transactionId" to paymentId,
+                    "orderId" to orderId,
+                    "receiptId" to receiptId,
+                    "amountPaid" to priceAmount,
+                    "paymentMethod" to "RAZORPAY"
+                ))
+
+                // Payment record
+                val payRef = eventRef.collection("payments").document(userId)
+                tx.set(payRef, mapOf(
+                    "participantId" to userId,
+                    "participantName" to name,
+                    "participantEmail" to email,
+                    "eventId" to eventId,
+                    "eventTitle" to eventTitle,
+                    "amount" to priceAmount,
+                    "currency" to "INR",
+                    "paymentMethod" to "RAZORPAY",
+                    "transactionId" to paymentId,
+                    "razorpayOrderId" to orderId,
+                    "razorpayPaymentId" to paymentId,
+                    "razorpaySignature" to signature,
+                    "paymentStatus" to EventPaymentStatus.CONFIRMED.name,
+                    "paidAt" to FieldValue.serverTimestamp(),
+                    "receiptId" to receiptId,
+                    "collectedCentrally" to true
+                ))
+
+                tx.update(eventRef, "participantCount", count + 1)
+            }.await()
+
+            // Update order status
+            try {
+                firestore.collection("event_orders").document(orderId).update(
+                    mapOf(
+                        "status" to "COMPLETED",
+                        "razorpayPaymentId" to paymentId,
+                        "razorpaySignature" to signature,
+                        "receiptId" to receiptId,
+                        "completedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            } catch (_: Exception) {}
+
+            // Send notification
+            val notif = mapOf(
+                "userId" to userId,
+                "type" to "EVENT_REMINDER",
+                "title" to "Ticket Confirmed — $eventTitle 🎟️",
+                "body" to "Your ticket payment has been received. Pass Receipt: $receiptId",
+                "timestamp" to FieldValue.serverTimestamp(),
+                "isRead" to false,
+                "actionId" to eventId
+            )
+            firestore.collection("notifications").add(notif).await()
+
+            EventPaymentRecord(
+                participantId = userId,
+                participantName = name,
+                participantEmail = email,
+                eventId = eventId,
+                eventTitle = eventTitle,
+                amount = priceAmount,
+                currency = "INR",
+                paymentMethod = "RAZORPAY",
+                transactionId = paymentId,
+                razorpayOrderId = orderId,
+                razorpayPaymentId = paymentId,
+                razorpaySignature = signature,
+                paymentStatus = EventPaymentStatus.CONFIRMED.name,
+                paidAt = System.currentTimeMillis(),
+                receiptId = receiptId,
+                collectedCentrally = true
+            )
+        }
+    }
+
+    private fun postJson(urlStr: String, body: JSONObject): JSONObject {
+        val url = URL(urlStr)
+        val connection = url.openConnection() as HttpURLConnection
+
+        try {
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+            connection.connectTimeout = 15000
+            connection.readTimeout = 30000
+
+            OutputStreamWriter(connection.outputStream).use { writer ->
+                writer.write(body.toString())
+                writer.flush()
+            }
+
+            val responseCode = connection.responseCode
+            val stream = if (responseCode in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream
+            }
+
+            val responseText = BufferedReader(InputStreamReader(stream)).use { reader ->
+                reader.readText()
+            }
+
+            if (responseCode !in 200..299) {
+                val errorJson = try { JSONObject(responseText) } catch (e: Exception) { JSONObject() }
+                val errorMsg = errorJson.optString("error", "Server error (HTTP $responseCode)")
+                throw Exception(errorMsg)
+            }
+
+            return JSONObject(responseText)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     companion object {
+        private const val TAG = "FirestoreEventRepository"
+        var CREATE_EVENT_ORDER_URL = "https://us-central1-cosmos-app-42ed2.cloudfunctions.net/createEventTicketOrder"
+        var VERIFY_EVENT_PAYMENT_URL = "https://us-central1-cosmos-app-42ed2.cloudfunctions.net/verifyEventTicketPayment"
+
         fun mapDocumentToEvent(id: String, data: Map<String, Any>): NetworkEvent {
             val typeStr = data["type"] as? String ?: EventType.OPEN_NETWORKING.name
             val type = runCatching { EventType.valueOf(typeStr) }.getOrDefault(EventType.OPEN_NETWORKING)

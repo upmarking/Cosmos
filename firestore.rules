@@ -87,6 +87,17 @@ service cloud.firestore {
         );
       }
 
+      match /payments/{userId} {
+        allow read: if isSignedIn() && (
+          isOwner(userId) ||
+          get(/databases/$(database)/documents/events/$(eventId)).data.createdBy == request.auth.uid
+        );
+        allow write: if isSignedIn() && (
+          isOwner(userId) ||
+          get(/databases/$(database)/documents/events/$(eventId)).data.createdBy == request.auth.uid
+        );
+      }
+
       match /rounds/{roundId} {
         allow read, write: if isSignedIn();
 
@@ -200,6 +211,11 @@ service cloud.firestore {
 
     // 13. Gift Cards collection rules
     match /gift_cards/{cardId} {
+      allow read, write: if true;
+    }
+
+    // 14. Event Orders collection rules (Platform Centralized Payments)
+    match /event_orders/{orderId} {
       allow read, write: if true;
     }
   }

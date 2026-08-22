@@ -920,85 +920,62 @@ fun PostEventScreen(
 
                                     // ── Payment Collection Section ──
                                     Text(
-                                        "PAYMENT COLLECTION",
+                                        "CENTRALIZED PLATFORM CHECKOUT",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = CosmosPrimary,
                                         fontWeight = FontWeight.Bold,
                                         letterSpacing = 1.sp
                                     )
-                                    Text(
-                                        "Where should participants send payment?",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = CosmosOnSurfaceVariant.copy(alpha = 0.6f)
-                                    )
 
-                                    // UPI ID
-                                    OutlinedTextField(
-                                        value = upiId,
-                                        onValueChange = { upiId = it },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        label = { Text("UPI ID") },
-                                        placeholder = { Text("yourname@upi", color = CosmosOnSurfaceVariant.copy(alpha = 0.4f)) },
-                                        leadingIcon = {
-                                            Text(
-                                                "\uD83D\uDCF1",
-                                                modifier = Modifier.padding(start = 12.dp),
-                                                fontSize = 18.sp
-                                            )
-                                        },
-                                        supportingText = {
-                                            if (upiId.isNotBlank() && !upiId.contains("@")) {
-                                                Text("Enter a valid UPI ID (e.g. name@upi)", color = CosmosError)
+                                    // Razorpay Gateway Assurance Card
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(CosmosPrimary.copy(alpha = 0.08f))
+                                            .border(1.dp, CosmosPrimary.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
+                                            .padding(16.dp)
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(Icons.Default.Lock, null, tint = CosmosPrimary, modifier = Modifier.size(18.dp))
+                                                Text(
+                                                    "Razorpay Centralized Gateway Active",
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    color = CosmosStarWhite,
+                                                    fontWeight = FontWeight.Bold
+                                                )
                                             }
-                                        },
-                                        isError = upiId.isNotBlank() && !upiId.contains("@"),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = CosmosPrimary,
-                                            unfocusedBorderColor = CosmosOutlineVariant.copy(alpha = 0.5f),
-                                            focusedTextColor = CosmosOnBackground,
-                                            unfocusedTextColor = CosmosOnBackground,
-                                            cursorColor = CosmosPrimary,
-                                            focusedLabelColor = CosmosPrimary,
-                                            unfocusedLabelColor = CosmosOnSurfaceVariant,
-                                            focusedContainerColor = CosmosSurfaceContainerLowest,
-                                            unfocusedContainerColor = CosmosSurfaceContainerLowest
-                                        ),
-                                        singleLine = true
-                                    )
+                                            Text(
+                                                "Ticket revenue is processed centrally via Cosmos's official Razorpay account. Attendees can pay via any UPI app (GPay, PhonePe, Paytm), Cards, or NetBanking.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = CosmosOnSurfaceVariant
+                                            )
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Icon(Icons.Default.CheckCircle, null, tint = CosmosSuccess, modifier = Modifier.size(14.dp))
+                                                Text(
+                                                    "Instant digital pass & QR code issued automatically upon payment.",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = CosmosSuccess,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+                                        }
+                                    }
 
-                                    // Account Holder Name
-                                    OutlinedTextField(
-                                        value = accountName,
-                                        onValueChange = { accountName = it },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        label = { Text("Account Holder Name") },
-                                        placeholder = { Text("Name on UPI account", color = CosmosOnSurfaceVariant.copy(alpha = 0.4f)) },
-                                        leadingIcon = {
-                                            Icon(Icons.Default.Person, null, tint = CosmosPrimary, modifier = Modifier.padding(start = 4.dp))
-                                        },
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = CosmosPrimary,
-                                            unfocusedBorderColor = CosmosOutlineVariant.copy(alpha = 0.5f),
-                                            focusedTextColor = CosmosOnBackground,
-                                            unfocusedTextColor = CosmosOnBackground,
-                                            cursorColor = CosmosPrimary,
-                                            focusedLabelColor = CosmosPrimary,
-                                            unfocusedLabelColor = CosmosOnSurfaceVariant,
-                                            focusedContainerColor = CosmosSurfaceContainerLowest,
-                                            unfocusedContainerColor = CosmosSurfaceContainerLowest
-                                        ),
-                                        singleLine = true
-                                    )
-
-                                    // Payment Instructions (optional)
+                                    // Payment Instructions / Guidelines (optional)
                                     OutlinedTextField(
                                         value = paymentInstructions,
                                         onValueChange = { paymentInstructions = it },
                                         modifier = Modifier.fillMaxWidth(),
-                                        label = { Text("Payment Instructions (optional)") },
-                                        placeholder = { Text("e.g. Pay before event date", color = CosmosOnSurfaceVariant.copy(alpha = 0.4f)) },
+                                        label = { Text("Attendee Guidelines / Notes (optional)") },
+                                        placeholder = { Text("e.g. Please bring your laptop and ID", color = CosmosOnSurfaceVariant.copy(alpha = 0.4f)) },
                                         shape = RoundedCornerShape(12.dp),
                                         colors = OutlinedTextFieldDefaults.colors(
                                             focusedBorderColor = CosmosPrimary,
@@ -1017,9 +994,8 @@ fun PostEventScreen(
 
                                     // ── Participant Preview Card ──
                                     val priceFilled = price.isNotBlank()
-                                    val upiFilled = upiId.isNotBlank() && upiId.contains("@")
-                                    if (priceFilled && upiFilled) {
-                                        val previewCurrencySymbol = when (selectedCurrency) { "USD" -> "$"; "INR" -> "\u20B9"; "EUR" -> "\u20AC"; "GBP" -> "\u00A3"; else -> "$" }
+                                    if (priceFilled) {
+                                        val previewCurrencySymbol = when (selectedCurrency) { "USD" -> "$"; "INR" -> "₹"; "EUR" -> "€"; "GBP" -> "£"; else -> "$" }
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -1048,7 +1024,7 @@ fun PostEventScreen(
                                                 ) {
                                                     Icon(Icons.Default.Visibility, null, tint = CosmosPrimary.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
                                                     Text(
-                                                        "PARTICIPANT VIEW",
+                                                        "ATTENDEE CHECKOUT PREVIEW",
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = CosmosPrimary.copy(alpha = 0.7f),
                                                         fontWeight = FontWeight.Bold,
@@ -1056,7 +1032,7 @@ fun PostEventScreen(
                                                     )
                                                 }
                                                 Text(
-                                                    "Pay $previewCurrencySymbol$price",
+                                                    "1x Pass: $previewCurrencySymbol$price",
                                                     style = MaterialTheme.typography.titleLarge,
                                                     color = CosmosOnBackground,
                                                     fontWeight = FontWeight.Bold
@@ -1065,24 +1041,17 @@ fun PostEventScreen(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                 ) {
-                                                    Text("\uD83D\uDCF1", fontSize = 14.sp)
+                                                    Text("💳", fontSize = 14.sp)
                                                     Text(
-                                                        upiId,
-                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        "Secured Razorpay Checkout (UPI, Cards, NetBanking)",
+                                                        style = MaterialTheme.typography.bodySmall,
                                                         color = CosmosPrimary,
                                                         fontWeight = FontWeight.Medium
                                                     )
                                                 }
-                                                if (accountName.isNotBlank()) {
-                                                    Text(
-                                                        "Account: $accountName",
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = CosmosOnSurfaceVariant
-                                                    )
-                                                }
                                                 if (paymentInstructions.isNotBlank()) {
                                                     Text(
-                                                        "\u201C$paymentInstructions\u201D",
+                                                        "“$paymentInstructions”",
                                                         style = MaterialTheme.typography.bodySmall,
                                                         color = CosmosOnSurfaceVariant.copy(alpha = 0.7f),
                                                         fontWeight = FontWeight.Light

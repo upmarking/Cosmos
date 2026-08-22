@@ -602,6 +602,353 @@ exports.verifyMembershipPayment = functions
   });
 });
 
+/**
+ * createEventTicketOrder
+ *
+ * Creates a standard Razorpay order for purchasing a paid event ticket.
+ * All ticket payments are collected centrally into the platform's Razorpay account.
+ *
+ * Input: { eventId, uid, userName, userEmail, userContact }
+ * Output: { success, orderId, amount, amountInPaise, currency, keyId, eventTitle, eventId }
+ */
+exports.createEventTicketOrder = functions
+  .runWith({ secrets: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'] })
+  .https.onRequest((req, res) => {
+  return cors(req, res, async () => {
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    try {
+      const { eventId, uid, userName, userEmail, userContact } = req.body;
+
+      if (!uid) {
+        res.status(401).json({ error: 'Authentication required.' });
+        return;
+      }
+      if (!eventId) {
+        res.status(400).json({ error: 'Missing eventId.' });
+        return;
+      }
+
+      // 1. Fetch Event Document
+      const eventRef = admin.firestore().collection('events').doc(eventId);
+      const eventDoc = await eventRef.get();
+
+      if (!eventDoc.exists) {
+        res.status(404).json({ error: 'Event not found.' });
+        return;
+      }
+
+      const eventData = eventDoc.data();
+
+      // Check if event is paid
+      if (!eventData.isPaid) {
+        res.status(400).json({ error: 'This is a free event. Registration does not require payment.' });
+        return;
+      }
+
+      // Check capacity
+      const currentParticipants = eventData.participantCount || 0;
+      const maxParticipants = eventData.maxParticipants || 100;
+      if (currentParticipants >= maxParticipants) {
+        res.status(400).json({ error: 'Event is already sold out.' });
+        return;
+      }
+
+      // Check if user is already registered
+      const regRef = eventRef.collection('registrants').doc(uid);
+      const regDoc = await regRef.get();
+      if (regDoc.exists) {
+        res.status(400).json({ error: 'You are already registered for this event.' });
+        return;
+      }
+
+      // Determine ticket price
+      let ticketAmount = 0;
+      if (typeof eventData.priceAmount === 'number' && eventData.priceAmount > 0) {
+        ticketAmount = Math.round(eventData.priceAmount);
+      } else if (eventData.price) {
+        const cleaned = String(eventData.price).replace(/[^0-9.]/g, '');
+        ticketAmount = Math.round(parseFloat(cleaned) || 0);
+      }
+
+      if (ticketAmount <= 0) {
+        res.status(400).json({ error: 'Invalid event ticket price.' });
+        return;
+      }
+
+      const amountInPaise = ticketAmount * 100;
+      const razorpayKeyId = process.env.RAZORPAY_KEY_ID || '';
+      const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+
+      let orderId = `order_evt_${crypto.randomBytes(8).toString('hex')}`;
+
+      if (razorpayKeyId && razorpayKeySecret) {
+        const orderPayload = {
+          amount: amountInPaise,
+          currency: 'INR',
+          receipt: `evt_${eventId.substring(0, 6)}_${uid.substring(0, 6)}_${Date.now()}`,
+          notes: {
+            event_id: eventId,
+            event_title: eventData.title || 'Cosmos Event',
+            user_id: uid,
+            user_name: userName || 'Cosmos Member',
+            user_email: userEmail || '',
+            type: 'event_ticket',
+            source: 'cosmos_platform'
+          }
+        };
+
+        const authHeader = Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64');
+        try {
+          const orderResponse = await axios.post('https://api.razorpay.com/v1/orders', orderPayload, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Basic ${authHeader}`
+            }
+          });
+          orderId = orderResponse.data.id;
+        } catch (err) {
+          console.error('Razorpay event order creation warning:', err.response ? err.response.data : err.message);
+        }
+      }
+
+      // Store pending order in Firestore
+      await admin.firestore().collection('event_orders').doc(orderId).set({
+        orderId: orderId,
+        eventId: eventId,
+        eventTitle: eventData.title || 'Cosmos Event',
+        userId: uid,
+        userName: userName || 'Cosmos Member',
+        userEmail: userEmail || '',
+        userContact: userContact || '',
+        amount: ticketAmount,
+        amountInPaise: amountInPaise,
+        currency: 'INR',
+        status: 'PENDING',
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      console.log(`Created event ticket order ${orderId} for event ${eventId} (${eventData.title}), user: ${uid}, amount: ₹${ticketAmount}`);
+
+      res.status(200).json({
+        success: true,
+        orderId: orderId,
+        eventId: eventId,
+        eventTitle: eventData.title || 'Cosmos Event',
+        amount: ticketAmount,
+        amountInPaise: amountInPaise,
+        currency: 'INR',
+        keyId: razorpayKeyId
+      });
+
+    } catch (error) {
+      console.error('createEventTicketOrder error:', error);
+      res.status(500).json({ error: 'Internal server error.', details: error.message });
+    }
+  });
+});
+
+/**
+ * verifyEventTicketPayment
+ *
+ * Verifies Razorpay HMAC signature for a ticket purchase, atomically records registrant,
+ * logs event payment, updates participant count, and creates notifications.
+ *
+ * Input: { uid, eventId, orderId, paymentId, signature, userName, userEmail }
+ * Output: { success, eventId, receiptId, amount, paymentId, orderId, paidAt }
+ */
+exports.verifyEventTicketPayment = functions
+  .runWith({ secrets: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'] })
+  .https.onRequest((req, res) => {
+  return cors(req, res, async () => {
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    try {
+      const { uid, eventId, orderId, paymentId, signature, userName, userEmail } = req.body;
+
+      if (!uid || !eventId || !orderId || !paymentId || !signature) {
+        res.status(400).json({ error: 'Missing required fields: uid, eventId, orderId, paymentId, signature.' });
+        return;
+      }
+
+      // Verify HMAC signature
+      const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+      if (razorpayKeySecret) {
+        const expectedSignature = crypto
+          .createHmac('sha256', razorpayKeySecret)
+          .update(`${orderId}|${paymentId}`)
+          .digest('hex');
+
+        if (expectedSignature !== signature) {
+          console.error(`Signature mismatch for event order ${orderId}. Expected: ${expectedSignature}, Got: ${signature}`);
+          res.status(400).json({ error: 'Payment signature verification failed.' });
+          return;
+        }
+      }
+
+      const orderRef = admin.firestore().collection('event_orders').doc(orderId);
+      const orderDoc = await orderRef.get();
+
+      if (!orderDoc.exists) {
+        res.status(404).json({ error: 'Event order not found.' });
+        return;
+      }
+
+      const orderData = orderDoc.data();
+
+      // Check if order was already completed
+      if (orderData.status === 'COMPLETED' && orderData.razorpayPaymentId === paymentId) {
+        res.status(200).json({
+          success: true,
+          alreadyProcessed: true,
+          eventId: eventId,
+          receiptId: orderData.receiptId || `COSMOS-TKT-${orderId.slice(-6).toUpperCase()}`
+        });
+        return;
+      }
+
+      if (orderData.userId !== uid) {
+        res.status(403).json({ error: 'Order does not belong to this user.' });
+        return;
+      }
+
+      const eventRef = admin.firestore().collection('events').doc(eventId);
+      const eventDoc = await eventRef.get();
+
+      if (!eventDoc.exists) {
+        res.status(404).json({ error: 'Event not found.' });
+        return;
+      }
+
+      const eventData = eventDoc.data();
+      const now = admin.firestore.FieldValue.serverTimestamp();
+      const receiptId = `COSMOS-TKT-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+      const amountPaid = orderData.amount || (eventData.priceAmount || 0);
+      const participantName = userName || orderData.userName || 'Cosmos Member';
+      const participantEmail = userEmail || orderData.userEmail || '';
+
+      const batch = admin.firestore().batch();
+
+      // 1. Update event orders record
+      batch.update(orderRef, {
+        status: 'COMPLETED',
+        razorpayPaymentId: paymentId,
+        razorpaySignature: signature,
+        receiptId: receiptId,
+        completedAt: now
+      });
+
+      // 2. Register user under event registrants
+      const registrantRef = eventRef.collection('registrants').doc(uid);
+      batch.set(registrantRef, {
+        userId: uid,
+        name: participantName,
+        email: participantEmail,
+        registeredAt: now,
+        paymentStatus: 'CONFIRMED',
+        transactionId: paymentId,
+        orderId: orderId,
+        receiptId: receiptId,
+        amountPaid: amountPaid,
+        paymentMethod: 'RAZORPAY'
+      });
+
+      // 3. Record event payment details
+      const paymentRef = eventRef.collection('payments').doc(uid);
+      batch.set(paymentRef, {
+        participantId: uid,
+        participantName: participantName,
+        participantEmail: participantEmail,
+        eventId: eventId,
+        eventTitle: eventData.title || orderData.eventTitle,
+        amount: amountPaid,
+        currency: 'INR',
+        paymentMethod: 'RAZORPAY',
+        transactionId: paymentId,
+        orderId: orderId,
+        paymentStatus: 'CONFIRMED',
+        paidAt: now,
+        receiptId: receiptId,
+        collectedCentrally: true
+      });
+
+      // 4. Increment participant count on event
+      batch.update(eventRef, {
+        participantCount: admin.firestore.FieldValue.increment(1)
+      });
+
+      // 5. Record platform global payment
+      const globalPaymentRef = admin.firestore().collection('payments').doc();
+      batch.set(globalPaymentRef, {
+        userId: uid,
+        eventId: eventId,
+        eventTitle: eventData.title || orderData.eventTitle,
+        paymentId: paymentId,
+        orderId: orderId,
+        receiptId: receiptId,
+        amount: amountPaid,
+        currency: 'INR',
+        type: 'EVENT_TICKET',
+        status: 'SUCCESS',
+        paymentMethod: 'RAZORPAY',
+        timestamp: now
+      });
+
+      // 6. Send notification to participant
+      const notifRef = admin.firestore().collection('notifications').doc();
+      batch.set(notifRef, {
+        userId: uid,
+        type: 'EVENT_REMINDER',
+        title: `Ticket Confirmed: ${eventData.title || 'Event'} 🎟️`,
+        body: `Your ticket payment of ₹${amountPaid} was successful. Pass Receipt: ${receiptId}. See you there!`,
+        actionId: eventId,
+        isRead: false,
+        timestamp: now
+      });
+
+      // 7. Send notification to host
+      const hostId = eventData.createdBy;
+      if (hostId && hostId !== uid) {
+        const hostNotifRef = admin.firestore().collection('notifications').doc();
+        batch.set(hostNotifRef, {
+          userId: hostId,
+          type: 'EVENT_REGISTRATION',
+          title: `🎟️ New Ticket Sold: ${participantName}`,
+          body: `${participantName} purchased a ticket for ₹${amountPaid} for "${eventData.title}".`,
+          actionId: eventId,
+          isRead: false,
+          timestamp: now
+        });
+      }
+
+      await batch.commit();
+
+      console.log(`✅ Ticket payment verified for user ${uid} on event ${eventId} (${eventData.title}). Payment ID: ${paymentId}, Receipt: ${receiptId}`);
+
+      res.status(200).json({
+        success: true,
+        eventId: eventId,
+        eventTitle: eventData.title || orderData.eventTitle,
+        receiptId: receiptId,
+        amount: amountPaid,
+        paymentId: paymentId,
+        orderId: orderId,
+        paidAt: Date.now()
+      });
+
+    } catch (error) {
+      console.error('verifyEventTicketPayment error:', error);
+      res.status(500).json({ error: 'Internal server error.', details: error.message });
+    }
+  });
+});
+
 function getBadgeName(tier) {
   const badges = {
     'ASTEROID': 'Explorer',

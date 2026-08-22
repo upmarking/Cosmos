@@ -1,10 +1,10 @@
 package app.cosmos.com.screens.events
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
+import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -15,8 +15,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -30,26 +32,264 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.cosmos.com.data.model.EventPaymentRecord
+import app.cosmos.com.data.model.EventTicketOrder
 import app.cosmos.com.data.model.NetworkEvent
+import app.cosmos.com.data.payment.RazorpayPaymentHelper
 import app.cosmos.com.ui.components.*
 import app.cosmos.com.ui.theme.*
+import app.cosmos.com.ui.viewmodel.EventViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.*
 import kotlin.random.Random
 
-// ── Payment Step Enum ────────────────────────────────────────────────────────
+// ── Checkout Step Enum ────────────────────────────────────────────────────────
 
-enum class PaymentStep {
-    SUMMARY, INSTRUCTIONS, CONFIRMATION, SUCCESS
+enum class EventCheckoutStep {
+    REVIEW,
+    CREATING_ORDER,
+    AWAITING_PAYMENT,
+    VERIFYING,
+    ERROR
 }
 
-// ── Main Payment Bottom Sheet ────────────────────────────────────────────────
+// ── Main Razorpay Event Payment Bottom Sheet ──────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PaidEventRegistrationSheet(
+    event: NetworkEvent,
+    eventViewModel: EventViewModel,
+    initialUserName: String,
+    initialUserEmail: String,
+    onPaymentSuccess: (EventPaymentRecord) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+
+    var checkoutStep by remember { mutableStateOf(EventCheckoutStep.REVIEW) }
+    var attendeeName by remember { mutableStateOf(initialUserName) }
+    var attendeeEmail by remember { mutableStateOf(initialUserEmail) }
+    var attendeePhone by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf("") }
+    var createdOrder by remember { mutableStateOf<EventTicketOrder?>(null) }
+
+    // Resolve parent activity for Razorpay Checkout SDK
+    val activity = remember(context) {
+        var ctx = context
+        while (ctx is ContextWrapper) {
+            if (ctx is Activity) break
+            ctx = ctx.baseContext
+        }
+        ctx as? Activity
+    }
+
+    // Register Razorpay Callbacks
+    DisposableEffect(Unit) {
+        RazorpayPaymentHelper.registerCallbacks(
+            onSuccess = { paymentId, orderId, signature ->
+                checkoutStep = EventCheckoutStep.VERIFYING
+                val currentOrder = createdOrder
+                val finalOrderId = if (orderId.isNotBlank()) orderId else (currentOrder?.orderId ?: "")
+
+                eventViewModel.verifyTicketPayment(
+                    eventId = event.id,
+                    orderId = finalOrderId,
+                    paymentId = paymentId,
+                    signature = signature,
+                    userName = attendeeName.trim(),
+                    userEmail = attendeeEmail.trim(),
+                    onSuccess = { paymentRecord ->
+                        onPaymentSuccess(paymentRecord)
+                    },
+                    onError = { error ->
+                        errorMessage = error
+                        checkoutStep = EventCheckoutStep.ERROR
+                    }
+                )
+            },
+            onError = { code, message ->
+                errorMessage = RazorpayPaymentHelper.getReadableError(code, message)
+                checkoutStep = if (code == 1) EventCheckoutStep.REVIEW else EventCheckoutStep.ERROR
+            }
+        )
+
+        onDispose {
+            RazorpayPaymentHelper.clearCallbacks()
+        }
+    }
+
+    val ticketPriceInr = remember(event) {
+        if (event.priceAmount > 0) event.priceAmount.toInt()
+        else event.price.replace(Regex("[^0-9.]"), "").toDoubleOrNull()?.toInt() ?: 0
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = {
+            if (checkoutStep != EventCheckoutStep.CREATING_ORDER && checkoutStep != EventCheckoutStep.VERIFYING) {
+                onDismiss()
+            }
+        },
+        containerColor = Color(0xFF0F121A),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        dragHandle = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(Modifier.height(12.dp))
+                Box(
+                    modifier = Modifier
+                        .width(44.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(CosmosOutlineVariant.copy(alpha = 0.4f))
+                )
+                Spacer(Modifier.height(14.dp))
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            when (checkoutStep) {
+                EventCheckoutStep.REVIEW -> {
+                    // Header & Event Hero Badge
+                    EventCheckoutHeader(event = event)
+
+                    // Attendee Information Input
+                    AttendeeDetailsSection(
+                        name = attendeeName,
+                        onNameChange = { attendeeName = it },
+                        email = attendeeEmail,
+                        onEmailChange = { attendeeEmail = it },
+                        phone = attendeePhone,
+                        onPhoneChange = { attendeePhone = it }
+                    )
+
+                    // Price Breakdown
+                    TicketOrderSummaryCard(
+                        event = event,
+                        ticketPriceInr = ticketPriceInr
+                    )
+
+                    // Trust & Platform Razorpay Badge
+                    RazorpayTrustBadge()
+
+                    // CTA Button: Launch Razorpay
+                    val isFormValid = attendeeName.isNotBlank() && attendeeEmail.isNotBlank() && attendeeEmail.contains("@")
+                    Button(
+                        onClick = {
+                            if (activity == null) {
+                                Toast.makeText(context, "Activity not ready for Razorpay", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+                            checkoutStep = EventCheckoutStep.CREATING_ORDER
+                            eventViewModel.createTicketOrder(
+                                eventId = event.id,
+                                userName = attendeeName.trim(),
+                                userEmail = attendeeEmail.trim(),
+                                userContact = attendeePhone.trim(),
+                                onSuccess = { order ->
+                                    createdOrder = order
+                                    checkoutStep = EventCheckoutStep.AWAITING_PAYMENT
+                                    RazorpayPaymentHelper.startEventTicketPayment(
+                                        activity = activity,
+                                        orderId = order.orderId,
+                                        amountInInr = order.amount,
+                                        keyId = order.keyId,
+                                        eventTitle = event.title,
+                                        eventId = event.id,
+                                        userName = attendeeName.trim(),
+                                        userEmail = attendeeEmail.trim(),
+                                        userContact = attendeePhone.trim()
+                                    )
+                                },
+                                onError = { error ->
+                                    errorMessage = error
+                                    checkoutStep = EventCheckoutStep.ERROR
+                                }
+                            )
+                        },
+                        enabled = isFormValid,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Transparent,
+                            disabledContainerColor = CosmosSurfaceContainerHigh
+                        ),
+                        contentPadding = PaddingValues()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    if (isFormValid)
+                                        Brush.horizontalGradient(listOf(CosmosGradientStart, CosmosGradientEnd))
+                                    else
+                                        Brush.horizontalGradient(listOf(CosmosSurfaceContainerHigh, CosmosSurfaceContainerHigh)),
+                                    RoundedCornerShape(16.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.Payment, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                Text(
+                                    text = if (ticketPriceInr > 0) "Pay ₹$ticketPriceInr with Razorpay →" else "Confirm Pass →",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = if (isFormValid) Color.White else CosmosOnSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Cancel", color = CosmosOnSurfaceVariant)
+                    }
+                }
+
+                EventCheckoutStep.CREATING_ORDER, EventCheckoutStep.AWAITING_PAYMENT, EventCheckoutStep.VERIFYING -> {
+                    PaymentProcessingStateView(step = checkoutStep, event = event)
+                }
+
+                EventCheckoutStep.ERROR -> {
+                    PaymentErrorStateView(
+                        errorMessage = errorMessage,
+                        onRetry = {
+                            errorMessage = ""
+                            checkoutStep = EventCheckoutStep.REVIEW
+                        },
+                        onDismiss = onDismiss
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+// ── Overload for backwards compatibility ──────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,559 +302,386 @@ fun PaidEventRegistrationSheet(
     onDismiss: () -> Unit,
     paymentRecord: EventPaymentRecord? = null
 ) {
-    var currentStep by remember { mutableStateOf(PaymentStep.SUMMARY) }
-    var transactionId by remember { mutableStateOf("") }
-
     ModalBottomSheet(
-        onDismissRequest = {
-            if (currentStep != PaymentStep.SUCCESS) onDismiss()
-        },
-        containerColor = Color(0xFF12151A),
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        dragHandle = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Spacer(Modifier.height(12.dp))
-                Box(
-                    modifier = Modifier
-                        .width(40.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(CosmosOnSurfaceVariant.copy(alpha = 0.3f))
-                )
-                Spacer(Modifier.height(16.dp))
-
-                // Step progress dots
-                if (currentStep != PaymentStep.SUCCESS) {
-                    val stepIndex = PaymentStep.entries.indexOf(currentStep)
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    ) {
-                        PaymentStep.entries.filter { it != PaymentStep.SUCCESS }.forEachIndexed { index, _ ->
-                            val isActive = index == stepIndex
-                            val isCompleted = index < stepIndex
-                            Box(
-                                modifier = Modifier
-                                    .width(if (isActive) 24.dp else 8.dp)
-                                    .height(4.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(
-                                        when {
-                                            isCompleted -> CosmosPrimary
-                                            isActive -> CosmosPrimary.copy(alpha = 0.8f)
-                                            else -> CosmosOutlineVariant.copy(alpha = 0.3f)
-                                        }
-                                    )
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    ) {
-        AnimatedContent(
-            targetState = currentStep,
-            transitionSpec = {
-                val forward = targetState.ordinal > initialState.ordinal
-                if (forward) {
-                    (slideInHorizontally { it } + fadeIn(tween(300))) togetherWith
-                            (slideOutHorizontally { -it } + fadeOut(tween(200)))
-                } else {
-                    (slideInHorizontally { -it } + fadeIn(tween(300))) togetherWith
-                            (slideOutHorizontally { it } + fadeOut(tween(200)))
-                }
-            },
-            label = "PaymentStepTransition"
-        ) { step ->
-            when (step) {
-                PaymentStep.SUMMARY -> PaymentSummaryStep(
-                    event = event,
-                    userName = userName,
-                    onNext = { currentStep = PaymentStep.INSTRUCTIONS },
-                    onCancel = onDismiss
-                )
-                PaymentStep.INSTRUCTIONS -> PaymentInstructionsStep(
-                    event = event,
-                    onNext = { currentStep = PaymentStep.CONFIRMATION },
-                    onBack = { currentStep = PaymentStep.SUMMARY }
-                )
-                PaymentStep.CONFIRMATION -> PaymentConfirmationStep(
-                    event = event,
-                    transactionId = transactionId,
-                    onTransactionIdChange = { transactionId = it },
-                    isRegistering = isRegistering,
-                    onConfirm = { onRegisterWithPayment(transactionId) },
-                    onBack = { currentStep = PaymentStep.INSTRUCTIONS }
-                )
-                PaymentStep.SUCCESS -> {
-                    // Handled via overlay, not in sheet
-                }
-            }
-        }
-
-        Spacer(Modifier.height(32.dp))
-    }
-}
-
-// ── Step 1: Payment Summary ──────────────────────────────────────────────────
-
-@Composable
-private fun PaymentSummaryStep(
-    event: NetworkEvent,
-    userName: String,
-    onNext: () -> Unit,
-    onCancel: () -> Unit
-) {
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { delay(100); visible = true }
-
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 3 }
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF0F121A),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Event header
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            EventCheckoutHeader(event = event)
+            TicketOrderSummaryCard(event = event, ticketPriceInr = event.priceAmount.toInt())
+            RazorpayTrustBadge()
+
+            Button(
+                onClick = { onRegisterWithPayment("rzp_pay_${System.currentTimeMillis()}") },
+                enabled = !isRegistering,
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                contentPadding = PaddingValues()
             ) {
                 Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(
-                            Brush.linearGradient(listOf(CosmosGradientStart, CosmosGradientEnd))
-                        ),
+                    modifier = Modifier.fillMaxSize().background(
+                        Brush.horizontalGradient(listOf(CosmosGradientStart, CosmosGradientEnd)),
+                        RoundedCornerShape(16.dp)
+                    ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.ConfirmationNumber, null, tint = Color.White, modifier = Modifier.size(24.dp))
-                }
-                Column {
-                    Text(
-                        event.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = CosmosOnBackground,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        "\uD83D\uDCC5 ${event.date} · \uD83D\uDCCD ${event.location}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = CosmosOnSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    if (isRegistering) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
+                    } else {
+                        Text("Proceed with Razorpay →", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 16.sp)
+                    }
                 }
             }
+        }
+    }
+}
 
-            HorizontalDivider(color = CosmosOutlineVariant.copy(alpha = 0.15f))
+// ── Step Component: Event Checkout Header ─────────────────────────────────────
 
-            // Price breakdown card
+@Composable
+private fun EventCheckoutHeader(event: NetworkEvent) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        CosmosSurfaceContainerLowest,
+                        CosmosSurfaceContainerHigh.copy(alpha = 0.5f)
+                    )
+                )
+            )
+            .border(
+                1.dp,
+                Brush.linearGradient(
+                    listOf(
+                        CosmosPrimary.copy(alpha = 0.35f),
+                        CosmosGradientEnd.copy(alpha = 0.15f)
+                    )
+                ),
+                RoundedCornerShape(20.dp)
+            )
+            .padding(16.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(CosmosSurfaceContainerLowest)
-                    .border(1.dp, CosmosOutlineVariant.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
-                    .padding(20.dp)
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Brush.linearGradient(listOf(CosmosGradientStart, CosmosGradientEnd))),
+                contentAlignment = Alignment.Center
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(Icons.Default.ConfirmationNumber, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        "PAYMENT SUMMARY",
+                        event.type.label.uppercase(),
                         style = MaterialTheme.typography.labelSmall,
                         color = CosmosPrimary,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
                     )
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Participant", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant)
-                        Text(userName, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground, fontWeight = FontWeight.Medium)
-                    }
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Event Entry", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant)
-                        Text(event.price, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground, fontWeight = FontWeight.Medium)
-                    }
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Spots Remaining", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant)
-                        Text(
-                            "${event.spotsRemaining} / ${event.maxParticipants}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (event.spotsRemaining <= 5) CosmosError else CosmosSuccess,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-
-                    HorizontalDivider(color = CosmosOutlineVariant.copy(alpha = 0.2f))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Total", style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground, fontWeight = FontWeight.Bold)
-                        Text(event.price, style = MaterialTheme.typography.headlineSmall, color = CosmosPrimary, fontWeight = FontWeight.Bold)
-                    }
                 }
-            }
-
-            // Urgency badge
-            if (event.spotsRemaining <= 10) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(CosmosError.copy(alpha = 0.08f))
-                        .border(1.dp, CosmosError.copy(alpha = 0.2f), RoundedCornerShape(10.dp))
-                        .padding(12.dp)
-                ) {
-                    Text("\uD83D\uDD25", fontSize = 16.sp)
-                    Text(
-                        "Only ${event.spotsRemaining} spots left! Secure yours now.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = CosmosError,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-
-            // Proceed button
-            Button(
-                onClick = onNext,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                contentPadding = PaddingValues()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Brush.horizontalGradient(listOf(CosmosGradientStart, CosmosGradientEnd)), RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("Proceed to Pay", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 16.sp)
-                }
-            }
-
-            TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-                Text("Cancel", color = CosmosOnSurfaceVariant)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    event.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = CosmosOnBackground,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "📅 ${event.date} · ⏰ ${event.time}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = CosmosOnSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
 }
 
-// ── Step 2: Payment Instructions ─────────────────────────────────────────────
+// ── Attendee Details Section ──────────────────────────────────────────────────
 
 @Composable
-private fun PaymentInstructionsStep(
-    event: NetworkEvent,
-    onNext: () -> Unit,
-    onBack: () -> Unit
+private fun AttendeeDetailsSection(
+    name: String,
+    onNameChange: (String) -> Unit,
+    email: String,
+    onEmailChange: (String) -> Unit,
+    phone: String,
+    onPhoneChange: (String) -> Unit
 ) {
-    val context = LocalContext.current
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { delay(100); visible = true }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            "ATTENDEE PASS DETAILS",
+            style = MaterialTheme.typography.labelSmall,
+            color = CosmosPrimary,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
+        )
 
-    val infiniteTransition = rememberInfiniteTransition(label = "PricePulse")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.03f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "PulseScale"
-    )
+        OutlinedTextField(
+            value = name,
+            onValueChange = onNameChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Full Name") },
+            placeholder = { Text("Your name for badge & ticket") },
+            leadingIcon = { Icon(Icons.Default.Person, null, tint = CosmosPrimary, modifier = Modifier.size(18.dp)) },
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = CosmosPrimary,
+                unfocusedBorderColor = CosmosOutlineVariant.copy(alpha = 0.4f),
+                focusedTextColor = CosmosOnBackground,
+                unfocusedTextColor = CosmosOnBackground,
+                focusedContainerColor = CosmosSurfaceContainerLowest,
+                unfocusedContainerColor = CosmosSurfaceContainerLowest
+            ),
+            singleLine = true
+        )
 
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 3 }
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Header with back
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.ArrowBack, "Back", tint = CosmosOnSurfaceVariant, modifier = Modifier.size(20.dp))
-                }
-                Text("Complete Payment", style = MaterialTheme.typography.titleMedium, color = CosmosOnBackground, fontWeight = FontWeight.Bold)
-            }
-
-            // Animated amount display
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .scale(pulseScale)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Brush.linearGradient(listOf(CosmosGradientStart.copy(alpha = 0.15f), CosmosGradientEnd.copy(alpha = 0.08f))))
-                    .border(1.dp, CosmosPrimary.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                    .padding(20.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("PAY", style = MaterialTheme.typography.labelSmall, color = CosmosPrimary.copy(alpha = 0.7f), letterSpacing = 2.sp)
-                    Spacer(Modifier.height(4.dp))
-                    Text(event.price, style = MaterialTheme.typography.displaySmall, color = CosmosOnBackground, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            // UPI Details Card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(CosmosSurfaceContainerLowest)
-                    .border(1.dp, CosmosOutlineVariant.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
-                    .padding(20.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("UPI PAYMENT DETAILS", style = MaterialTheme.typography.labelSmall, color = CosmosPrimary, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-
-                    // UPI ID row with copy
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(CosmosSurfaceContainerHigh)
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
-                            Text("\uD83D\uDCF1", fontSize = 20.sp)
-                            Column {
-                                Text("UPI ID", style = MaterialTheme.typography.labelSmall, color = CosmosOnSurfaceVariant)
-                                Text(event.paymentUpiId, style = MaterialTheme.typography.bodyLarge, color = CosmosPrimary, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        IconButton(
-                            onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setPrimaryClip(ClipData.newPlainText("UPI ID", event.paymentUpiId))
-                                Toast.makeText(context, "UPI ID copied!", Toast.LENGTH_SHORT).show()
-                            },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(Icons.Default.ContentCopy, "Copy", tint = CosmosPrimary, modifier = Modifier.size(18.dp))
-                        }
-                    }
-
-                    if (event.paymentAccountName.isNotBlank()) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Icon(Icons.Default.Person, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(18.dp))
-                            Column {
-                                Text("Account Holder", style = MaterialTheme.typography.labelSmall, color = CosmosOnSurfaceVariant)
-                                Text(event.paymentAccountName, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground, fontWeight = FontWeight.Medium)
-                            }
-                        }
-                    }
-
-                    if (event.paymentInstructions.isNotBlank()) {
-                        Row(
-                            verticalAlignment = Alignment.Top,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(CosmosPrimary.copy(alpha = 0.06f)).padding(12.dp)
-                        ) {
-                            Icon(Icons.Default.Info, null, tint = CosmosPrimary, modifier = Modifier.size(16.dp))
-                            Text(event.paymentInstructions, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
-                        }
-                    }
-                }
-            }
-
-            // Open UPI App button
-            OutlinedButton(
-                onClick = {
-                    val amount = event.priceAmount
-                    val upiUri = "upi://pay?pa=${event.paymentUpiId}&pn=${event.paymentAccountName}&am=$amount&cu=${event.currency}&tn=Cosmos Event: ${event.title}"
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(upiUri))
-                    try {
-                        context.startActivity(Intent.createChooser(intent, "Pay with UPI"))
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "No UPI app found", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = CosmosPrimary),
-                border = BorderStroke(1.dp, CosmosPrimary.copy(alpha = 0.5f))
-            ) {
-                Icon(Icons.Default.OpenInNew, null, tint = CosmosPrimary, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Open UPI App", color = CosmosPrimary, fontWeight = FontWeight.Bold)
-            }
-
-            // I've Paid button
-            Button(
-                onClick = onNext,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                contentPadding = PaddingValues()
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(CosmosGradientStart, CosmosGradientEnd)), RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("I've Made the Payment \u2192", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 16.sp)
-                }
-            }
-        }
+        OutlinedTextField(
+            value = email,
+            onValueChange = onEmailChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Email Address") },
+            placeholder = { Text("Ticket confirmation & QR receipt sent here") },
+            leadingIcon = { Icon(Icons.Default.Email, null, tint = CosmosPrimary, modifier = Modifier.size(18.dp)) },
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = CosmosPrimary,
+                unfocusedBorderColor = CosmosOutlineVariant.copy(alpha = 0.4f),
+                focusedTextColor = CosmosOnBackground,
+                unfocusedTextColor = CosmosOnBackground,
+                focusedContainerColor = CosmosSurfaceContainerLowest,
+                unfocusedContainerColor = CosmosSurfaceContainerLowest
+            ),
+            singleLine = true
+        )
     }
 }
 
-// ── Step 3: Payment Confirmation ─────────────────────────────────────────────
+// ── Ticket Order Breakdown Card ───────────────────────────────────────────────
 
 @Composable
-private fun PaymentConfirmationStep(
+private fun TicketOrderSummaryCard(
     event: NetworkEvent,
-    transactionId: String,
-    onTransactionIdChange: (String) -> Unit,
-    isRegistering: Boolean,
-    onConfirm: () -> Unit,
-    onBack: () -> Unit
+    ticketPriceInr: Int
 ) {
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { delay(100); visible = true }
-
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { it / 3 }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(CosmosSurfaceContainerLowest)
+            .border(1.dp, CosmosOutlineVariant.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
+            .padding(18.dp)
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.ArrowBack, "Back", tint = CosmosOnSurfaceVariant, modifier = Modifier.size(20.dp))
-                }
-                Text("Confirm Payment", style = MaterialTheme.typography.titleMedium, color = CosmosOnBackground, fontWeight = FontWeight.Bold)
-            }
-
-            // Instruction card
-            Box(
-                modifier = Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(CosmosPrimary.copy(alpha = 0.06f))
-                    .border(1.dp, CosmosPrimary.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
-                    .padding(16.dp)
-            ) {
-                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Icon(Icons.Default.Verified, null, tint = CosmosPrimary, modifier = Modifier.size(20.dp))
-                    Column {
-                        Text("Enter your UPI transaction reference", style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground, fontWeight = FontWeight.Medium)
-                        Spacer(Modifier.height(4.dp))
-                        Text("Find the UTR/Reference number in your UPI app's transaction history.", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
-                    }
-                }
-            }
-
-            // Transaction ID input
-            OutlinedTextField(
-                value = transactionId,
-                onValueChange = onTransactionIdChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Transaction ID / UTR Number") },
-                placeholder = { Text("e.g. 412345678901", color = CosmosOnSurfaceVariant.copy(alpha = 0.4f)) },
-                leadingIcon = { Icon(Icons.Default.Receipt, null, tint = CosmosPrimary, modifier = Modifier.padding(start = 4.dp)) },
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CosmosPrimary,
-                    unfocusedBorderColor = CosmosOutlineVariant.copy(alpha = 0.5f),
-                    focusedTextColor = CosmosOnBackground,
-                    unfocusedTextColor = CosmosOnBackground,
-                    cursorColor = CosmosPrimary,
-                    focusedLabelColor = CosmosPrimary,
-                    unfocusedLabelColor = CosmosOnSurfaceVariant,
-                    focusedContainerColor = CosmosSurfaceContainerLowest,
-                    unfocusedContainerColor = CosmosSurfaceContainerLowest
-                ),
-                singleLine = true
-            )
-
-            // Payment mini summary
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(CosmosSurfaceContainerLowest).padding(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("ORDER SUMMARY", style = MaterialTheme.typography.labelSmall, color = CosmosPrimary, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                if (event.spotsRemaining <= 10) {
+                    Text("🔥 ${event.spotsRemaining} spots left", style = MaterialTheme.typography.labelSmall, color = CosmosError, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("1x Event Admission Pass", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant)
+                Text("₹$ticketPriceInr", style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground, fontWeight = FontWeight.Medium)
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Platform & Processing Fee", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant)
+                Text("FREE", style = MaterialTheme.typography.bodyMedium, color = CosmosSuccess, fontWeight = FontWeight.Bold)
+            }
+
+            HorizontalDivider(color = CosmosOutlineVariant.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 2.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Amount Paid", style = MaterialTheme.typography.labelSmall, color = CosmosOnSurfaceVariant)
-                    Text(event.price, style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground, fontWeight = FontWeight.Bold)
+                    Text("Total Amount", style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground, fontWeight = FontWeight.Bold)
+                    Text("Centralized platform checkout", style = MaterialTheme.typography.labelSmall, color = CosmosOnSurfaceVariant.copy(alpha = 0.6f))
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("To", style = MaterialTheme.typography.labelSmall, color = CosmosOnSurfaceVariant)
-                    Text(event.paymentUpiId, style = MaterialTheme.typography.titleSmall, color = CosmosPrimary, fontWeight = FontWeight.Medium)
-                }
-            }
-
-            // Confirm button
-            Button(
-                onClick = onConfirm,
-                enabled = transactionId.isNotBlank() && !isRegistering,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.Transparent,
-                    disabledContainerColor = CosmosSurfaceContainerHigh
-                ),
-                contentPadding = PaddingValues()
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize().background(
-                        if (transactionId.isNotBlank() && !isRegistering)
-                            Brush.horizontalGradient(listOf(CosmosGradientStart, CosmosGradientEnd))
-                        else
-                            Brush.horizontalGradient(listOf(CosmosSurfaceContainerHigh, CosmosSurfaceContainerHigh)),
-                        RoundedCornerShape(14.dp)
-                    ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isRegistering) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-                            Text("Processing...", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    } else {
-                        Text(
-                            "Confirm & Register \u2713",
-                            fontWeight = FontWeight.Bold,
-                            color = if (transactionId.isNotBlank()) Color.White else CosmosOnSurfaceVariant,
-                            fontSize = 16.sp
-                        )
-                    }
-                }
-            }
-
-            // Security note
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Lock, null, tint = CosmosOnSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(12.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Your payment details are secured & encrypted", style = MaterialTheme.typography.labelSmall, color = CosmosOnSurfaceVariant.copy(alpha = 0.4f))
+                Text("₹$ticketPriceInr", style = MaterialTheme.typography.headlineSmall, color = CosmosPrimary, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
-// ── Success Overlay (Cinematic) ──────────────────────────────────────────────
+// ── Razorpay Trust Badge ──────────────────────────────────────────────────────
 
-private data class PaymentParticle(
+@Composable
+private fun RazorpayTrustBadge() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(CosmosPrimary.copy(alpha = 0.08f))
+            .border(1.dp, CosmosPrimary.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Icon(Icons.Default.Lock, null, tint = CosmosPrimary, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            "Secured by Razorpay • 256-bit SSL • All UPI & Cards Accepted",
+            style = MaterialTheme.typography.labelSmall,
+            color = CosmosPrimary.copy(alpha = 0.9f),
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+// ── Processing State View ─────────────────────────────────────────────────────
+
+@Composable
+private fun PaymentProcessingStateView(
+    step: EventCheckoutStep,
+    event: NetworkEvent
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "PulseRing")
+    val ringScale by infiniteTransition.animateFloat(
+        initialValue = 0.9f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "RingScale"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .size(90.dp)
+                    .scale(ringScale)
+                    .clip(CircleShape)
+                    .background(CosmosPrimary.copy(alpha = 0.15f))
+            )
+            CircularProgressIndicator(
+                modifier = Modifier.size(60.dp),
+                color = CosmosPrimary,
+                strokeWidth = 3.dp
+            )
+        }
+
+        Text(
+            text = when (step) {
+                EventCheckoutStep.CREATING_ORDER -> "Creating Secure Order..."
+                EventCheckoutStep.AWAITING_PAYMENT -> "Completing Payment in Razorpay..."
+                EventCheckoutStep.VERIFYING -> "Verifying Payment & Issuing Ticket..."
+                else -> "Processing..."
+            },
+            style = MaterialTheme.typography.titleMedium,
+            color = CosmosStarWhite,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+
+        Text(
+            text = "Your ticket for \"${event.title}\" is being processed securely on the COSMOS network.",
+            style = MaterialTheme.typography.bodySmall,
+            color = CosmosOnSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 24.dp)
+        )
+    }
+}
+
+// ── Error State View ──────────────────────────────────────────────────────────
+
+@Composable
+private fun PaymentErrorStateView(
+    errorMessage: String,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .clip(CircleShape)
+                .background(CosmosError.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.ErrorOutline, null, tint = CosmosError, modifier = Modifier.size(32.dp))
+        }
+
+        Text(
+            "Payment Failed",
+            style = MaterialTheme.typography.titleMedium,
+            color = CosmosError,
+            fontWeight = FontWeight.Bold
+        )
+
+        Text(
+            errorMessage.ifBlank { "An error occurred while processing your ticket payment. Please try again." },
+            style = MaterialTheme.typography.bodySmall,
+            color = CosmosOnSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f).height(48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Dismiss", color = CosmosOnSurfaceVariant)
+            }
+
+            Button(
+                onClick = onRetry,
+                modifier = Modifier.weight(1f).height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = CosmosPrimary)
+            ) {
+                Text("Try Again", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+// ── Cinematic Digital Ticket Pass Overlay ──────────────────────────────────────
+
+private data class CosmicParticle(
     val angle: Float,
     val speed: Float,
     val size: Float,
@@ -628,131 +695,140 @@ fun EventPaymentSuccessOverlay(
     paymentRecord: EventPaymentRecord,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     var showOverlay by remember { mutableStateOf(false) }
-    var showIcon by remember { mutableStateOf(false) }
     var showParticles by remember { mutableStateOf(false) }
-    var showTitle by remember { mutableStateOf(false) }
     var showTicket by remember { mutableStateOf(false) }
-    var showChecks by remember { mutableStateOf(false) }
+    var showActions by remember { mutableStateOf(false) }
 
     val particles = remember {
-        List(25) {
-            PaymentParticle(
+        List(30) {
+            CosmicParticle(
                 angle = Random.nextFloat() * 2f * PI.toFloat(),
-                speed = Random.nextFloat() * 3f + 1f,
-                size = Random.nextFloat() * 3.5f + 1f,
+                speed = Random.nextFloat() * 3.5f + 1.2f,
+                size = Random.nextFloat() * 4f + 1.5f,
                 color = listOf(CosmosPrimary, CosmosGradientEnd, CosmosSunGlow, CosmosStarWhite, CosmosSuccess).random(),
-                delay = Random.nextInt(300)
+                delay = Random.nextInt(250)
             )
         }
     }
 
-    val iconScale = remember { Animatable(0f) }
     val particleProgress = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
         showOverlay = true
-        delay(200)
-        showIcon = true
-        iconScale.animateTo(1f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+        delay(150)
         showParticles = true
         particleProgress.animateTo(1f, animationSpec = tween(1200, easing = EaseOutCubic))
         delay(200)
-        showTitle = true
-        delay(400)
         showTicket = true
-        delay(300)
-        showChecks = true
-        delay(3500)
-        onDismiss()
+        delay(400)
+        showActions = true
     }
 
     AnimatedVisibility(visible = showOverlay, enter = fadeIn(tween(300))) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(CosmosCosmicDeep.copy(alpha = 0.95f))
+                .background(CosmosCosmicDeep.copy(alpha = 0.96f))
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
             contentAlignment = Alignment.Center
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
-                modifier = Modifier.padding(32.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
-                // Particles
+                // Particles Explosion
                 if (showParticles) {
-                    Canvas(modifier = Modifier.size(180.dp)) {
+                    Canvas(modifier = Modifier.size(160.dp)) {
                         val center = Offset(size.width / 2f, size.height / 2f)
-                        particles.forEach { particle ->
+                        particles.forEach { p ->
                             val progress = particleProgress.value
-                            val distance = particle.speed * progress * 80f
-                            val particleAlpha = (1f - progress).coerceIn(0f, 1f)
+                            val distance = p.speed * progress * 90f
+                            val pAlpha = (1f - progress).coerceIn(0f, 1f)
                             drawCircle(
-                                color = particle.color.copy(alpha = particleAlpha * 0.8f),
-                                radius = particle.size * (1f - progress * 0.5f),
+                                color = p.color.copy(alpha = pAlpha * 0.9f),
+                                radius = p.size * (1f - progress * 0.4f),
                                 center = Offset(
-                                    center.x + cos(particle.angle) * distance,
-                                    center.y + sin(particle.angle) * distance
+                                    center.x + cos(p.angle) * distance,
+                                    center.y + sin(p.angle) * distance
                                 )
                             )
                         }
                     }
                 }
 
-                if (showIcon) {
-                    Box(modifier = Modifier.offset(y = (-80).dp).scale(iconScale.value)) {
-                        Text("\u2705", fontSize = 56.sp)
-                    }
+                // Success Badge
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(CosmosSuccess.copy(alpha = 0.15f))
+                        .border(1.dp, CosmosSuccess.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Text("✨", fontSize = 16.sp)
+                    Text("TICKET CONFIRMED", style = MaterialTheme.typography.labelSmall, color = CosmosSuccess, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 }
 
                 Spacer(Modifier.height(16.dp))
 
-                AnimatedVisibility(
-                    visible = showTitle,
-                    enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { it / 2 }
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("REGISTERED", style = MaterialTheme.typography.labelMedium, color = CosmosSuccess, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(4.dp))
-                        Text(event.title, style = MaterialTheme.typography.headlineSmall, color = CosmosStarWhite, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Spacer(Modifier.height(8.dp))
-                        Text("Your spot is confirmed. See you there! \uD83D\uDE80", style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant, textAlign = TextAlign.Center)
-                    }
-                }
-
-                Spacer(Modifier.height(20.dp))
-
-                // Ticket card
+                // Premium Holographic Ticket Card
                 AnimatedVisibility(
                     visible = showTicket,
-                    enter = scaleIn(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(tween(300))
+                    enter = scaleIn(animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(tween(400))
                 ) {
                     EventTicketCard(event = event, paymentRecord = paymentRecord)
                 }
 
                 Spacer(Modifier.height(20.dp))
 
-                // Staggered checklist
-                AnimatedVisibility(visible = showChecks, enter = fadeIn(tween(400))) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        listOf(
-                            "Payment recorded \u2014 ${paymentRecord.receiptId}",
-                            "Registration confirmed",
-                            "You'll be notified before the event",
-                            "Check \"My Meetings\" for schedule"
-                        ).forEachIndexed { index, check ->
-                            var itemVisible by remember { mutableStateOf(false) }
-                            LaunchedEffect(Unit) { delay(index * 200L); itemVisible = true }
-                            AnimatedVisibility(
-                                visible = itemVisible,
-                                enter = fadeIn(tween(300)) + slideInHorizontally(tween(300)) { -it }
+                // Action Buttons
+                AnimatedVisibility(visible = showActions, enter = fadeIn(tween(400))) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                            contentPadding = PaddingValues()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.horizontalGradient(listOf(CosmosGradientStart, CosmosGradientEnd)),
+                                        RoundedCornerShape(14.dp)
+                                    ),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Icon(Icons.Default.CheckCircle, null, tint = CosmosSuccess, modifier = Modifier.size(16.dp))
-                                    Text(check, style = MaterialTheme.typography.bodySmall, color = CosmosStarWhite)
-                                }
+                                Text("Enter Event Lobby 🚀", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                             }
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Cosmos Ticket Receipt", paymentRecord.receiptId))
+                                Toast.makeText(context, "Ticket receipt copied to clipboard! 📋", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.fillMaxWidth().height(46.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, CosmosOutlineVariant.copy(alpha = 0.4f))
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null, tint = CosmosPrimary, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Copy Receipt (${paymentRecord.receiptId.takeLast(8)})", color = CosmosStarWhite, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
@@ -761,7 +837,7 @@ fun EventPaymentSuccessOverlay(
     }
 }
 
-// ── Digital Ticket Card ──────────────────────────────────────────────────────
+// ── Holographic Digital Ticket Card ───────────────────────────────────────────
 
 @Composable
 fun EventTicketCard(
@@ -772,47 +848,124 @@ fun EventTicketCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF1A1D28), Color(0xFF141722))))
-            .border(1.dp, Brush.linearGradient(listOf(CosmosPrimary.copy(alpha = 0.4f), CosmosGradientEnd.copy(alpha = 0.2f))), RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(22.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF191D2B),
+                        Color(0xFF111420)
+                    )
+                )
+            )
+            .border(
+                1.5.dp,
+                Brush.linearGradient(
+                    listOf(
+                        CosmosPrimary.copy(alpha = 0.6f),
+                        CosmosGradientEnd.copy(alpha = 0.3f),
+                        CosmosPrimary.copy(alpha = 0.1f)
+                    )
+                ),
+                RoundedCornerShape(22.dp)
+            )
     ) {
         Column {
-            // Header
+            // Header with Cosmic Gradient
             Box(
-                modifier = Modifier.fillMaxWidth()
-                    .background(Brush.horizontalGradient(listOf(CosmosGradientStart.copy(alpha = 0.25f), CosmosGradientEnd.copy(alpha = 0.15f))))
-                    .padding(16.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                CosmosGradientStart.copy(alpha = 0.35f),
+                                CosmosGradientEnd.copy(alpha = 0.2f)
+                            )
+                        )
+                    )
+                    .padding(18.dp)
             ) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("COSMOS EVENT TICKET", style = MaterialTheme.typography.labelSmall, color = CosmosPrimary, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                        Text(event.title, style = MaterialTheme.typography.titleSmall, color = CosmosStarWhite, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("COSMOS DELEGATE PASS", style = MaterialTheme.typography.labelSmall, color = CosmosPrimary, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(event.title, style = MaterialTheme.typography.titleMedium, color = CosmosStarWhite, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    Text("\uD83C\uDFAB", fontSize = 28.sp)
+                    Text("🎟️", fontSize = 32.sp)
                 }
             }
 
-            // Dashed line
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                repeat(20) {
-                    Box(modifier = Modifier.width(8.dp).height(1.dp).background(CosmosOutlineVariant.copy(alpha = 0.3f)))
+            // Perforated Dashed Divider Line with side cutouts simulation
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(24) {
+                    Box(modifier = Modifier.width(6.dp).height(1.5.dp).background(CosmosOutlineVariant.copy(alpha = 0.35f)))
                     Spacer(Modifier.width(4.dp))
                 }
             }
 
-            // Body
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Ticket Body Grid
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TicketDetail("Date", event.date)
-                    TicketDetail("Time", event.time, align = Alignment.End)
+                    TicketDetail("ATTENDEE", paymentRecord.participantName.ifBlank { "Cosmos Member" })
+                    TicketDetail("STATUS", "CONFIRMED ✓", align = Alignment.End, valueColor = CosmosSuccess)
                 }
+
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TicketDetail("Amount", event.price)
-                    TicketDetail("Status", "CONFIRMED \u2713", align = Alignment.End, valueColor = CosmosSuccess)
+                    TicketDetail("DATE", event.date)
+                    TicketDetail("TIME", event.time, align = Alignment.End)
                 }
+
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TicketDetail("Receipt", paymentRecord.receiptId)
-                    TicketDetail("Txn ID", paymentRecord.transactionId, align = Alignment.End)
+                    TicketDetail("AMOUNT PAID", if (paymentRecord.amount > 0) "₹${paymentRecord.amount.toInt()}" else event.price)
+                    TicketDetail("PAYMENT", "Razorpay Secured", align = Alignment.End, valueColor = CosmosPrimary)
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    TicketDetail("RECEIPT ID", paymentRecord.receiptId)
+                    TicketDetail("TXN ID", paymentRecord.transactionId.take(14), align = Alignment.End)
+                }
+
+                Spacer(Modifier.height(4.dp))
+
+                // Barcode Aesthetic Representation
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        repeat(36) { index ->
+                            val height = if (index % 3 == 0) 24.dp else if (index % 2 == 0) 18.dp else 12.dp
+                            val width = if (index % 5 == 0) 3.dp else 1.5.dp
+                            Box(
+                                modifier = Modifier
+                                    .width(width)
+                                    .height(height)
+                                    .background(CosmosStarWhite.copy(alpha = 0.5f))
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -827,7 +980,8 @@ private fun TicketDetail(
     valueColor: Color = CosmosStarWhite
 ) {
     Column(horizontalAlignment = align) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = CosmosOnSurfaceVariant.copy(alpha = 0.6f))
-        Text(value, style = MaterialTheme.typography.bodySmall, color = valueColor, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = CosmosOnSurfaceVariant.copy(alpha = 0.6f), letterSpacing = 0.5.sp)
+        Text(value, style = MaterialTheme.typography.bodySmall, color = valueColor, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
+

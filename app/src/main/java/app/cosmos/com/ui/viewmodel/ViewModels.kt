@@ -716,13 +716,68 @@ class EventViewModel(
         }
     }
 
-    // ── Paid Event Registration ──────────────────────────────────────────────
+    // ── Paid Event Registration (Centralized Razorpay) ───────────────────────
 
     private val _isRegisteringPaid = MutableStateFlow(false)
     val isRegisteringPaid: StateFlow<Boolean> = _isRegisteringPaid.asStateFlow()
 
+    private val _isCreatingOrder = MutableStateFlow(false)
+    val isCreatingOrder: StateFlow<Boolean> = _isCreatingOrder.asStateFlow()
+
+    private val _isVerifyingPayment = MutableStateFlow(false)
+    val isVerifyingPayment: StateFlow<Boolean> = _isVerifyingPayment.asStateFlow()
+
     private val _paymentRecord = MutableStateFlow<app.cosmos.com.data.model.EventPaymentRecord?>(null)
     val paymentRecord: StateFlow<app.cosmos.com.data.model.EventPaymentRecord?> = _paymentRecord.asStateFlow()
+
+    fun createTicketOrder(
+        eventId: String,
+        userName: String,
+        userEmail: String,
+        userContact: String = "",
+        onSuccess: (app.cosmos.com.data.model.EventTicketOrder) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            _isCreatingOrder.value = true
+            eventRepo.createEventTicketOrder(eventId, uid, userName, userEmail, userContact)
+                .onSuccess { order ->
+                    _isCreatingOrder.value = false
+                    onSuccess(order)
+                }
+                .onFailure { error ->
+                    _isCreatingOrder.value = false
+                    onError(error.message ?: "Failed to create ticket order")
+                }
+        }
+    }
+
+    fun verifyTicketPayment(
+        eventId: String,
+        orderId: String,
+        paymentId: String,
+        signature: String,
+        userName: String,
+        userEmail: String,
+        onSuccess: (app.cosmos.com.data.model.EventPaymentRecord) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            _isVerifyingPayment.value = true
+            eventRepo.verifyEventTicketPayment(eventId, uid, orderId, paymentId, signature, userName, userEmail)
+                .onSuccess { record ->
+                    _isVerifyingPayment.value = false
+                    _paymentRecord.value = record
+                    onSuccess(record)
+                }
+                .onFailure { error ->
+                    _isVerifyingPayment.value = false
+                    onError(error.message ?: "Payment verification failed")
+                }
+        }
+    }
 
     fun registerWithPayment(
         eventId: String,
@@ -731,7 +786,7 @@ class EventViewModel(
         transactionId: String,
         amount: Double,
         currency: String,
-        paymentMethod: String = "UPI",
+        paymentMethod: String = "RAZORPAY",
         onSuccess: (app.cosmos.com.data.model.EventPaymentRecord) -> Unit,
         onError: (String) -> Unit
     ) {
