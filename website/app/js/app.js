@@ -211,7 +211,10 @@ async function handleLinkedInCallback(user) {
   try {
     showToast('Linking your LinkedIn account...', 'info');
 
-    const redirectUri = window.location.origin + window.location.pathname;
+    let redirectUri = window.location.origin + window.location.pathname;
+    if (redirectUri.endsWith('/')) {
+      redirectUri = redirectUri.slice(0, -1);
+    }
     
     // Determine the API URL (local emulator with live deployed fallback)
     const liveFunctionsUrl = 'https://us-central1-cosmos-app-42ed2.cloudfunctions.net/exchangeLinkedInCode';

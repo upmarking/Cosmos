@@ -428,7 +428,10 @@ export async function renderEditProfile(outlet, path = '') {
       }
     } else {
       const clientId = '86w9zd45y9pupv';
-      const redirectUri = window.location.origin + window.location.pathname;
+      let redirectUri = window.location.origin + window.location.pathname;
+      if (redirectUri.endsWith('/')) {
+        redirectUri = redirectUri.slice(0, -1);
+      }
       const oauthState = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
       sessionStorage.setItem('linkedin_oauth_state', oauthState);
