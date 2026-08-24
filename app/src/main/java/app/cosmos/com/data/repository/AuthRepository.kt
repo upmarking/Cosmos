@@ -29,6 +29,7 @@ interface AuthRepository {
     val currentUser: Flow<Member?>
     val currentUserId: String?
     suspend fun signIn(email: String, password: String): Result<Unit>
+    suspend fun signInWithGoogle(idToken: String): Result<Unit>
     suspend fun signUp(email: String, password: String, name: String, primaryType: String): Result<Unit>
     suspend fun signOut(): Result<Unit>
     suspend fun saveOnboardingData(member: Member): Result<Unit>
@@ -262,6 +263,53 @@ class FirebaseAuthRepository(
             } else {
                 Result.failure(e)
             }
+        }
+    }
+
+    override suspend fun signInWithGoogle(idToken: String): Result<Unit> {
+        return try {
+            val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+            val result = auth.signInWithCredential(credential).await()
+            val user = result.user ?: throw IllegalStateException("User not found after Google sign-in")
+
+            // Check if document exists in Firestore, if not create initial document
+            val userDocRef = firestore.collection("users").document(user.uid)
+            val snapshot = userDocRef.get().await()
+            if (!snapshot.exists()) {
+                val initialData = hashMapOf<String, Any>(
+                    "id" to user.uid,
+                    "name" to (user.displayName ?: ""),
+                    "email" to (user.email ?: "").trim().lowercase(),
+                    "avatarUrl" to (user.photoUrl?.toString() ?: ""),
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "updatedAt" to FieldValue.serverTimestamp(),
+                    "isProfileComplete" to false,
+                    "primaryUserType" to "",
+                    "headline" to "",
+                    "role" to "",
+                    "company" to "",
+                    "location" to "",
+                    "bio" to "",
+                    "tags" to emptyList<String>(),
+                    "goalStatement" to "",
+                    "longTermVision" to "",
+                    "lookingFor" to emptyList<String>(),
+                    "isLinkedInConnected" to false,
+                    "membershipTier" to MembershipTier.ASTEROID.name,
+                    "connectionsCount" to 0,
+                    "followersCount" to 0,
+                    "followingCount" to 0,
+                    "eventsAttended" to 0,
+                    "followUpsCompleted" to 0,
+                    "joinedCircles" to emptyList<String>(),
+                    "pendingCircles" to emptyList<String>()
+                )
+                userDocRef.set(initialData, SetOptions.merge()).await()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            android.util.Log.e("CosmosAuth", "Google sign-in error", e)
+            Result.failure(e)
         }
     }
 

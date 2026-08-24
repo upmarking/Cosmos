@@ -213,27 +213,43 @@ async function handleLinkedInCallback(user) {
 
     const redirectUri = window.location.origin + window.location.pathname;
     
-    // Determine the API URL (local emulator vs deployed functions)
-    let functionsUrl = 'https://us-central1-cosmos-app-42ed2.cloudfunctions.net/exchangeLinkedInCode';
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      functionsUrl = 'http://127.0.0.1:5001/cosmos-app-42ed2/us-central1/exchangeLinkedInCode';
+    // Determine the API URL (local emulator with live deployed fallback)
+    const liveFunctionsUrl = 'https://us-central1-cosmos-app-42ed2.cloudfunctions.net/exchangeLinkedInCode';
+    const emulatorFunctionsUrl = 'http://127.0.0.1:5001/cosmos-app-42ed2/us-central1/exchangeLinkedInCode';
+
+    let response;
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    if (isLocal) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        response = await fetch(emulatorFunctionsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code, uid: user.uid, redirectUri: redirectUri }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+      } catch (emulatorErr) {
+        console.warn('Local functions emulator not running, routing to deployed Cloud Function.');
+        response = await fetch(liveFunctionsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code, uid: user.uid, redirectUri: redirectUri })
+        });
+      }
+    } else {
+      response = await fetch(liveFunctionsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code, uid: user.uid, redirectUri: redirectUri })
+      });
     }
 
-    const response = await fetch(functionsUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        code: code,
-        uid: user.uid,
-        redirectUri: redirectUri
-      })
-    });
-
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Server error exchanging code');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || errorData.details || 'Server error exchanging code');
     }
 
     const data = await response.json();
@@ -266,7 +282,7 @@ function clearUrlParams() {
   window.history.replaceState({}, document.title, url.toString());
 }
 
-function handleAuthState(user) {
+async function handleAuthState(user) {
   const splash = document.getElementById('splash-screen');
   
   if (user && !user.emailVerified) {
@@ -286,11 +302,12 @@ function handleAuthState(user) {
 
   if (user) {
     document.body.classList.remove('auth-mode');
-    ensureUserProfile(user).then(() => {
+    try {
+      await ensureUserProfile(user);
       handleLinkedInCallback(user);
-    }).catch((err) => {
+    } catch (err) {
       console.warn('Failed to sync user profile:', err);
-    });
+    }
 
     // Start real-time badge listeners
     startBadgeListeners(user.uid);

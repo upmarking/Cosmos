@@ -88,4 +88,5 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.storage)
     implementation(libs.razorpay.checkout)
+    implementation(libs.play.services.auth)
 }

@@ -29,9 +29,11 @@ function normalizeTierName(tierName) {
   return LEGACY_TIER_MAP[upper] || upper;
 }
 
-// ── LinkedIn OAuth (existing) ────────────────────────────────────────────────
+// ── LinkedIn OAuth (Google Cloud Secret Manager) ────────────────────────────
 
-exports.exchangeLinkedInCode = functions.https.onRequest((req, res) => {
+exports.exchangeLinkedInCode = functions
+  .runWith({ secrets: ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET'] })
+  .https.onRequest((req, res) => {
   return cors(req, res, async () => {
     // Enable CORS preflight
     if (req.method === 'OPTIONS') {

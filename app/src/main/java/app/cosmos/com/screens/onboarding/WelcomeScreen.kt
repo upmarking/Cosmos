@@ -108,6 +108,48 @@ fun WelcomeScreen(
     val isLoading by authViewModel.isLoading.collectAsState()
     val currentUser by authViewModel.currentUser.collectAsState()
 
+    val webClientId = "622320322399-e5124d73int5ea2lmnugpog8hf5ejlsq.apps.googleusercontent.com"
+    val gso = remember(webClientId) {
+        com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+            com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
+        )
+            .requestIdToken(webClientId)
+            .requestEmail()
+            .build()
+    }
+
+    val googleSignInClient = remember(context, gso) {
+        com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
+    }
+
+    val googleSignInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+            val idToken = account?.idToken
+            if (!idToken.isNullOrBlank()) {
+                authViewModel.signInWithGoogle(idToken) {
+                    val user = authViewModel.currentUser.value
+                    if (user != null && user.isProfileComplete) {
+                        onSignIn()
+                    } else {
+                        onGetStarted()
+                    }
+                }
+            } else {
+                localError = "Failed to obtain Google ID Token."
+            }
+        } catch (e: com.google.android.gms.common.api.ApiException) {
+            if (e.statusCode != com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes.SIGN_IN_CANCELLED) {
+                localError = "Google Sign-In failed (${e.statusCode}): ${e.message}"
+            }
+        } catch (e: Exception) {
+            localError = e.message ?: "Google Sign-In failed"
+        }
+    }
+
     LaunchedEffect(Unit) {
         delay(200)
         visible = true
@@ -263,6 +305,30 @@ fun WelcomeScreen(
                                 color = CosmosOnBackground,
                                 fontWeight = FontWeight.Bold
                             )
+                            Spacer(Modifier.height(16.dp))
+
+                            CosmosGoogleSignInButton(
+                                onClick = {
+                                    localError = ""
+                                    googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                                },
+                                enabled = !isLoading
+                            )
+
+                            Spacer(Modifier.height(16.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                HorizontalDivider(modifier = Modifier.weight(1f), color = CosmosOutlineVariant.copy(alpha = 0.5f))
+                                Text(
+                                    text = "or",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = CosmosOnSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 12.dp)
+                                )
+                                HorizontalDivider(modifier = Modifier.weight(1f), color = CosmosOutlineVariant.copy(alpha = 0.5f))
+                            }
                             Spacer(Modifier.height(16.dp))
                             
                             OutlinedTextField(
@@ -494,6 +560,16 @@ fun WelcomeScreen(
                             icon = Icons.AutoMirrored.Filled.ArrowForward
                         )
 
+                        Spacer(Modifier.height(12.dp))
+
+                        CosmosGoogleSignInButton(
+                            onClick = {
+                                localError = ""
+                                googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                            },
+                            enabled = !isLoading
+                        )
+
                         Spacer(Modifier.height(16.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
@@ -551,5 +627,94 @@ fun WelcomeScreen(
                 textContentColor = CosmosOnSurfaceVariant
             )
         }
+    }
+}
+
+@Composable
+fun CosmosGoogleSignInButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    text: String = "Continue with Google"
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(52.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = CosmosSurfaceContainerHigh,
+        border = androidx.compose.foundation.BorderStroke(1.dp, CosmosOutlineVariant.copy(alpha = 0.6f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            GoogleLogoIcon(modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.3.sp
+                ),
+                color = CosmosOnBackground
+            )
+        }
+    }
+}
+
+@Composable
+fun GoogleLogoIcon(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val width = size.width
+        val height = size.height
+        val strokeWidth = width * 0.18f
+        val center = androidx.compose.ui.geometry.Offset(width / 2f, height / 2f)
+
+        // Red (Top)
+        drawArc(
+            color = Color(0xFFEA4335),
+            startAngle = 195f,
+            sweepAngle = 125f,
+            useCenter = false,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+        )
+        // Yellow (Left)
+        drawArc(
+            color = Color(0xFFFBBC05),
+            startAngle = 135f,
+            sweepAngle = 65f,
+            useCenter = false,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+        )
+        // Green (Bottom)
+        drawArc(
+            color = Color(0xFF34A853),
+            startAngle = 35f,
+            sweepAngle = 105f,
+            useCenter = false,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+        )
+        // Blue (Right)
+        drawArc(
+            color = Color(0xFF4285F4),
+            startAngle = 315f,
+            sweepAngle = 85f,
+            useCenter = false,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth)
+        )
+        // Blue crossbar
+        drawLine(
+            color = Color(0xFF4285F4),
+            start = androidx.compose.ui.geometry.Offset(center.x, center.y),
+            end = androidx.compose.ui.geometry.Offset(width - strokeWidth / 4f, center.y),
+            strokeWidth = strokeWidth,
+            cap = androidx.compose.ui.graphics.StrokeCap.Square
+        )
     }
 }

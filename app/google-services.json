@@ -12,7 +12,20 @@
           "package_name": "app.cosmos.com"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "622320322399-po1jfqt1td6lrketno4kjivs9lkvmc2d.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "app.cosmos.com",
+            "certificate_hash": "864b3609a606db0c77df084162009f1e0a9845b8"
+          }
+        },
+        {
+          "client_id": "622320322399-e5124d73int5ea2lmnugpog8hf5ejlsq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDumpo71fxTPAw84DhTVwpzhSbcW9YhWv8"
@@ -20,26 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:622320322399:android:bc8a971e4aeca93efe98ea",
-        "android_client_info": {
-          "package_name": "com.cosmos.app"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyDumpo71fxTPAw84DhTVwpzhSbcW9YhWv8"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "622320322399-e5124d73int5ea2lmnugpog8hf5ejlsq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

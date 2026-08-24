@@ -103,6 +103,21 @@ class AuthViewModel(
         }
     }
 
+    fun signInWithGoogle(idToken: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            authRepo.signInWithGoogle(idToken)
+                .onSuccess {
+                    _isLoading.value = false
+                    onSuccess()
+                }
+                .onFailure { error ->
+                    _isLoading.value = false
+                    _authError.emit(error.message ?: "Google sign-in failed")
+                }
+        }
+    }
+
     fun signUp(email: String, password: String, name: String, type: String, onSuccess: () -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
