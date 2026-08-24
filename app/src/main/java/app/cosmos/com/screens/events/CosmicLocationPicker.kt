@@ -909,21 +909,6 @@ private fun VirtualMeetingSection(
         )
     }
     var selectedAtmosphere by remember { mutableStateOf<VirtualAtmosphere?>(null) }
-    val detectedPlatform = remember(url) {
-        VIRTUAL_PLATFORMS.firstOrNull { url.contains(it.urlPrefix, ignoreCase = true) }
-    }
-    val isValidUrl = remember(url) { url.startsWith("http://") || url.startsWith("https://") }
-
-    val infiniteTransition = rememberInfiniteTransition(label = "VirtualPulse")
-    val signalPulse by infiniteTransition.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "SignalPulse"
-    )
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -972,17 +957,16 @@ private fun VirtualMeetingSection(
                 )
         )
 
-        // ── Section: Meeting Link Input ──
+        // ── Section: Auto-generation Info Card ──
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                text = "MEETING LINK",
+                text = "MEETING INTEGRATION",
                 style = MaterialTheme.typography.labelSmall,
                 color = CosmosPrimary.copy(alpha = 0.7f),
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.2.sp
             )
 
-            // Smart URL Input with Glass Wrapper
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -990,258 +974,70 @@ private fun VirtualMeetingSection(
                     .background(CosmosSurfaceContainerLow)
                     .border(
                         width = 1.dp,
-                        brush = if (isValidUrl) {
-                            Brush.horizontalGradient(
-                                listOf(
-                                    (detectedPlatform?.brandColor ?: CosmosPrimary).copy(alpha = 0.6f),
-                                    CosmosPrimary.copy(alpha = 0.3f)
-                                )
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                CosmosPrimary.copy(alpha = 0.4f),
+                                CosmosGradientEnd.copy(alpha = 0.2f)
                             )
-                        } else {
-                            Brush.horizontalGradient(
-                                listOf(
-                                    CosmosOutlineVariant.copy(alpha = 0.4f),
-                                    CosmosOutlineVariant.copy(alpha = 0.2f)
-                                )
-                            )
-                        },
+                        ),
                         shape = RoundedCornerShape(16.dp)
                     )
+                    .padding(16.dp)
             ) {
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = {
-                        onUrlChange(it)
-                        val detected = VIRTUAL_PLATFORMS.firstOrNull { p -> it.contains(p.urlPrefix, ignoreCase = true) }
-                        if (detected != null) selectedPlatform = detected
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = {
-                        Text(
-                            "Paste your meeting link here...",
-                            color = CosmosOnSurfaceVariant.copy(alpha = 0.5f),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    },
-                    leadingIcon = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(
-                                    (detectedPlatform?.brandColor ?: CosmosPrimary).copy(alpha = 0.15f)
-                                ),
+                                .background(CosmosPrimary.copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = detectedPlatform?.icon ?: Icons.Default.Link,
+                                imageVector = Icons.Default.AutoAwesome,
                                 contentDescription = null,
-                                tint = detectedPlatform?.brandColor ?: CosmosPrimary,
+                                tint = CosmosPrimary,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
-                    },
-                    trailingIcon = {
-                        if (isValidUrl) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier.padding(end = 8.dp)
-                            ) {
-                                if (detectedPlatform != null) {
-                                    Text(
-                                        text = detectedPlatform.name,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = detectedPlatform.brandColor,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = "Valid Link",
-                                    tint = CosmosSuccess,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        } else if (url.isNotBlank()) {
-                            Icon(
-                                imageVector = Icons.Default.ErrorOutline,
-                                contentDescription = "Invalid",
-                                tint = CosmosError.copy(alpha = 0.7f),
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .padding(end = 4.dp)
-                            )
-                        }
-                    },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedTextColor = CosmosOnBackground,
-                        unfocusedTextColor = CosmosOnBackground,
-                        cursorColor = CosmosPrimary,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent
-                    )
-                )
-            }
-        }
-
-        // ── Virtual Venue Confirmation Card ──
-        AnimatedVisibility(
-            visible = isValidUrl && url.length > 10,
-            enter = fadeIn(tween(300)) + expandVertically(tween(300)),
-            exit = fadeOut(tween(200)) + shrinkVertically(tween(200))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(CosmosSurfaceContainerLowest)
-                    .border(
-                        width = 1.dp,
-                        brush = Brush.linearGradient(
-                            listOf(
-                                (detectedPlatform?.brandColor ?: CosmosPrimary).copy(alpha = 0.6f),
-                                CosmosPrimary.copy(alpha = 0.3f),
-                                (detectedPlatform?.brandColor ?: CosmosPrimary).copy(alpha = 0.6f)
-                            )
-                        ),
-                        shape = RoundedCornerShape(18.dp)
-                    )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    // Header with SIGNAL ACTIVE badge
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.weight(1f, fill = false)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(
-                                        Brush.linearGradient(
-                                            listOf(
-                                                (detectedPlatform?.brandColor ?: CosmosPrimary).copy(alpha = 0.3f),
-                                                (detectedPlatform?.brandColor ?: CosmosPrimary).copy(alpha = 0.1f)
-                                            )
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = detectedPlatform?.icon ?: Icons.Default.Language,
-                                    contentDescription = null,
-                                    tint = detectedPlatform?.brandColor ?: CosmosPrimary,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Column {
-                                Text(
-                                    text = "Virtual Venue",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = CosmosOnBackground,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = detectedPlatform?.name ?: "Custom Platform",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = CosmosOnSurfaceVariant
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        // SIGNAL ACTIVE Badge
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.Black.copy(alpha = 0.6f))
-                                .border(1.dp, CosmosGlassBorder, RoundedCornerShape(8.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        CosmosSuccess.copy(alpha = signalPulse)
-                                    )
-                            )
-                            Text(
-                                text = "SIGNAL ACTIVE",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = CosmosSuccess,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp
-                            )
-                        }
+                        Text(
+                            text = "Auto-Generated Google Meet",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = CosmosOnBackground,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
-                    // Link Preview
+                    Text(
+                        text = "A secure Google Meet room will be automatically created when you launch the event. No manual link configuration is needed.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CosmosOnSurfaceVariant,
+                        lineHeight = 16.sp
+                    )
+
                     Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(CosmosSurfaceContainerLow)
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black.copy(alpha = 0.3f))
+                            .padding(8.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Link,
+                            imageVector = Icons.Default.CalendarToday,
                             contentDescription = null,
-                            tint = CosmosPrimary.copy(alpha = 0.7f),
-                            modifier = Modifier.size(16.dp)
+                            tint = CosmosPrimary,
+                            modifier = Modifier.size(14.dp)
                         )
                         Text(
-                            text = url,
-                            style = MaterialTheme.typography.bodySmall,
+                            text = "Participants auto-sync to Google Calendar",
+                            style = MaterialTheme.typography.labelSmall,
                             color = CosmosPrimary,
-                            fontFamily = FontFamily.Monospace,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    // Venue Stats Row — equal width columns
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        VenueStatItem(
-                            icon = Icons.Default.Security,
-                            label = "Encrypted",
-                            value = if (url.startsWith("https")) "Yes" else "No",
-                            modifier = Modifier.weight(1f)
-                        )
-                        VenueStatItem(
-                            icon = Icons.Default.Language,
-                            label = "Protocol",
-                            value = if (url.startsWith("https")) "HTTPS" else "HTTP",
-                            modifier = Modifier.weight(1f)
-                        )
-                        VenueStatItem(
-                            icon = Icons.Default.Wifi,
-                            label = "Stream",
-                            value = "Ready",
-                            modifier = Modifier.weight(1f)
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }

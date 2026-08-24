@@ -46,6 +46,7 @@ interface EventRepository {
     fun getEventParticipants(eventId: String): Flow<List<Member>>
     fun getEventRegistrants(eventId: String): Flow<List<EventRegistrant>>
     suspend fun createEvent(event: NetworkEvent, creatorId: String): Result<String>
+    suspend fun createVirtualEvent(event: NetworkEvent, creatorId: String, creatorEmail: String): Result<Pair<String, String>>
     suspend fun updateEvent(eventId: String, updates: Map<String, Any>): Result<Unit>
     suspend fun deleteEvent(eventId: String): Result<Unit>
     suspend fun searchEvents(query: String, type: EventType? = null, tags: List<String> = emptyList()): Result<List<NetworkEvent>>
@@ -238,10 +239,25 @@ class FirestoreEventRepository(
             )
             firestore.collection("notifications").add(hostNotifData).await()
         }
+
+        // Sync to Google Calendar if virtual event
+        val calendarEventId = eventDoc.getString("calendarEventId") ?: ""
+        if (calendarEventId.isNotBlank() && email.isNotBlank()) {
+            try {
+                syncCalendarAttendee(eventId, email, add = true)
+            } catch (e: Exception) {
+                Log.w(TAG, "Calendar attendee sync failed (non-fatal): ${e.message}")
+            }
+        }
         Unit
     }
 
     override suspend fun unregisterFromEvent(eventId: String, userId: String): Result<Unit> = runCatching {
+        // Get user email for Calendar sync before removing
+        val registrantDoc = firestore.collection("events").document(eventId)
+            .collection("registrants").document(userId).get().await()
+        val registrantEmail = registrantDoc.getString("email") ?: ""
+
         firestore.runTransaction { transaction ->
             val eventRef = firestore.collection("events").document(eventId)
             val eventDoc = transaction.get(eventRef)
@@ -253,6 +269,19 @@ class FirestoreEventRepository(
                 transaction.update(eventRef, "participantCount", currentCount - 1)
             }
         }.await()
+
+        // Sync Calendar attendee removal for virtual events
+        if (registrantEmail.isNotBlank()) {
+            val eventDoc = firestore.collection("events").document(eventId).get().await()
+            val calendarEventId = eventDoc.getString("calendarEventId") ?: ""
+            if (calendarEventId.isNotBlank()) {
+                try {
+                    syncCalendarAttendee(eventId, registrantEmail, add = false)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Calendar attendee removal failed (non-fatal): ${e.message}")
+                }
+            }
+        }
         Unit
     }
 
@@ -419,6 +448,103 @@ class FirestoreEventRepository(
         }
         val docRef = firestore.collection("events").add(eventMap).await()
         docRef.id
+    }
+
+    /**
+     * Create a virtual event by calling the Cloud Function which:
+     * 1. Creates a Google Calendar event with auto-generated Meet link
+     * 2. Creates the Firestore event document
+     * Returns Pair(eventId, meetLink)
+     */
+    override suspend fun createVirtualEvent(
+        event: NetworkEvent,
+        creatorId: String,
+        creatorEmail: String
+    ): Result<Pair<String, String>> = runCatching {
+        withContext(Dispatchers.IO) {
+            val url = URL(CREATE_VIRTUAL_EVENT_URL)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+            connection.connectTimeout = 30000
+            connection.readTimeout = 30000
+
+            val body = JSONObject().apply {
+                put("title", event.title)
+                put("description", event.description)
+                put("date", event.date)
+                put("time", event.time)
+                put("maxParticipants", event.maxParticipants)
+                put("isPaid", event.isPaid)
+                put("price", event.price)
+                put("currency", event.currency)
+                put("priceAmount", event.priceAmount)
+                put("coverUrl", event.coverUrl)
+                put("tags", org.json.JSONArray(event.tags))
+                put("creatorId", creatorId)
+                put("creatorEmail", creatorEmail)
+                if (event.isPaid) {
+                    put("paymentUpiId", event.paymentUpiId)
+                    put("paymentAccountName", event.paymentAccountName)
+                    put("paymentInstructions", event.paymentInstructions)
+                }
+            }
+
+            OutputStreamWriter(connection.outputStream).use {
+                it.write(body.toString())
+                it.flush()
+            }
+
+            val responseCode = connection.responseCode
+            val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
+            val responseBody = BufferedReader(InputStreamReader(stream)).use { it.readText() }
+            connection.disconnect()
+
+            if (responseCode !in 200..299) {
+                throw Exception("Failed to create virtual event: $responseBody")
+            }
+
+            val json = JSONObject(responseBody)
+            val eventId = json.getString("eventId")
+            val meetLink = json.optString("meetLink", "")
+
+            Log.d(TAG, "Virtual event created: $eventId, Meet: $meetLink")
+            Pair(eventId, meetLink)
+        }
+    }
+
+    /**
+     * Sync a Calendar attendee addition or removal via Cloud Function.
+     */
+    private suspend fun syncCalendarAttendee(eventId: String, email: String, add: Boolean) {
+        withContext(Dispatchers.IO) {
+            val urlStr = if (add) ADD_EVENT_PARTICIPANT_URL else REMOVE_EVENT_PARTICIPANT_URL
+            val url = URL(urlStr)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+            connection.connectTimeout = 15000
+            connection.readTimeout = 15000
+
+            val body = JSONObject().apply {
+                put("eventId", eventId)
+                put("email", email)
+            }
+
+            OutputStreamWriter(connection.outputStream).use {
+                it.write(body.toString())
+                it.flush()
+            }
+
+            val responseCode = connection.responseCode
+            connection.disconnect()
+
+            if (responseCode !in 200..299) {
+                Log.w(TAG, "Calendar attendee sync failed with code: $responseCode")
+            }
+        }
     }
 
     override suspend fun updateEvent(eventId: String, updates: Map<String, Any>): Result<Unit> = runCatching {
@@ -862,6 +988,9 @@ class FirestoreEventRepository(
         private const val TAG = "FirestoreEventRepository"
         var CREATE_EVENT_ORDER_URL = "https://us-central1-cosmos-app-42ed2.cloudfunctions.net/createEventTicketOrder"
         var VERIFY_EVENT_PAYMENT_URL = "https://us-central1-cosmos-app-42ed2.cloudfunctions.net/verifyEventTicketPayment"
+        var CREATE_VIRTUAL_EVENT_URL = "https://us-central1-cosmos-app-42ed2.cloudfunctions.net/createVirtualEvent"
+        var ADD_EVENT_PARTICIPANT_URL = "https://us-central1-cosmos-app-42ed2.cloudfunctions.net/addEventParticipant"
+        var REMOVE_EVENT_PARTICIPANT_URL = "https://us-central1-cosmos-app-42ed2.cloudfunctions.net/removeEventParticipant"
 
         fun mapDocumentToEvent(id: String, data: Map<String, Any>): NetworkEvent {
             val typeStr = data["type"] as? String ?: EventType.OPEN_NETWORKING.name
@@ -887,7 +1016,10 @@ class FirestoreEventRepository(
                 coverUrl = data["coverUrl"] as? String ?: "",
                 tags = (data["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
                 createdBy = data["createdBy"] as? String ?: "",
-                createdAt = (data["createdAt"] as? com.google.firebase.Timestamp)?.seconds ?: 0L
+                createdAt = (data["createdAt"] as? com.google.firebase.Timestamp)?.seconds ?: 0L,
+                isVirtual = data["isVirtual"] as? Boolean ?: false,
+                meetLink = data["meetLink"] as? String ?: "",
+                calendarEventId = data["calendarEventId"] as? String ?: ""
             )
         }
     }

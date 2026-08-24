@@ -633,6 +633,10 @@ class EventViewModel(
         }
     }
 
+    fun clearActiveEvent() {
+        _activeEvent.value = null
+    }
+
     fun register(eventId: String, name: String, email: String) {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch {
@@ -687,6 +691,7 @@ class EventViewModel(
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch {
             _isCreatingEvent.value = true
+            val creatorEmail = authRepo.currentUser.firstOrNull()?.email ?: ""
             if (imageBytes != null) {
                 try {
                     val tempId = java.util.UUID.randomUUID().toString()
@@ -694,24 +699,44 @@ class EventViewModel(
                     storageRef.putBytes(imageBytes).await()
                     val downloadUrl = storageRef.downloadUrl.await().toString()
                     val eventWithImage = event.copy(coverUrl = downloadUrl)
-                    eventRepo.createEvent(eventWithImage, uid).onSuccess {
-                        _isCreatingEvent.value = false
-                        onSuccess()
-                    }.onFailure { error ->
-                        _isCreatingEvent.value = false
-                        onError(error.message ?: "Failed to create event")
+                    if (event.isVirtual) {
+                        eventRepo.createVirtualEvent(eventWithImage, uid, creatorEmail).onSuccess {
+                            _isCreatingEvent.value = false
+                            onSuccess()
+                        }.onFailure { error ->
+                            _isCreatingEvent.value = false
+                            onError(error.message ?: "Failed to create virtual event")
+                        }
+                    } else {
+                        eventRepo.createEvent(eventWithImage, uid).onSuccess {
+                            _isCreatingEvent.value = false
+                            onSuccess()
+                        }.onFailure { error ->
+                            _isCreatingEvent.value = false
+                            onError(error.message ?: "Failed to create event")
+                        }
                     }
                 } catch (e: Exception) {
                     _isCreatingEvent.value = false
                     onError(e.message ?: "Failed to upload cover image")
                 }
             } else {
-                eventRepo.createEvent(event, uid).onSuccess {
-                    _isCreatingEvent.value = false
-                    onSuccess()
-                }.onFailure { error ->
-                    _isCreatingEvent.value = false
-                    onError(error.message ?: "Failed to create event")
+                if (event.isVirtual) {
+                    eventRepo.createVirtualEvent(event, uid, creatorEmail).onSuccess {
+                        _isCreatingEvent.value = false
+                        onSuccess()
+                    }.onFailure { error ->
+                        _isCreatingEvent.value = false
+                        onError(error.message ?: "Failed to create virtual event")
+                    }
+                } else {
+                    eventRepo.createEvent(event, uid).onSuccess {
+                        _isCreatingEvent.value = false
+                        onSuccess()
+                    }.onFailure { error ->
+                        _isCreatingEvent.value = false
+                        onError(error.message ?: "Failed to create event")
+                    }
                 }
             }
         }

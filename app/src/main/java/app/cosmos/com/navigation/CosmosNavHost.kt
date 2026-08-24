@@ -310,16 +310,23 @@ fun CosmosNavHost(
                     navController.navigate(Screen.EventLobby.createRoute(eventId))
                 },
                 onPostEventTap = {
-                    navController.navigate(Screen.PostEvent.route)
+                    navController.navigate(Screen.PostEvent.createRoute())
                 },
                 onNavigate = { route -> navController.navigate(route) }
             )
         }
         composable(
             route = Screen.PostEvent.route,
-            arguments = listOf(navArgument("eventId") { type = NavType.StringType; nullable = true })
+            arguments = listOf(
+                navArgument("eventId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
         ) { backStackEntry ->
-            val eventId = backStackEntry.arguments?.getString("eventId")
+            val rawEventId = backStackEntry.arguments?.getString("eventId")
+            val eventId = rawEventId?.takeIf { it.isNotBlank() && it != "{eventId}" && it != "null" }
             app.cosmos.com.screens.events.PostEventScreen(
                 eventId = eventId,
                 onBack = { navController.popBackStack() },

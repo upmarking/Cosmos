@@ -95,15 +95,19 @@ fun PostEventScreen(
     var isExistingCoverRemoved by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(eventId) {
-        if (eventId != null) {
-            eventViewModel.selectEvent(eventId)
+    val isEditing = !eventId.isNullOrBlank() && eventId != "{eventId}" && eventId != "null"
+
+    LaunchedEffect(eventId, isEditing) {
+        if (isEditing) {
+            eventId?.let { eventViewModel.selectEvent(it) }
+        } else {
+            eventViewModel.clearActiveEvent()
         }
     }
 
-    LaunchedEffect(activeEvent) {
+    LaunchedEffect(activeEvent, isEditing) {
         val event = activeEvent
-        if (eventId != null && event != null) {
+        if (isEditing && event != null) {
             title = event.title
             description = event.description
             date = event.date
@@ -137,7 +141,7 @@ fun PostEventScreen(
     CosmosAmbientBackground {
         Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             CosmosTopBar(
-                title = if (eventId != null) "Edit Event" else "Create Event",
+                title = if (isEditing) "Edit Event" else "Create Event",
                 onBack = onBack
             )
 
@@ -161,7 +165,7 @@ fun PostEventScreen(
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "Launch your event into the cosmos",
+                                text = if (isEditing) "Update your event details" else "Launch your event into the cosmos",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = CosmosPrimary.copy(alpha = 0.7f),
                                 fontWeight = FontWeight.Medium,
@@ -240,7 +244,7 @@ fun PostEventScreen(
                                 }
                             }
 
-                            val hasExistingCover = eventId != null && activeEvent?.coverUrl?.let { it.isNotBlank() && !it.startsWith("gradient:") } == true && !isExistingCoverRemoved
+                            val hasExistingCover = isEditing && activeEvent?.coverUrl?.let { it.isNotBlank() && !it.startsWith("gradient:") } == true && !isExistingCoverRemoved
                             if (selectedImageUri != null || hasExistingCover) {
                                 // Image Preview
                                 BoxWithConstraints(
@@ -269,7 +273,7 @@ fun PostEventScreen(
                                             selectedImageUri = null
                                             imageZoom = 1f
                                             imagePanFraction = 0f
-                                            if (eventId != null) {
+                                            if (isEditing) {
                                                 isExistingCoverRemoved = true
                                             }
                                         },
@@ -1100,7 +1104,7 @@ fun PostEventScreen(
                                     ) {
                                         Icon(Icons.Default.RocketLaunch, null, tint = CosmosPrimary, modifier = Modifier.size(18.dp))
                                         Text(
-                                            "READY TO LAUNCH",
+                                            text = if (isEditing) "READY TO UPDATE" else "READY TO LAUNCH",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = CosmosPrimary,
                                             fontWeight = FontWeight.Bold,
@@ -1122,23 +1126,23 @@ fun PostEventScreen(
                                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Icon(Icons.Default.Event, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(14.dp))
-                                            Text(date, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                                             Icon(Icons.Default.Event, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(14.dp))
+                                             Text(date, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
                                         }
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Icon(Icons.Default.Schedule, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(14.dp))
-                                            Text(time, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                                             Icon(Icons.Default.Schedule, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(14.dp))
+                                             Text(time, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
                                         }
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Icon(Icons.Default.People, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(14.dp))
-                                            Text("$maxParticipants", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
+                                             Icon(Icons.Default.People, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(14.dp))
+                                             Text("$maxParticipants", style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant)
                                         }
                                     }
 
                                     if (location.isNotBlank()) {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Icon(Icons.Default.LocationOn, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(14.dp))
-                                            Text(location, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                             Icon(Icons.Default.LocationOn, null, tint = CosmosOnSurfaceVariant, modifier = Modifier.size(14.dp))
+                                             Text(location, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
                                     }
                                 }
@@ -1146,7 +1150,7 @@ fun PostEventScreen(
                         }
 
                         CosmosButton(
-                            text = if (isCreating || isSavingChanges) "Saving..." else if (eventId != null) "Save Changes" else "Launch Event \uD83D\uDE80",
+                            text = if (isCreating || isSavingChanges) "Saving..." else if (isEditing) "Save Changes" else "Launch Event \uD83D\uDE80",
                             onClick = {
                                 val imageBytes = selectedImageUri?.let { uri ->
                                     cropEventBitmap(context, uri, imageZoom, imagePanFraction)
@@ -1154,7 +1158,8 @@ fun PostEventScreen(
                                 val currencySymbol = when (selectedCurrency) { "USD" -> "$"; "INR" -> "\u20B9"; "EUR" -> "\u20AC"; "GBP" -> "\u00A3"; else -> "$" }
                                 val parsedPrice = price.toDoubleOrNull() ?: 0.0
                                 
-                                if (eventId != null) {
+                                if (isEditing) {
+                                    val targetEventId = eventId ?: return@CosmosButton
                                     isSavingChanges = true
                                     val updates = mutableMapOf<String, Any>(
                                         "title" to title,
@@ -1185,7 +1190,7 @@ fun PostEventScreen(
                                             }
 
                                             eventViewModel.updateEvent(
-                                                eventId = eventId,
+                                                eventId = targetEventId,
                                                 updates = updates,
                                                 onSuccess = {
                                                     isSavingChanges = false
@@ -1203,6 +1208,7 @@ fun PostEventScreen(
                                         }
                                     }
                                 } else {
+                                    val isVirtual = location.startsWith("https://meet.google.com") || location.contains("meet.google", ignoreCase = true)
                                     val event = app.cosmos.com.data.model.NetworkEvent(
                                         id = "",
                                         title = title,
@@ -1223,7 +1229,8 @@ fun PostEventScreen(
                                         coverUrl = if (selectedImageUri != null) "" else selectedGradient.id,
                                         tags = listOf("Networking"),
                                         createdBy = "",
-                                        createdAt = 0L
+                                        createdAt = 0L,
+                                        isVirtual = isVirtual
                                     )
                                     eventViewModel.createEventWithImage(
                                         event = event,

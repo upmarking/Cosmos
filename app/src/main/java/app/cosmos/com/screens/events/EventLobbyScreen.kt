@@ -1,14 +1,20 @@
 package app.cosmos.com.screens.events
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,15 +25,17 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.cosmos.com.data.model.EventPaymentRecord
+import app.cosmos.com.navigation.Screen
 import app.cosmos.com.ui.components.*
 import app.cosmos.com.ui.theme.*
 import app.cosmos.com.ui.viewmodel.AuthViewModel
 import app.cosmos.com.ui.viewmodel.EventViewModel
-import app.cosmos.com.navigation.Screen
 import coil.compose.AsyncImage
+import app.cosmos.com.screens.events.*
 
 @Composable
 fun EventLobbyScreen(
@@ -118,7 +126,7 @@ fun EventLobbyScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -212,6 +220,56 @@ fun EventLobbyScreen(
                             CosmosGlassCard(showTopGradientBorder = false) {
                                 Text("About This Event", style = MaterialTheme.typography.titleSmall, color = CosmosOnBackground, modifier = Modifier.padding(bottom = 8.dp))
                                 Text(event.description, style = MaterialTheme.typography.bodyMedium, color = CosmosOnSurfaceVariant)
+
+                                if (event.isVirtual && event.meetLink.isNotBlank()) {
+                                    Spacer(Modifier.height(16.dp))
+                                    Text("Virtual Venue", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary, modifier = Modifier.padding(bottom = 6.dp))
+                                    if (isCreator || event.isRegistered) {
+                                        val context = LocalContext.current
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(CosmosPrimary.copy(alpha = 0.15f))
+                                                .border(1.dp, CosmosPrimary.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                                .clickable {
+                                                    try {
+                                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(event.meetLink))
+                                                        context.startActivity(intent)
+                                                    } catch (e: Exception) {
+                                                        Toast.makeText(context, "Could not open join link", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Videocam,
+                                                contentDescription = null,
+                                                tint = CosmosPrimary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text("Join Google Meet", style = MaterialTheme.typography.labelLarge, color = CosmosPrimary, fontWeight = FontWeight.Bold)
+                                                Text(event.meetLink, style = MaterialTheme.typography.bodySmall, color = CosmosOnSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            }
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                                contentDescription = null,
+                                                tint = CosmosOnSurfaceVariant,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    } else {
+                                        Text(
+                                            text = "🔒 Join link is visible to registered participants.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = CosmosOnSurfaceVariant
+                                        )
+                                    }
+                                }
+
                                 Spacer(Modifier.height(12.dp))
                                 Text("Format", style = MaterialTheme.typography.labelMedium, color = CosmosPrimary, modifier = Modifier.padding(bottom = 4.dp))
                                 val formatText = if (eventRounds.isNotEmpty()) {
@@ -421,7 +479,7 @@ fun EventLobbyScreen(
                                         Text(time, style = MaterialTheme.typography.labelMedium, color = CosmosPrimary, modifier = Modifier.width(80.dp))
                                         Text(activity, style = MaterialTheme.typography.bodyMedium, color = CosmosOnBackground)
                                     }
-                                    Divider(color = CosmosOutlineVariant.copy(alpha = 0.2f))
+                                    HorizontalDivider(color = CosmosOutlineVariant.copy(alpha = 0.2f))
                                 }
                             }
                         }

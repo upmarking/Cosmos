@@ -51,7 +51,7 @@ sealed class Screen(val route: String) {
         fun createRoute(eventId: String) = "event_lobby/$eventId"
     }
     object PostEvent : Screen("post_event?eventId={eventId}") {
-        fun createRoute(eventId: String? = null) = if (eventId != null) "post_event?eventId=$eventId" else "post_event"
+        fun createRoute(eventId: String? = null) = if (!eventId.isNullOrBlank() && eventId != "{eventId}" && eventId != "null") "post_event?eventId=$eventId" else "post_event"
     }
 
     // ── Communities sub-screens ──────────────────────────────────────────────

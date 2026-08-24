@@ -3,6 +3,7 @@ const admin = require('firebase-admin');
 const axios = require('axios');
 const cors = require('cors')({ origin: true });
 const crypto = require('crypto');
+const calendarService = require('./googleCalendarService');
 require('dotenv').config();
 
 admin.initializeApp();
@@ -1067,3 +1068,254 @@ function simulateAiContent(action, prompt) {
   }
 }
 
+// ── Google Calendar + Meet: Virtual Event Management ──────────────────────────
+
+/**
+ * createVirtualEvent
+ * 
+ * Creates a Firestore event AND a Google Calendar event with auto-generated
+ * Google Meet link. Participants are automatically added as Calendar attendees
+ * when they register.
+ * 
+ * Body: { title, description, date, time, maxParticipants, isPaid, price,
+ *         currency, priceAmount, coverUrl, tags, creatorId, creatorEmail,
+ *         paymentUpiId, paymentAccountName, paymentInstructions }
+ * 
+ * Returns: { success, eventId, meetLink, calendarEventId }
+ */
+exports.createVirtualEvent = functions
+  .runWith({
+    secrets: ['GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY'],
+    timeoutSeconds: 30,
+    memory: '256MB',
+  })
+  .https.onRequest((req, res) => {
+    return cors(req, res, async () => {
+      if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+      }
+
+      try {
+        const {
+          title,
+          description = '',
+          date,
+          time,
+          maxParticipants = 50,
+          isPaid = false,
+          price = '',
+          currency = 'INR',
+          priceAmount = 0,
+          coverUrl = '',
+          tags = [],
+          creatorId,
+          creatorEmail = '',
+          paymentUpiId = '',
+          paymentAccountName = '',
+          paymentInstructions = '',
+        } = req.body;
+
+        if (!title || !date || !time || !creatorId) {
+          res.status(400).json({ error: 'Missing required fields: title, date, time, creatorId' });
+          return;
+        }
+
+        // 1. Create Google Calendar event with Meet link
+        let calendarEventId = '';
+        let meetLink = '';
+
+        try {
+          const calResult = await calendarService.createCalendarEvent({
+            title: `[Cosmos] ${title}`,
+            description: description || `Cosmos virtual event: ${title}`,
+            dateStr: date,
+            timeStr: time,
+            durationMinutes: 60,
+            attendeeEmails: creatorEmail ? [creatorEmail] : [],
+          });
+          calendarEventId = calResult.calendarEventId;
+          meetLink = calResult.meetLink;
+          console.log(`Calendar event created: ${calendarEventId}, Meet: ${meetLink}`);
+        } catch (calError) {
+          // Calendar creation failed — proceed without Meet link
+          // This allows graceful degradation if service account isn't configured
+          console.warn('Google Calendar event creation failed (proceeding without Meet link):', calError.message);
+          meetLink = 'https://meet.google.com/new'; // Fallback: user creates their own
+        }
+
+        // 2. Create Firestore event document
+        const eventData = {
+          title,
+          description,
+          date,
+          time,
+          location: meetLink || 'Virtual',
+          type: 'OPEN_NETWORKING',
+          participantCount: 0,
+          maxParticipants,
+          isPaid,
+          price,
+          currency,
+          priceAmount,
+          coverUrl,
+          tags,
+          createdBy: creatorId,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          // Virtual event specific fields
+          isVirtual: true,
+          meetLink,
+          calendarEventId,
+        };
+
+        if (isPaid) {
+          eventData.paymentUpiId = paymentUpiId;
+          eventData.paymentAccountName = paymentAccountName;
+          eventData.paymentInstructions = paymentInstructions;
+        }
+
+        const docRef = await admin.firestore().collection('events').add(eventData);
+        console.log(`Firestore event created: ${docRef.id}`);
+
+        res.status(200).json({
+          success: true,
+          eventId: docRef.id,
+          meetLink,
+          calendarEventId,
+        });
+
+      } catch (error) {
+        console.error('createVirtualEvent error:', error);
+        res.status(500).json({
+          error: 'Failed to create virtual event',
+          details: error.message,
+        });
+      }
+    });
+  });
+
+/**
+ * addEventParticipant
+ * 
+ * Registers a participant for an event AND adds them as a Google Calendar
+ * attendee so they receive the Meet link and calendar invite automatically.
+ * 
+ * Body: { eventId, userId, name, email }
+ * Returns: { success }
+ */
+exports.addEventParticipant = functions
+  .runWith({
+    secrets: ['GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY'],
+    timeoutSeconds: 15,
+    memory: '256MB',
+  })
+  .https.onRequest((req, res) => {
+    return cors(req, res, async () => {
+      if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+      }
+
+      try {
+        const { eventId, userId, name, email } = req.body;
+
+        if (!eventId || !userId || !email) {
+          res.status(400).json({ error: 'Missing required fields: eventId, userId, email' });
+          return;
+        }
+
+        const db = admin.firestore();
+        const eventRef = db.collection('events').doc(eventId);
+        const eventDoc = await eventRef.get();
+
+        if (!eventDoc.exists) {
+          res.status(404).json({ error: 'Event not found' });
+          return;
+        }
+
+        const eventData = eventDoc.data();
+        const calendarEventId = eventData.calendarEventId || '';
+
+        // Add to Google Calendar if it's a virtual event with a Calendar event
+        if (calendarEventId && email) {
+          try {
+            await calendarService.addAttendeeToEvent(calendarEventId, email);
+            console.log(`Added ${email} to Calendar event ${calendarEventId}`);
+          } catch (calError) {
+            console.warn(`Failed to add ${email} to Calendar event:`, calError.message);
+            // Don't fail the registration if Calendar sync fails
+          }
+        }
+
+        res.status(200).json({ success: true });
+
+      } catch (error) {
+        console.error('addEventParticipant error:', error);
+        res.status(500).json({
+          error: 'Failed to add participant to calendar',
+          details: error.message,
+        });
+      }
+    });
+  });
+
+/**
+ * removeEventParticipant
+ * 
+ * Removes a participant from the Google Calendar event attendee list.
+ * 
+ * Body: { eventId, email }
+ * Returns: { success }
+ */
+exports.removeEventParticipant = functions
+  .runWith({
+    secrets: ['GOOGLE_CALENDAR_SERVICE_ACCOUNT_KEY'],
+    timeoutSeconds: 15,
+    memory: '256MB',
+  })
+  .https.onRequest((req, res) => {
+    return cors(req, res, async () => {
+      if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+      }
+
+      try {
+        const { eventId, email } = req.body;
+
+        if (!eventId || !email) {
+          res.status(400).json({ error: 'Missing required fields: eventId, email' });
+          return;
+        }
+
+        const db = admin.firestore();
+        const eventDoc = await db.collection('events').doc(eventId).get();
+
+        if (!eventDoc.exists) {
+          res.status(404).json({ error: 'Event not found' });
+          return;
+        }
+
+        const eventData = eventDoc.data();
+        const calendarEventId = eventData.calendarEventId || '';
+
+        if (calendarEventId && email) {
+          try {
+            await calendarService.removeAttendeeFromEvent(calendarEventId, email);
+            console.log(`Removed ${email} from Calendar event ${calendarEventId}`);
+          } catch (calError) {
+            console.warn(`Failed to remove ${email} from Calendar event:`, calError.message);
+          }
+        }
+
+        res.status(200).json({ success: true });
+
+      } catch (error) {
+        console.error('removeEventParticipant error:', error);
+        res.status(500).json({
+          error: 'Failed to remove participant from calendar',
+          details: error.message,
+        });
+      }
+    });
+  });

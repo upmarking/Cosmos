@@ -270,7 +270,11 @@ data class NetworkEvent(
     val isRegistered: Boolean = false,
     val rounds: List<EventRound> = emptyList(),
     val createdBy: String = "",
-    val createdAt: Long = 0L
+    val createdAt: Long = 0L,
+    // Virtual event fields (Google Calendar + Meet integration)
+    val isVirtual: Boolean = false,
+    val meetLink: String = "",
+    val calendarEventId: String = ""
 ) {
     val isFull: Boolean get() = participantCount >= maxParticipants
     val spotsRemaining: Int get() = (maxParticipants - participantCount).coerceAtLeast(0)
